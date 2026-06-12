@@ -1,0 +1,11 @@
+# Saved model checkpoints
+artifacts/
+
+# Python
+__pycache__/
+
+# Editor / tooling
+.ropeproject/
+.idea/
+.vscode/
+.DS_Store
