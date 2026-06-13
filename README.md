@@ -198,8 +198,7 @@ reference, the original AlphaZero used ~800.
 The graphs below show win-rate vs Stockfish at 2800 Elo* as training scales.
 Each point is measured over 492 games, played as both player 1 and player 2.
 
-<!-- TODO: paste win-rate graphs here -->
-
+<img width="1185" height="765" alt="sf-winrate" src="https://github.com/user-attachments/assets/dae8203c-a2f1-4781-80b3-a80ce89fe9dc" />
 
 All models were trained on a TPUv4-32:
 
