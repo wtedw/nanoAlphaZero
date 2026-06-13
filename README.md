@@ -351,6 +351,11 @@ Cycle 1000/5000 | 8.40s
   MSE vs perfect = 0.0007 | sign accuracy = 1.000
 ```
 
+Compare this to the known perfect play outcomes in Hex
+(hex7 bottom row, middle)
+<img width="836" height="529" alt="Pasted image 20250507172600" src="https://github.com/user-attachments/assets/e64de723-1902-4135-982b-d3deb68073cd" />
+
+
 </details>
 
 
