@@ -221,10 +221,41 @@ Stockfish settings:
 
 ### Hex
 
-On a solved game like hex7 we can watch the value head acquire perfect play
+On a solved game like hex we can watch the value head acquire perfect play
 directly. The trainer periodically prints its verdict on every Black opening
 move next to the known perfect-play outcome. As training proceeds, `MSE vs
 perfect` falls toward 0 and `sign accuracy` climbs to 1.000.
+
+For example, these are the value head outputs for each opening once training finishes.
+```
+hex6
+Perfect play (B=Black wins / .=Black loses), [x]=model sign mismatch:
+   .  .  .  .  .  B
+   .  B  B  B  B  B
+   B  B  B  B  B  B
+   B  B  B  B  B  B
+   B  B  B  B  B  .
+   B  .  .  .  .  .
+  MSE vs perfect = 0.0004 | sign accuracy = 1.000
+
+
+hex7
+Perfect play (B=Black wins / .=Black loses), [x]=model sign mismatch:
+   .  .  .  .  .  .  B
+   .  .  B  .  B  B  B
+   .  B  B  B  B  B  .
+   B  B  B  B  B  B  B
+   .  B  B  B  B  B  .
+   B  B  B  .  B  .  .
+   B  .  .  .  .  .  .
+  MSE vs perfect = 0.0082 | sign accuracy = 1.000
+```
+
+Compare this to the known perfect play outcomes in Hex
+- hex6 bottom row, right
+- hex7 bottom row, middle
+<img width="836" height="529" alt="Pasted image 20250507172600" src="https://github.com/user-attachments/assets/e64de723-1902-4135-982b-d3deb68073cd" />
+
 
 `MSE vs perfect` is a good proxy for progress, but a near-zero MSE does not guarantee the model can reliably beat a strong opponent like MoHex, so we set configs to keep training well past that point.
 
@@ -350,11 +381,6 @@ Cycle 1000/5000 | 8.40s
    B  .  .  .  .  .  .
   MSE vs perfect = 0.0007 | sign accuracy = 1.000
 ```
-
-Compare this to the known perfect play outcomes in Hex
-(hex7 bottom row, middle)
-<img width="836" height="529" alt="Pasted image 20250507172600" src="https://github.com/user-attachments/assets/e64de723-1902-4135-982b-d3deb68073cd" />
-
 
 </details>
 
