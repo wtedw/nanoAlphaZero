@@ -1,6 +1,9 @@
 # Saved model checkpoints
 artifacts/
 
+# Run logs
+logs/
+
 # Python
 __pycache__/
 

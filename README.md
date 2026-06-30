@@ -1,10 +1,9 @@
 # nanoAlphaZero
 
-nanoAlphaZero is quite possibly the strongest single-file implementation of AlphaZero out there. The entire MCTS and RL pipeline fits in just ~3,600 lines. Despite this, it can achieve perfect play on any solvable game (e.g. Tic-Tac-Toe, Connect4, and Hex). It can even reach super-GM Elo in chess, given enough train-time and test-time compute. It's also game-agnostic: point it at any two-player board game, adjust the model size, and it learns to play.
+nanoAlphaZero is quite possibly the strongest single-file implementation of AlphaZero out there. Despite its small footprint, it achieves perfect-play results for any solvable game, and with enough train-time and test-time compute, it reaches super-grandmaster Elo in chess. It's also game-agnostic: point it at any two-player board game, adjust the model size, and it learns to play.
 
 > note: this is a WIP.
 > - all code is optimized for TPUs, including our custom PGX fork ([wtedw/pgx](https://github.com/wtedw/pgx/tree/dcb18cb))
-> - the chess configs are meant for a TPU pod and haven't been tested thoroughly for single TPUs
 > - chess reaches strong play after about 200k updates; smaller games converge much sooner
 > - custom games require their own PGX env implementation
 
@@ -37,7 +36,15 @@ uv run alphazero.py --env hex5
 uv run alphazero.py --env chess
 ```
 
-Supported envs: `ttt`, `connect4`, `hex4`, `hex5`, `hex6`, `hex7`, `hex8`, `hex9`, `chess`
+Supported games:
+
+| game        | envs              | status                                                     |
+| ----------- | ----------------- | ---------------------------------------------------------- |
+| Tic-Tac-Toe | `ttt`             | solid, reaches perfect play                                |
+| Hex         | `hex4`–`hex9`     | solid up to 8x8 (`hex9` is less tested)                    |
+| Chess       | `chess`           | solid, reaches strong play given enough compute            |
+| Connect4    | `connect4`        | reaches perfect play outcomes, can struggle to maintain it |
+| Go          | `go3`–`go9`       | recently added, not yet tested                             |
 
 Options:
 
@@ -179,9 +186,10 @@ Options:
 | flag             | effect                                                       |
 | ---------------- | ------------------------------------------------------------ |
 | `--play-only`    | skip training; load a checkpoint and play                    |
+| `--play-both`    | skip training; load a checkpoint and play as both sides      |
 | `--load PATH`    | checkpoint to load (defaults to the save path)               |
 | `--play-as 1\|2` | you move first (`1`, default) or the model moves first (`2`) |
-| `--play-sims N`  | MCTS simulations the model uses per move                     |
+
 
 In-game commands: enter a move (connect4: column `1-7`; ttt/hex: cell number or
 `row col`), or type `undo`, `restart`, `quit`.
@@ -387,8 +395,8 @@ Cycle 1000/5000 | 8.40s
 
 ## Todo
 - Incorporate the full gumbel/muzero MCTS from MCTX
-- Verify chess config works with a single TPUv4
 - Verify larger hex boards still hit perfect play
+- Test Go models against reference opponent
 
 ## Acknowledgements
 This project would not have been possible without the amazing work of the following:

@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
-#     "pgx @ git+https://github.com/wtedw/pgx.git@dcb18cb",
+#     "pgx @ git+https://github.com/wtedw/pgx.git@0aefd41",
 #     "flashbax @ git+https://github.com/instadeepai/flashbax.git@e0199d7bb232c622a19d3c28f9d6b34eb8215eab",
 #     "flax==0.10.1",
 #     "optax==0.2.7",
@@ -14,10 +14,12 @@
 # =============================================================================
 # Imports
 # =============================================================================
+import atexit
 import functools
 import os
 import pickle
 import re
+import sys
 import time
 from dataclasses import dataclass, field
 from types import SimpleNamespace
@@ -25,6 +27,7 @@ from typing import Any, Callable, Generic, NamedTuple, Optional, Tuple
 
 import chex
 import flax.linen as nn
+import flax.traverse_util
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -101,25 +104,24 @@ class RunnerState(NamedTuple):
 
 # =============================================================================
 # Neural network model
+#
+# A mishmash of architectural ideas pulled from various papers/repos.
+# Feel free to modify them.
+#   - ConvModelReZero: for simpler games. Good for Hex.
+#   - ConvModelNestedBottleneck: for more difficult games like chess or large
+#     Go boards.
+#
+# Sources:
+#   - Policy improvement by planning with Gumbel:
+#       https://openreview.net/forum?id=bERaNdoegnO
+#   - Scaling Scaling Laws with Board Games:
+#       https://arxiv.org/abs/2104.03113
+#   - Accelerating Self-Play Learning in Go (KataGo):
+#       https://arxiv.org/abs/1902.10565
+#   - Stronger Normalization-Free Transformers:
+#       https://arxiv.org/abs/2512.10938
 # =============================================================================
-class DynamicTanh(nn.Module):
-    features: int
-    init_alpha: float = 0.5
-
-    @nn.compact
-    def __call__(self, x):
-        alpha = self.param(
-            "alpha", lambda rng, shape: self.init_alpha * jnp.ones(shape), (1,)
-        )
-        gamma = self.param(
-            "gamma", lambda rng, shape: jnp.ones(shape), (self.features,)
-        )
-        beta = self.param("beta", lambda rng, shape: jnp.zeros(shape), (self.features,))
-        y = jnp.tanh(alpha * x)
-        return gamma * y + beta
-
-
-class Derf(nn.Module):
+class DerfNorm(nn.Module):
     features: int
     init_alpha: float = 0.5
     init_shift: float = 0.0
@@ -139,17 +141,41 @@ class Derf(nn.Module):
         y = erf(alpha * x + shift)
         return gamma * y + beta
 
+# [todo] Remove / modify KataValueHeadGPool.
+# Was used during dynamic board size experiments, but worked well with all game envs.
 class KataValueHeadGPool(nn.Module):
-    """Global pooling over spatial positions: mean + max.
-
-    Input  x: [B, H, W, C]  ->  out: [B, 2C]
     """
-
+    Simplified JAX/Flax implementation of KataGo's Value Head Global Pooling.
+    Assumes static board size (no masking).
+    """
     @nn.compact
     def __call__(self, x):
-        layer_mean = jnp.mean(x, axis=(1, 2))  # [B, C]
-        layer_max = jnp.max(x, axis=(1, 2))  # [B, C]
-        return jnp.concatenate([layer_mean, layer_max], axis=-1)  # [B, 2C]
+        # x shape: [Batch, Height, Width, Channels] (NHWC)
+
+        # 1. Calculate Mean over spatial dimensions (H, W -> axes 1, 2)
+        layer_mean = jnp.mean(x, axis=(1, 2), keepdims=True)
+
+        # 2. Calculate offset based on board size
+        # We calculate area dynamically from shape to handle JIT/different board sizes automatically
+        # Shape indices: 0=Batch, 1=Height, 2=Width, 3=Channels
+        height = x.shape[1]
+        width = x.shape[2]
+        hw_area = height * width
+
+        # 14.0 is the centering offset used in KataGo (sqrt(361) approx 19)
+        # For a static 19x19 board, this results in (19 - 14) = 5.0
+        hw_sqrt_offset = jnp.sqrt(hw_area) - 14.0
+
+        # 3. Generate the 3 pooling outputs
+        out_pool1 = layer_mean
+        out_pool2 = layer_mean * (hw_sqrt_offset / 10.0)
+        out_pool3 = layer_mean * ((hw_sqrt_offset ** 2) / 100.0 - 0.1)
+
+        # 4. Concatenate along the channel dimension (axis 3)
+        # Output shape: [Batch, 1, 1, Channels * 3]
+        out = jnp.concatenate((out_pool1, out_pool2, out_pool3), axis=-1)
+        return out
+
 
 class ReZeroBlock(nn.Module):
     features: int
@@ -157,21 +183,115 @@ class ReZeroBlock(nn.Module):
     @nn.compact
     def __call__(self, x):
         identity = x
-        y = nn.Conv(self.features, (3, 3), padding="SAME", use_bias=False)(x)
+        y = nn.relu(x)
+        y = nn.Conv(self.features, (3, 3), padding="SAME", use_bias=False)(y)
         y = nn.relu(y)
         y = nn.Conv(self.features, (3, 3), padding="SAME", use_bias=False)(y)
         alpha = self.param("alpha", nn.initializers.zeros, ())
-        y = alpha * y
-        return identity + y
+        return identity + alpha * y
 
 
 class ConvModelReZero(nn.Module):
     action_space: int
     conv_width: int = 256
     conv_depth: int = 32
-    use_derf: bool = False
-    use_names: bool = False
     use_kata_gpool: bool = False
+
+    @nn.compact
+    def _trunk(self, obs):
+        x = nn.Conv(
+            self.conv_width, (3, 3), padding="SAME", use_bias=True, name="input_conv"
+        )(obs)
+        for _ in range(self.conv_depth):
+            x = ReZeroBlock(self.conv_width)(x)
+        return x
+
+    @nn.compact
+    def __call__(self, obs, valid, deterministic: bool = False):
+        x = self._trunk(obs)
+
+        # --- Policy head ---
+        p = nn.Conv(2, (1, 1), use_bias=False)(x)
+        p = DerfNorm(2)(p)
+        p = nn.relu(p)
+        p = p.reshape(p.shape[0], -1)
+        logits = nn.Dense(
+            self.action_space,
+            kernel_init=nn.initializers.normal(stddev=1e-2),
+            bias_init=nn.initializers.zeros,
+            name="policy_out",
+        )(p)
+        masked_logits = jnp.where(valid, logits, jnp.finfo(logits.dtype).min)
+
+        # --- Value head ---
+        if self.use_kata_gpool:
+            v = nn.Conv(16, (1, 1), use_bias=False)(x)
+            v = DerfNorm(16)(v)
+            v = nn.relu(v)
+            v = KataValueHeadGPool()(v)  # [B, 48]
+            v = v.reshape(v.shape[0], -1)
+        else:
+            v = nn.Conv(1, (1, 1), use_bias=False)(x)
+            v = DerfNorm(1)(v)
+            v = nn.relu(v)
+            v = v.reshape(v.shape[0], -1)
+
+        v = nn.Dense(self.conv_width, name="value_dense")(v)
+        v = nn.relu(v)
+        value = nn.Dense(
+            1,
+            kernel_init=nn.initializers.normal(stddev=1e-2),
+            bias_init=nn.initializers.zeros,
+            name="value_out",
+        )(v).squeeze(-1)
+        value = jnp.tanh(value)
+
+        return masked_logits, value
+
+class InnerBlock(nn.Module):
+    """Inner residual sub-block at bottleneck width."""
+
+    features: int
+
+    @nn.compact
+    def __call__(self, x):
+        identity = x
+        y = nn.relu(x)
+        y = nn.Conv(self.features, (3, 3), padding="SAME", use_bias=False)(y)
+        y = nn.relu(y)
+        y = nn.Conv(self.features, (3, 3), padding="SAME", use_bias=False)(y)
+        return identity + y
+
+class NestedBottleneckReZeroBlock(nn.Module):
+
+    features: int
+    bottleneck_ratio: int = 2
+    num_inner_blocks: int = 2
+
+    @nn.compact
+    def __call__(self, x):
+        identity = x
+        inner_features = self.features // self.bottleneck_ratio
+
+        y = nn.relu(x)
+        y = nn.Conv(inner_features, (1, 1), padding="SAME", use_bias=False)(y)
+
+        for _ in range(self.num_inner_blocks):
+            y = InnerBlock(inner_features)(y)
+
+        y = nn.relu(y)
+        y = nn.Conv(self.features, (1, 1), padding="SAME", use_bias=False)(y)
+
+        alpha = self.param("alpha", nn.initializers.zeros, ())
+        return identity + alpha * y
+
+class ConvModelNestedBottleneck(nn.Module):
+    action_space: int
+    conv_width: int = 256
+    conv_depth: int = 32
+    bottleneck_ratio: int = 2
+    num_inner_blocks: int = 2
+    use_kata_gpool: bool = True
 
     @nn.compact
     def _trunk(self, obs):
@@ -180,70 +300,65 @@ class ConvModelReZero(nn.Module):
         )(obs)
         x = nn.relu(x)
         for _ in range(self.conv_depth):
-            x = ReZeroBlock(self.conv_width)(x)
+            x = NestedBottleneckReZeroBlock(
+                features=self.conv_width,
+                bottleneck_ratio=self.bottleneck_ratio,
+                num_inner_blocks=self.num_inner_blocks,
+            )(x)
         return x
 
     @nn.compact
     def __call__(self, obs, valid, deterministic: bool = False):
-        NormLayer = Derf if self.use_derf else DynamicTanh
-
         x = self._trunk(obs)
 
+        # --- Policy head (identical to ConvModelReZero) ---
         p = nn.Conv(2, (1, 1), use_bias=False)(x)
-        p = NormLayer(2)(p)
+        p = DerfNorm(2)(p)
         p = nn.relu(p)
         p = p.reshape(p.shape[0], -1)
         logits = nn.Dense(
             self.action_space,
             kernel_init=nn.initializers.normal(stddev=1e-2),
             bias_init=nn.initializers.zeros,
-            name="policy_out" if self.use_names else None,
+            name="policy_out",
         )(p)
         masked_logits = jnp.where(valid, logits, jnp.finfo(logits.dtype).min)
 
-        # --- Value head ---
+        # --- Value head (identical to ConvModelReZero) ---
         if self.use_kata_gpool:
             v = nn.Conv(16, (1, 1), use_bias=False)(x)
-            v = NormLayer(16)(v)
+            v = DerfNorm(16)(v)
             v = nn.relu(v)
-            v = KataValueHeadGPool()(v)  # [B, 48]
+            v = KataValueHeadGPool()(v)
+            v = v.reshape(v.shape[0], -1)
         else:
             v = nn.Conv(1, (1, 1), use_bias=False)(x)
-            v = NormLayer(1)(v)
+            v = DerfNorm(1)(v)
             v = nn.relu(v)
             v = v.reshape(v.shape[0], -1)
 
-        v = nn.Dense(self.conv_width, name="value_dense" if self.use_names else None)(v)
+        v = nn.Dense(self.conv_width, name="value_dense")(v)
         v = nn.relu(v)
         value = nn.Dense(
             1,
             kernel_init=nn.initializers.normal(stddev=1e-2),
             bias_init=nn.initializers.zeros,
-            name="value_out" if self.use_names else None,
+            name="value_out",
         )(v).squeeze(-1)
         value = jnp.tanh(value)
 
         return masked_logits, value
 
-    def sample(self, logits, key, test: bool = False):
-        return (
-            jnp.argmax(logits, axis=-1) if test else jax.random.categorical(key, logits)
-        )
-
-
-def make_model(config, rng, sharding=None):
+def create_conv_model(config, rng, sharding=None):
     conv_width = config["conv_width"]
     conv_depth = config["conv_depth"]
     observation_space = config["game_obs_shape"]
     action_space = config["game_num_actions"]
-    use_derf = config.get("conv_use_derf", False)
 
     model = ConvModelReZero(
         action_space=action_space,
         conv_width=conv_width,
         conv_depth=conv_depth,
-        use_derf=use_derf,
-        use_names=config["conv_use_names"],
         use_kata_gpool=config.get("conv_use_kata_gpool", False),
     )
 
@@ -255,6 +370,28 @@ def make_model(config, rng, sharding=None):
     )
 
     return model, model_state
+
+def create_nested_bottleneck_model(config, rng, sharding=None):
+    model = ConvModelNestedBottleneck(
+        action_space=config["game_num_actions"],
+        conv_width=config["conv_width"],
+        conv_depth=config["conv_depth"],
+        bottleneck_ratio=config.get("nested_bottleneck_ratio", 2),
+        num_inner_blocks=config.get("nested_num_inner_blocks", 2),
+        use_kata_gpool=config.get("conv_use_kata_gpool", True),
+    )
+    observation = jnp.zeros((1,) + config["game_obs_shape"])
+    valid_action_mask = jnp.ones((1, config["game_num_actions"]), dtype=bool)
+    model_state = init_and_shard_model(
+        config, model, rng, observation, valid_action_mask, sharding
+    )
+    return model, model_state
+
+
+def make_model(config, rng, sharding=None):
+    if config.get("use_bn_model", False):
+        return create_nested_bottleneck_model(config, rng, sharding)
+    return create_conv_model(config, rng, sharding)
 
 
 # shards model params as REPLICATED across the mesh when enabled
@@ -283,27 +420,16 @@ def init_and_shard_model(config, model, rng, obs, valid_mask, sharding):
 # =============================================================================
 # Environment
 # =============================================================================
+@dataclass
 class WrappedEnv:
-    def __init__(
-        self,
-        obs_shape,
-        num_actions,
-        init_fn,
-        step_fn,
-        autostep_fn,
-        *,
-        init_dummy_estate_fn,
-        single_estate,
-        observe_fn=None,
-    ):
-        self.obs_shape = obs_shape
-        self.num_actions = num_actions
-        self.init = init_fn
-        self.step = step_fn
-        self.autostep = autostep_fn
-        self.init_dummy_estate = init_dummy_estate_fn
-        self.single_estate = single_estate
-        self.observe = observe_fn
+    obs_shape: Tuple
+    num_actions: int
+    init: Callable
+    step: Callable
+    autostep: Callable
+    init_dummy_estate: Callable
+    single_estate: Any
+    observe: Optional[Callable] = None
 
     def __repr__(self) -> str:
         return f"WrappedEnv(obs_shape={self.obs_shape}, num_actions={self.num_actions})"
@@ -336,22 +462,40 @@ def make_env(config):
     pgx_obs_shape = jnp.squeeze(es_obs, axis=0).shape
 
     return WrappedEnv(
-        pgx_obs_shape,
-        pgx_num_actions,
-        vmap_env_init,
-        vmap_env_step,
-        vmap_auto_step,
-        init_dummy_estate_fn=init_dummy_estate,
-        observe_fn=vmap_observe_fn,
+        obs_shape=pgx_obs_shape,
+        num_actions=pgx_num_actions,
+        init=vmap_env_init,
+        step=vmap_env_step,
+        autostep=vmap_auto_step,
+        init_dummy_estate=init_dummy_estate,
         single_estate=single_estate,
+        observe=vmap_observe_fn,
     )
 
 
+
 # =============================================================================
-# 1sh MCTS policy (standalone Sequential-Halving BFS, inlined)
+# MCTS
+#
+# Adapted from https://github.com/google-deepmind/mctx.
+#
+# "1sh": a custom search that runs a single round of Sequential Halving,
+# batched across all root actions. Full MCTS expands nodes one at a time; 1sh
+# does the whole round in two parallel network calls:
+#   1. Evaluate all `num_root_considered` root actions at once.
+#   2. Keep the better half (`num_survivors`), expand one child of each, and
+#      pick the best action.
+# The search budget is fixed by the two rungs.
+#
+# Since 1sh is a fixed-shape single round, several config knobs are UNUSED --
+# placeholders for swapping in MCTX's full node-by-node MCTS later:
+#   - mcts_num_simulations : node-expansion budget for the full search
+#   - mcts_epsilon         : qtransform epsilon
+#   - mcts_max_m           : max sampled actions at the root
+#   - mcts_use_gumbel      : Gumbel-MuZero vs. regular MuZero
+#   - mcts_variant         : which MCTX policy to dispatch to
 # =============================================================================
 
-# ── Standalone "1sh" Sequential-Halving BFS policy (no MCTX dependency) ──
 
 # Parameters are an arbitrary nested structure of chex.Array.
 Params = chex.ArrayTree
@@ -408,34 +552,11 @@ class PolicyOutput:
     action: chex.Array
     action_weights: chex.Array
 
-    ### everything down below is for diagnostics / compression
-    search_logits: Optional[Any] = None
-
-    # root-level diagnostics
-    children_values: Optional[Any] = None
+    # visit counts over actions, used by the selfplay exploration sampler.
     visit_counts: Optional[Any] = None
-    root_gumbel: Optional[Any] = None
-    root_prior_logits: Optional[Any] = None
 
-    # layer 1 diagnostics
-    layer1_value: Optional[Any] = None
-
-    # after q-transform
-    final_qvalues: Optional[Any] = None
-    final_score: Optional[Any] = None
-    advantages: Optional[Any] = None
-
-    # internals of q-transform
-    raw_value: Optional[Any] = None
-    mixed_value: Optional[Any] = None
-    maxvisit: Optional[Any] = None
-    rescaled_qvalues: Optional[Any] = None
-    rescaled_qvalues2: Optional[Any] = None
-
-    # BNK compressed fields
+    # BNK compressed fields (populated when use_bnk=True)
     bnk_k_indices: Optional[Any] = None
-    k_root_prior_logits: Optional[Any] = None
-    k_search_logits: Optional[Any] = None
     bnk_action_weights: Optional[Any] = None
 
 
@@ -514,8 +635,8 @@ def final_qtransform_completed_by_mix_value(
     rescale_values: bool = False,
     use_mixed_value: bool = True,
     epsilon: chex.Numeric = 1e-8,
-) -> Tuple[chex.Array, chex.Array, chex.Array, chex.Array, chex.Array]:
-    """Returns completed qvalues.
+) -> chex.Array:
+    """Returns the completed, transformed Q-values used to pick actions.
 
     The missing Q-values of the unvisited actions are replaced by the mixed
     value, defined in Appendix D of "Policy improvement by planning with
@@ -523,9 +644,6 @@ def final_qtransform_completed_by_mix_value(
 
     The Q-values are transformed by a linear transformation:
       `(maxvisit_init + max(visit_counts)) * value_scale * qvalues`.
-
-    Returns a tuple `(raw_value, mixed_value, maxvisit, rescaled_qvalues,
-    original_res)` to expose intermediates for diagnostics.
     """
     qvalues = root_qvalues
     visit_counts = layer1_visit_counts
@@ -551,8 +669,7 @@ def final_qtransform_completed_by_mix_value(
     maxvisit = jnp.max(visit_counts, axis=-1)
     visit_scale = maxvisit_init + maxvisit
 
-    original_res = visit_scale * value_scale * completed_qvalues
-    return (raw_value, mixed_value, maxvisit, rescaled_qvalues, original_res)
+    return visit_scale * value_scale * completed_qvalues
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -642,8 +759,6 @@ def gumbel_muzero_policy_1sh(
 
     Note: this policy has NO `num_simulations` knob — its search budget is fixed
     by the two rungs and controlled entirely by `num_root_considered` / `num_survivors`.
-    The `mcts_num_simulations` config field is unused here (it's reserved for the
-    future MCTX full-MCTS policy).
     """
 
     # ------------------------------------------------------------------------
@@ -718,7 +833,7 @@ def gumbel_muzero_policy_1sh(
 
     # If we visit and the value is negative, we should pick that over invalid action
     # This will happen when we do top_k with masked_score
-    layer1_cqvalues, rescaled_qvalues1 = layer1_qtransform(layer1_qvalues)
+    layer1_cqvalues, _ = layer1_qtransform(layer1_qvalues)
 
     # ------------------------------------------------------------------------
     # 2) SECOND RUNG  –– keep best S roots, add one extra rollout inside each
@@ -840,16 +955,13 @@ def gumbel_muzero_policy_1sh(
         epsilon=epsilon,
     )
 
-    (raw_value, mixed_value, maxvisit, rescaled_qvalues2, completed_q) = jax.vmap(
-        qtransform_fn, in_axes=[0, 0, 0, 0]
-    )(q_root, root.value, root.prior_logits, visit_root)
+    completed_q = jax.vmap(qtransform_fn, in_axes=[0, 0, 0, 0])(
+        q_root, root.value, root.prior_logits, visit_root
+    )
 
     final_score = root_gumbel + root.prior_logits + completed_q
     best_a = masked_argmax(final_score, invalid_actions)
 
-    # these are not really "advantages" for the 1sh policy.
-    # we populate the advantages field for wandb graphs
-    final_advantages = completed_q
     search_logits = root.prior_logits + completed_q
 
     # Final mask to ensure invalid actions are -inf
@@ -860,53 +972,22 @@ def gumbel_muzero_policy_1sh(
     # completed-Q info for all A actions (not just the num_root_considered explored ones).
     if use_bnk:
         _, bnk_k_indices = jax.lax.top_k(search_logits, k=num_k_actions)  # [B, K]
-        k_root_prior_logits = _fast_gather2d(root.prior_logits, bnk_k_indices)  # [B, K]
         k_search_logits = _fast_gather2d(search_logits, bnk_k_indices)  # [B, K]
         bnk_action_weights = jax.nn.softmax(k_search_logits)  # [B, K]
     else:
         bnk_k_indices = None
-        k_root_prior_logits = None
-        k_search_logits = None
         bnk_action_weights = None
-
-    # Reshape layer1_value for debugging
-    layer1_value_full = jnp.sum(mask1 * layer1_out.value[:, :, None], 1)
-    rescaled_qvalues1 = jnp.sum(mask1 * rescaled_qvalues1[:, :, None], 1)
 
     return PolicyOutput(
         # --- decision & training targets ---
         action=best_a,  # int32  [B]
         action_weights=action_weights,  # float [B, A]
-        # --- convenience for analysis ---
-        search_logits=search_logits,  # [B, A]
-        # --- root-level diagnostics ---
-        children_values=q_root,  # [B, A]
         visit_counts=visit_root,  # [B, A]
-        root_gumbel=root_gumbel,  # [B, A]
-        root_prior_logits=root.prior_logits,  # [B, A]
-        # layer 1 diagnostics
-        layer1_value=layer1_value_full,  # [B, A]
-        # after q-transform
-        final_qvalues=completed_q,  # [B, A]
-        final_score=final_score,  # [B, A]
-        advantages=final_advantages,
-        # internals of q-transform
-        raw_value=raw_value,  # [B]
-        mixed_value=mixed_value,  # [B]
-        maxvisit=maxvisit,  # [B]
-        rescaled_qvalues=rescaled_qvalues1,  # [B, A]  (optional)
-        rescaled_qvalues2=rescaled_qvalues2,  # [B, A]  (optional)
         # BNK compressed fields (populated when use_bnk=True)
         bnk_k_indices=bnk_k_indices,  # [B, K1] or None
-        k_root_prior_logits=k_root_prior_logits,  # [B, K1] or None
-        k_search_logits=k_search_logits,  # [B, K1] or None
         bnk_action_weights=bnk_action_weights,  # [B, K1] or None
     )
 
-
-# =============================================================================
-# MCTS
-# =============================================================================
 def make_mcts(config, wenv, model):
     is_chess = config["env_id"] == "chess"
 
@@ -977,28 +1058,6 @@ def make_mcts(config, wenv, model):
 
         return recurrent_fn
 
-    # We run a custom "1sh" search (gumbel_muzero_policy_1sh, inlined below)
-    # instead of the full MCTX MCTS. The full MCTS expands nodes one at a time,
-    # sequentially. What we implement inline is a fast, fully-parallel version of
-    # what that MCTS would do if it ran a single round of Sequential Halving:
-    #   - SH always explores `num_root_considered` unique actions, so we
-    #     evaluate all of them in parallel in one batched network call.
-    #   - We then discard the worse half, keep the survivors (`num_survivors`),
-    #     expand exactly one inner node per survivor (again in parallel), and
-    #     pick the best action.
-    # This approximates one round of the full MCTS and empirically works very
-    # well -- well enough to train chess models with it. The search budget is
-    # fixed by the two rungs (num_root_considered / num_survivors).
-    #
-    # Because 1sh is this fixed-shape single round, several MCTS config knobs are
-    # currently UNUSED -- they are placeholders for when we swap in MCTX's full
-    # node-by-node MCTS, which will use them:
-    #   - mcts_num_simulations : node-expansion budget for the full search
-    #   - mcts_epsilon         : for qtransform
-    #   - mcts_max_m           : max number of sampled actions at the root
-    #   - mcts_use_gumbel      : toggle Gumbel-MuZero / regular MuZero
-    #   - mcts_variant         : which MCTX policy to dispatch to
-    # They are kept in the configs so the values are ready when that lands.
     @functools.partial(jax.jit, static_argnums=(4, 5))
     def run_mcts(
         rng_key: chex.PRNGKey,
@@ -1538,6 +1597,7 @@ def make_selfplay(
 
         ep_step_min = jnp.min(ep_step)
         ep_step_max = jnp.max(ep_step)
+        ep_step_std = jnp.std(ep_step)  # jnp.std upcasts int16 ep_step to float
 
         scalar_metrics = {
             "selfplay/global_step": selfplay_state.step_count,
@@ -1551,6 +1611,7 @@ def make_selfplay(
             "selfplay/n_legal_moves_avg_mid": avg_legal_moves_mid,
             "selfplay/ep_step_min": ep_step_min,
             "selfplay/ep_step_max": ep_step_max,
+            "selfplay/ep_step_std": ep_step_std,
             "selfplay-reward/valid_1s_aft_term": valid_1s_aft_term,
             "selfplay-reward/valid_0s_aft_term": valid_0s_aft_term,
             "selfplay-reward/valid_0s_no_term": valid_0s_no_term,
@@ -1757,13 +1818,25 @@ def make_train(config, model, model_state, data_sharding=None):
             boundaries=[warmup_steps],
         )
     else:
-        lr_schedule = base_learning_rate
+        lr_schedule = optax.constant_schedule(base_learning_rate)
 
-    # [todo] figure out better default, or remove clipping
     max_grad_norm = config.get("max_grad_norm", 1.0)
+
+    # decay conv/dense kernels only. The "kernel" leaf
+    # name covers exactly Conv/Dense weights, so this mask excludes biases, the
+    # Derf norm params (alpha/gamma/beta/shift), and the ReZero alpha.
+    def _decay_mask_fn(params):
+        flat = flax.traverse_util.flatten_dict(params)
+        mask = {path: (path[-1] == "kernel") for path in flat}
+        return flax.traverse_util.unflatten_dict(mask)
+
+    adamw_kwargs = dict(weight_decay=weight_decay)
+    if config.get("weight_decay_kernels_only", False):
+        adamw_kwargs["mask"] = _decay_mask_fn
+
     tx = optax.chain(
         optax.clip_by_global_norm(max_grad_norm),
-        optax.adamw(lr_schedule, weight_decay=weight_decay),
+        optax.adamw(lr_schedule, **adamw_kwargs),
     )
 
     # factor out creation so we can JIT it with REPLICATED out_shardings
@@ -1910,6 +1983,8 @@ def make_alphazero(config, rng, data_sharding=None):
     config = config.copy()
     config["game_obs_shape"] = wenv.obs_shape
     config["game_num_actions"] = wenv.num_actions
+
+    _print_config(config)
 
     # thread sharding through model/train/buffers/selfplay
     model, model_state = make_model(
@@ -2178,45 +2253,120 @@ def _ascii_loss_chart(series_map, height=12, max_width=70):
     return "\n".join(lines) + "\n  " + legend
 
 
-def _probe_executables(run_fn, runner_state):
-    """Pre-flight: force-compile run_fn for BOTH is_warmup branches up front, so a
-    second-executable recompile (-> doubled HBM scratch -> OOM) surfaces now rather
-    than after a long warmup. is_warmup is traced, so both branches must share one
-    executable; cache size jumping to 2 means run_fn is not a fixed point on
-    runner_state and the train path would OOM once warmup ends.
+def _fixed_point_mismatches(in_state, out_info):
+    """Compare run_fn's train-path OUTPUT against its INPUT runner_state, leaf by
+    leaf. Any difference in dtype, shape, or sharding means runner_state is not a
+    fixed point: feeding the output back next cycle retraces -> a second executable
+    -> doubled HBM scratch -> OOM.
 
-    Donation-safe: run_fn donates arg 0, so we probe on a throwaway *copy* of
-    runner_state and discard the result, leaving the real state intact for warmup.
-    Two sequential calls (output -> input) are what actually exercise the fixed
-    point. The is_warmup=False call trains on the still-empty replay buffer, but
-    that garbage dies with the copy. Note: the copy transiently doubles the
-    runner_state's HBM (buffers included).
+    in_state: the concrete runner_state (leaves expose .dtype/.shape/.sharding).
+    out_info: ShapeDtypeStruct pytree from Compiled.out_info (same attrs).
+    Returns a list of (path_str, field, in_value, out_value) for each mismatch.
     """
-    # .copy() gives a genuinely distinct buffer (the documented way to survive a
-    # donated jit call) -- unlike device_put-to-same-sharding, which aliases the
-    # original and would get killed when run_fn donates the probe.
-    probe = jax.tree.map(lambda x: x.copy(), runner_state)
-    out, _ = run_fn(probe, jnp.array(False))  # train path (heavier: optimizer step)
-    out, _ = run_fn(out, jnp.array(True))  # warmup path -- must reuse the same exe
-    jax.block_until_ready(out)
-    n = run_fn._cache_size()
-    if n == 1:
+    in_leaves = jax.tree_util.tree_leaves_with_path(in_state)
+    out_leaves = jax.tree_util.tree_leaves_with_path(out_info)
+    mismatches = []
+    for (path, x), (_, y) in zip(in_leaves, out_leaves):
+        where = jax.tree_util.keystr(path)
+        if x.dtype != y.dtype:
+            mismatches.append((where, "dtype", x.dtype, y.dtype))
+        if x.shape != y.shape:
+            mismatches.append((where, "shape", x.shape, y.shape))
+        if x.sharding != y.sharding:
+            mismatches.append((where, "sharding", x.sharding, y.sharding))
+    return mismatches
+
+
+def _probe_executables(run_fn, runner_state):
+    """Pre-flight, zero extra HBM: AOT-compile run_fn for BOTH is_warmup branches so
+    a compile / scratch-reservation OOM surfaces now rather than after a long
+    warmup, then verify the train (is_warmup=False) branch's OUTPUT matches its
+    INPUT in dtype/shape/sharding -- i.e. runner_state is a fixed point, so feeding
+    it back after warmup won't retrace into a second executable -> doubled HBM ->
+    OOM.
+
+    .lower()/.compile() traces and compiles but never *executes*, so run_fn's arg-0
+    donation is not triggered: runner_state stays live for warmup and nothing is
+    copied (the old throwaway-copy probe transiently doubled HBM and OOM'd chess).
+    is_warmup is traced into one shared executable, but the train output's concrete
+    sharding/dtype is what historically diverged, so we inspect that branch.
+    """
+    out_info = None
+    for warmup in (False, True):
+        # .compile() forces XLA compilation + program load, so a compile-time /
+        # scratch-reservation OOM (the "Error loading program ... reserve NN.NG")
+        # surfaces here, before the long warmup.
+        compiled = run_fn.lower(runner_state, jnp.array(warmup)).compile()
+        if warmup is False:
+            out_info = compiled.out_info[0]  # (runner_state, metrics) -> [0]
+
+    mismatches = _fixed_point_mismatches(runner_state, out_info)
+    if not mismatches:
         print(
-            "[probe] OK: warmup and train share 1 executable; no post-warmup "
-            "recompile/OOM.",
+            "[probe] OK: train-path output dtype/shape/sharding == input; no "
+            "post-warmup recompile/OOM.",
             flush=True,
         )
     else:
         print(
-            f"[probe] WARN: run_fn cache size {n} (expected 1) -- not a fixed "
-            f"point on runner_state; train path would recompile -> likely OOM "
-            f"after warmup.",
+            f"[probe] WARN: {len(mismatches)} leaf field(s) change on the train "
+            f"path -> feeding output back will recompile -> likely OOM after "
+            f"warmup. First: {mismatches[0]}",
             flush=True,
         )
-    del out  # drop the throwaway state; real runner_state is untouched
+    # runner_state was never donated/executed -- caller uses it as-is.
+
+class _Tee:
+    """Duplicate writes to several streams at once (terminal + log file)."""
+
+    def __init__(self, *streams):
+        self.streams = streams
+
+    def write(self, data):
+        for s in self.streams:
+            s.write(data)
+        return len(data)
+
+    def flush(self):
+        for s in self.streams:
+            s.flush()
+
+
+def _start_run_logfile(config):
+    """Mirror all stdout to logs/[env]_[timestamp].txt for the rest of the run."""
+    os.makedirs("logs", exist_ok=True)
+    env_name = config.get("game_name", config["env_id"])
+    log_path = os.path.join(
+        "logs", f"{env_name}_{time.strftime('%Y%m%d-%H%M%S')}.txt"
+    )
+    log_file = open(log_path, "w", buffering=1)  # line-buffered: flush each line
+    prev_stdout = sys.stdout
+    sys.stdout = _Tee(prev_stdout, log_file)
+
+    def _close():  # restore + close on normal exit, Ctrl+C, or crash
+        sys.stdout = prev_stdout
+        log_file.close()
+
+    atexit.register(_close)
+    return log_path
+
+
+def _print_config(config):
+    """Print the full run config as a sorted key/value table before training."""
+    name = config.get("game_name", config.get("env_id", "?"))
+    print("\n" + "=" * 60)
+    print(f"Run config [{name}]")
+    print("=" * 60)
+    width = max(len(k) for k in config)
+    for k in sorted(config):
+        print(f"  {k:<{width}} : {config[k]}")
+    print("=" * 60 + "\n", flush=True)
 
 
 def run_alphazero(config, ckpt_path=None):
+    log_path = _start_run_logfile(config)
+    print(f"Logging this run to {log_path}")
+
     rng = jax.random.PRNGKey(42)
 
     rng, az_rng = jax.random.split(rng)
@@ -2228,9 +2378,9 @@ def run_alphazero(config, ckpt_path=None):
 
     print("Successfully initialized all components.")
 
-    # Optional pre-flight: compile both is_warmup branches now (on a throwaway copy)
-    # so a recompile-induced OOM surfaces before the long warmup, not after it.
-    if config.get("debug_probe_executables", True):
+    # Optional pre-flight: AOT-compile both is_warmup branches now (no execution,
+    # no copy) so a recompile-induced OOM surfaces before the long warmup, not after.
+    if config.get("debug_probe_executables", False):
         _probe_executables(run_fn, runner_state)
 
     # --- Warmup Phase: run cycles with is_warmup=True (model frozen) to prime the
@@ -2268,6 +2418,8 @@ def run_alphazero(config, ckpt_path=None):
         "value": [],
         "policy": [],
     }  # per-cycle, for ASCII chart
+    ep_step_std_history = []  # per-cycle selfplay/ep_step_std, for ASCII chart
+    norm_history = {"grad": [], "param": []}  # per-cycle grad/param norms, ASCII chart
     chart_period = config.get("loss_chart_period", 50)
 
     # --- Strength eval setup: a GATED ELO LADDER.
@@ -2283,14 +2435,16 @@ def run_alphazero(config, ckpt_path=None):
     eval_period = config.get("eval_period", 100)
     # Promote when current scores this well vs the anchor (top of the informative
     # band: ~0.85 ≈ +300 ΔElo). Higher → fewer, taller rungs but riskier saturation.
-    eval_promote_score = config.get("eval_promote_score", 0.85)
+    eval_promote_score = config.get("eval_promote_score", 0.75)
     # ...and only after it holds for this many consecutive evals (noise guard).
     eval_promote_patience = config.get("eval_promote_patience", 2)
     # Periodic checkpointing: every ckpt_period cycles, overwrite ckpt_path with
     # the latest params (crash recovery / resumable inference). Disabled if no
     # ckpt_period set or no path given (e.g. --no-save).
     ckpt_period = config.get("ckpt_period")
-    eval_openings = all_opening_actions(wenv, config)
+    eval_openings = all_opening_actions(
+        wenv, config, plies=config.get("eval_opening_plies", 1)
+    )
     eval_fn = az.run_mcts_fn
     # Ladder state. anchor_params=None ⇒ rung 0 = random opponent, pinned at Elo 0.
     anchor_params = None
@@ -2340,7 +2494,8 @@ def run_alphazero(config, ckpt_path=None):
             f"p1_wins={last.get('selfplay/p1_wins', 0):.0f} "
             f"p2_wins={last.get('selfplay/p2_wins', 0):.0f} "
             f"ties={last.get('selfplay/p_just_tied', 0):.0f} "
-            f"n_legal_avg_mid={last.get('selfplay/n_legal_moves_avg_mid', 0):.2f}\n"
+            f"n_legal_avg_mid={last.get('selfplay/n_legal_moves_avg_mid', 0):.2f} "
+            f"ep_step_std={last.get('selfplay/ep_step_std', 0):.2f}\n"
             f"  phase2 drain    | "
             f"consumable={last.get('drain/num_valid_consumable', 0):.0f} "
             f"slices={last.get('drain/n_slices', 0):.0f}\n"
@@ -2348,6 +2503,8 @@ def run_alphazero(config, ckpt_path=None):
             f"loss={last.get('total_loss', 0):.4f} "
             f"loss_v={last.get('loss_v', 0):.4f} "
             f"loss_pi={last.get('loss_pi', 0):.4f} "
+            f"grad_norm={last.get('norms/grad_norm', 0):.3f} "
+            f"param_norm={last.get('norms/param_norm', 0):.3f} "
             f"batch[r+={last.get('train_batch/n_reward_pos', 0):.0f} "
             f"r-={last.get('train_batch/n_reward_neg', 0):.0f} "
             f"r0={last.get('train_batch/n_reward_zero', 0):.0f} "
@@ -2363,6 +2520,13 @@ def run_alphazero(config, ckpt_path=None):
             len(loss_history["total"]) > 4000
         ):  # cap memory; chart bucket-averages anyway
             loss_history = {k: v[-4000:] for k, v in loss_history.items()}
+        ep_step_std_history.append(last.get("selfplay/ep_step_std", float("nan")))
+        if len(ep_step_std_history) > 4000:
+            ep_step_std_history = ep_step_std_history[-4000:]
+        norm_history["grad"].append(last.get("norms/grad_norm", float("nan")))
+        norm_history["param"].append(last.get("norms/param_norm", float("nan")))
+        if len(norm_history["grad"]) > 4000:
+            norm_history = {k: v[-4000:] for k, v in norm_history.items()}
         if (
             chart_period
             and cycle_n % chart_period == 0
@@ -2379,6 +2543,23 @@ def run_alphazero(config, ckpt_path=None):
                 flush=True,
             )
             print(flush=True)
+            print(
+                f"── selfplay/ep_step_std over last {n_pts} cycles ──",
+                flush=True,
+            )
+            print(
+                _ascii_loss_chart({"ep_step_std": ep_step_std_history}),
+                flush=True,
+            )
+            print(flush=True)
+            # grad/param norms on separate small (default-size) charts: they live
+            # on very different scales, so a shared y-axis would flatten grad_norm.
+            print(f"── grad_norm over last {n_pts} cycles ──", flush=True)
+            print(_ascii_loss_chart({"grad_norm": norm_history["grad"]}), flush=True)
+            print(flush=True)
+            print(f"── param_norm over last {n_pts} cycles ──", flush=True)
+            print(_ascii_loss_chart({"param_norm": norm_history["param"]}), flush=True)
+            print(flush=True)
 
         is_diagnostic_time = (cycle_n == 1) or (
             cycle_n % config.get("diagnostic_period", 100) == 0
@@ -2391,6 +2572,9 @@ def run_alphazero(config, ckpt_path=None):
         # connect4 opening-column value-vs-perfect-play diagnostic
         elif is_diagnostic_time and config["env_id"] == "connect_four":
             _run_connect4_diagnostics(runner_state.model_ts, wenv, config)
+        # go policy-logit + value-head ASCII diagnostic
+        elif is_diagnostic_time and config["env_id"].startswith("go"):
+            _run_go_diagnostics(runner_state.model_ts, wenv, config)
 
         # --- Strength eval: gated Elo ladder (see setup block above).
         # Always measure vs random (forgetting detector + rung-0 yardstick); on
@@ -2414,6 +2598,17 @@ def run_alphazero(config, ckpt_path=None):
                 key=ek_rand,
                 label="random (Elo 0)",
             )
+            # Cap the Elo credit for beating the random opponent. Random is rung
+            # 0's anchor, so its ΔElo is the base every higher rung stacks on.
+            # Beating random ~100% otherwise pegs ΔElo at the score→Elo clamp
+            # ceiling (≈+1600), inflating the whole ladder. With the default cap
+            # of 0, beating random just anchors the ladder at Elo 0 (no credit
+            # for beating random); all real Elo then comes from beating past
+            # selves. min() keeps the negative side, so losing to random still
+            # shows negative Elo and trips the forgetting detector.
+            rand_elo_cap = config.get("eval_vs_random_max_elo", 0.0)
+            if rand_elo_cap is not None:
+                delta_rand = min(delta_rand, float(rand_elo_cap))
             if score_rand > best_score_rand:
                 best_score_rand = score_rand
             elif rung > 0 and score_rand < best_score_rand - 0.15:
@@ -2520,12 +2715,36 @@ def _random_legal_actions(env_state, config, key):
     return jnp.argmax(logits + g, axis=-1).astype(jnp.int32)
 
 
-def all_opening_actions(wenv, config):
-    """Every legal first move from the initial position (player-1 openings).
-    ttt->9, connect4->7, hex4x4->16, chess->20, etc."""
+def all_opening_actions(wenv, config, plies=1):
+    """Every legal opening LINE of length `plies` from the initial position.
+
+    Returns a 2-D int array of shape (num_openings, plies); row i is one forced
+    move sequence. plies=1 -> one row per legal first move (ttt->9, connect4->7,
+    hex4x4->16, chess->20). plies=2 -> every legal (move1, move2) pair (chess
+    ->~400), which probes a wider, more balanced slice of the opening tree and
+    so gives a lower-variance ladder score. Lines that terminate before `plies`
+    moves are dropped (can't host a full game), keeping the result rectangular.
+    """
     env_state = wenv.init_dummy_estate(batch_size=1)
     legal = np.asarray(_legal_mask_from_state(env_state, config)[0])
-    return np.nonzero(legal)[0].astype(np.int32)
+    lines = [[int(a)] for a in np.nonzero(legal)[0]]
+    for _ in range(int(plies) - 1):
+        n = len(lines)
+        env_state = wenv.init_dummy_estate(batch_size=n)
+        depth = len(lines[0])
+        for d in range(depth):  # replay the line built so far, batched
+            col = jnp.asarray([line[d] for line in lines], dtype=jnp.int32)
+            env_state = wenv.step(env_state, col)
+        legal_masks = np.asarray(_legal_mask_from_state(env_state, config))
+        terminated = np.asarray(env_state.terminated)
+        next_lines = []
+        for i, line in enumerate(lines):
+            if terminated[i]:
+                continue  # game over before reaching `plies` moves -> drop
+            for a in np.nonzero(legal_masks[i])[0]:
+                next_lines.append(line + [int(a)])
+        lines = next_lines
+    return np.asarray(lines, dtype=np.int32)
 
 
 def run_eval_match(
@@ -2543,11 +2762,12 @@ def run_eval_match(
 ):
     """Play one game per forced opening, fully batched.
 
-    `opening_actions` is a 1-D array of player-1 first moves; one game is played
-    per entry. Seat 0 plays with `params_p0`, seat 1 with `params_p1`. A param
-    set of `None` means uniform-random legal play. After the forced opening move,
-    both sides play greedy MCTS. Returns (p0_wins, draws, p1_wins) as ints; games
-    that don't finish within `max_plies` count as draws.
+    `opening_actions` is an array of forced opening lines: shape (N,) for a single
+    forced move each, or (N, K) for a K-move forced line. One game is played per
+    row. Seat 0 plays with `params_p0`, seat 1 with `params_p1`. A param set of
+    `None` means uniform-random legal play. After the forced opening moves, both
+    sides play greedy MCTS. Returns (p0_wins, draws, p1_wins) as ints; games that
+    don't finish within `max_plies` count as draws.
     """
     if max_plies is None:
         max_plies = config.get("eval_max_plies") or config.get("game_max_steps") or 512
@@ -2555,6 +2775,8 @@ def run_eval_match(
         num_simulations = config["mcts_num_simulations"]
 
     opening_actions = np.asarray(opening_actions, dtype=np.int32)
+    if opening_actions.ndim == 1:  # (N,) -> (N, 1): one forced move per game
+        opening_actions = opening_actions[:, None]
     num_real = len(opening_actions)
 
     # Pad the batch up to a multiple of the device count so data-parallel
@@ -2569,7 +2791,8 @@ def run_eval_match(
     num_games = len(batch_actions)
 
     env_state = wenv.init_dummy_estate(batch_size=num_games)
-    env_state = wenv.step(env_state, jnp.asarray(batch_actions))  # forced opening
+    for d in range(batch_actions.shape[1]):  # play each forced opening ply
+        env_state = wenv.step(env_state, jnp.asarray(batch_actions[:, d]))
 
     final_rewards = jnp.zeros((num_games, 2), dtype=jnp.float32)
     finished = env_state.terminated
@@ -2747,6 +2970,13 @@ def _print_board(env_state, wenv, env_id):
         for r in range(H):
             cells = " ".join(_sym(board[r, c]) for c in range(W))
             print(f"  {r + 1:>2} " + " " * r + cells)
+    elif env_id.startswith("go"):
+        # Columns are letters (a, b, ...), rows are 1-indexed numbers.
+        col_letters = " ".join(chr(ord("a") + c) for c in range(W))
+        print("     " + col_letters)
+        for r in range(H):
+            cells = " ".join(_sym(board[r, c]) for c in range(W))
+            print(f"  {r + 1:>2} " + cells)
     else:  # tic_tac_toe and other square grids
         for r in range(H):
             print(
@@ -2765,6 +2995,21 @@ def _parse_move(raw: str, env_id: str, H: int, W: int, legal):
         if env_id == "connect_four":
             # input is a 1-indexed column number
             action = int(raw) - 1
+        elif env_id.startswith("go"):
+            if raw in ("pass", "p"):
+                action = W * W  # pass is the last action index (size**2)
+            else:
+                m = re.fullmatch(r"([a-z])\s*(\d+)", raw)
+                if m:  # algebraic, e.g. "a1" (column letter + row number)
+                    col = ord(m.group(1)) - ord("a")
+                    row = int(m.group(2)) - 1
+                    action = row * W + col
+                else:
+                    parts = raw.split()
+                    if len(parts) == 2:  # "row col", 1-indexed
+                        action = (int(parts[0]) - 1) * W + (int(parts[1]) - 1)
+                    else:  # single 1-indexed cell number
+                        action = int(raw) - 1
         elif env_id.startswith("hex"):
             m = re.fullmatch(r"([a-z])\s*(\d+)", raw)
             if m:  # algebraic, e.g. "a1" / "c3" (column letter + row number)
@@ -2795,8 +3040,12 @@ def _action_to_str(action: int, env_id: str, W: int) -> str:
     """Human-readable description of a model's chosen action."""
     if env_id == "connect_four":
         return f"column {action + 1}"
+    if env_id.startswith("go") and action == W * W:
+        return "pass"
     row, col = action // W, action % W
     if env_id.startswith("hex"):
+        return f"{chr(ord('a') + col)}{row + 1}"
+    if env_id.startswith("go"):
         return f"{chr(ord('a') + col)}{row + 1}"
     return f"cell {action + 1} (row {row + 1}, col {col + 1})"
 
@@ -2853,6 +3102,8 @@ def play_against_model(config, params=None, *, human_player=0, num_simulations=N
         print("Enter a column number (1-7) to drop your piece.")
     elif env_id.startswith("hex"):
         print("Enter a cell as a column letter + row number, e.g. 'a1' or 'c3'.")
+    elif env_id.startswith("go"):
+        print("Enter a cell as a column letter + row number, e.g. 'a1'; or 'pass'.")
     else:
         print("Enter the number shown in an empty cell (or 'row col').")
     print("Commands: undo, restart, quit")
@@ -2931,6 +3182,93 @@ def play_against_model(config, params=None, *, human_player=0, num_simulations=N
     print("=" * 50)
 
 
+def play_both(config, params=None):
+    """Interactive terminal game where you enter moves for BOTH players.
+
+    You control player 1 and player 2 yourself; the model never moves, but its
+    value head and policy are shown for each position.
+    Commands during a turn: `undo`, `restart`, `quit`.
+    """
+    env_id = config["env_id"]
+    if env_id == "chess":
+        print("Playing both sides for chess is currently not supported.")
+        return
+
+    wenv, model, model_state, run_mcts_fn, config = make_play(config)
+    H, W = wenv.obs_shape[0], wenv.obs_shape[1]
+
+    if params is None:
+        params = model_state["params"]
+        print("⚠️  No params provided — showing eval from an UNTRAINED model.")
+    params = jax.device_put(params)
+
+    print("\n" + "=" * 50)
+    print(f"Playing {env_id}. You control both players.")
+    print("Player 1 is 'X', player 2 is 'O'.")
+    if env_id == "connect_four":
+        print("Enter a column number (1-7) to drop your piece.")
+    elif env_id.startswith("hex"):
+        print("Enter a cell as a column letter + row number, e.g. 'a1' or 'c3'.")
+    elif env_id.startswith("go"):
+        print("Enter a cell as a column letter + row number, e.g. 'a1'; or 'pass'.")
+    else:
+        print("Enter the number shown in an empty cell (or 'row col').")
+    print("Commands: undo, restart, quit")
+    print("=" * 50)
+
+    rng = jax.random.PRNGKey(int(time.time()))
+    rng, env_rng = jax.random.split(rng)
+    initial_state = wenv.init(jax.random.split(env_rng, 1))
+    state = initial_state
+    history = [initial_state]
+
+    while not bool(state.terminated[0]):
+        _print_board(state, wenv, env_id)
+        current_player = int(state.current_player[0])
+        sym = "X" if current_player == 0 else "O"
+        _print_model_eval(model, params, wenv, state, env_id, W)
+        legal = np.asarray(state.legal_action_mask[0])
+        while True:
+            raw = input(f"Player {current_player + 1} ({sym}) move: ").strip().lower()
+            if raw in ("quit", "q", "exit"):
+                print("Bye.")
+                return
+            if raw == "undo":
+                # each ply is one human move, so step back a single state
+                if len(history) >= 2:
+                    history = history[:-1]
+                else:
+                    print("Nothing to undo.")
+                state = history[-1]
+                break
+            if raw == "restart":
+                state = initial_state
+                history = [initial_state]
+                print("Game restarted.")
+                break
+            action = _parse_move(raw, env_id, H, W, legal)
+            if action is None:
+                print("  Illegal or unparseable move, try again.")
+                continue
+            state = wenv.step(state, jnp.array([action], dtype=jnp.int32))
+            history.append(state)
+            break
+
+    # --- Game over ---
+    _print_board(state, wenv, env_id)
+    rewards = np.asarray(state.rewards[0])
+    print("=" * 50)
+    print("--- GAME OVER ---")
+    if rewards[0] > 0:
+        print("Player 1 (X) wins! 🎉")
+    elif rewards[1] > 0:
+        print("Player 2 (O) wins! 🎉")
+    else:
+        print("Draw.")
+    print(f"Rewards [P1, P2] = {rewards.tolist()}")
+    print("=" * 50)
+
+
 # =============================================================================
 # Configuration
 # =============================================================================
@@ -2959,8 +3297,6 @@ def get_ttt_config():
         "use_conv_model": True,
         "conv_width": 32,
         "conv_depth": 4,
-        "conv_use_names": True,
-        "conv_use_derf": True,
         "conv_use_kata_gpool": False,
         # --- MCTS ---
         "mcts_num_simulations": 13,
@@ -2981,6 +3317,7 @@ def get_ttt_config():
         "num_iters": 10_000,
         "learning_rate": 1e-3,
         "weight_decay": 1e-4,
+        "weight_decay_kernels_only": True,
         "use_bf16": False,
         "lr_warmup_steps": buffer_warmup_steps,
         "train_batch_size": batch_size,
@@ -3022,7 +3359,7 @@ def get_hex_config(board_size=4):
         5: dict(
             conv_width=128,
             conv_depth=4,
-            num_iters=(800 * 20),
+            num_iters=(1700 * 20),
             learning_rate=1e-4,
             cycle_n_selfplay=20,
             cycle_n_train=20,
@@ -3056,8 +3393,8 @@ def get_hex_config(board_size=4):
             conv_depth=32,
             num_iters=(40_000 * 80),
             learning_rate=1e-4,
-            cycle_n_selfplay=80,
-            cycle_n_train=50,
+            cycle_n_selfplay=40,
+            cycle_n_train=25,
         ),
     }
     if board_size not in board_cfgs:
@@ -3067,7 +3404,7 @@ def get_hex_config(board_size=4):
     game_max_steps = board_size * board_size
 
     # ---- shrunk for easy single-file runs (hex prod = 8192) ----
-    batch_size = 4096
+    batch_size = 8192
     REPLAY_BUFFER_TOTAL_SIZE = 2_048_000
     # ------------------------------------------------------------
 
@@ -3088,10 +3425,10 @@ def get_hex_config(board_size=4):
         "game_num_actions": None,  # patched from live env in make_alphazero
         # --- Model ---
         "use_conv_model": True,
+        # "use_bn_model": True,
+        "use_bn_model": False,
         "conv_width": board_cfg["conv_width"],
         "conv_depth": board_cfg["conv_depth"],
-        "conv_use_names": True,
-        "conv_use_derf": True,
         "conv_use_kata_gpool": True,
         # --- MCTS (1sh) ---
         "mcts_num_simulations": 24,
@@ -3116,6 +3453,7 @@ def get_hex_config(board_size=4):
         "num_iters": board_cfg["num_iters"],
         "learning_rate": board_cfg["learning_rate"],
         "weight_decay": 1e-4,
+        "weight_decay_kernels_only": True,
         "use_bf16": False,
         "lr_warmup_steps": buffer_warmup_steps,
         "train_batch_size": batch_size,
@@ -3138,6 +3476,7 @@ def get_hex_config(board_size=4):
         "diagnostic_period": 50,
         "eval_period": 50,  # run every N cycles
         "eval_max_plies": None,
+        "eval_opening_plies": 2,
         "ckpt_period": None,  # save a checkpoint every N cycles (None = only at end)
         # --- System ---
         "enable_sharding": True,
@@ -3166,10 +3505,10 @@ def get_connect4_config():
         "game_num_actions": 7,
         # --- Model ---
         "use_conv_model": True,
+        # "use_bn_model": False,
+        "use_bn_model": True,
         "conv_width": 256,
         "conv_depth": 8,
-        "conv_use_names": True,
-        "conv_use_derf": True,
         "conv_use_kata_gpool": True,
         # --- MCTS (1sh) ---
         "mcts_num_simulations": 64,
@@ -3188,9 +3527,10 @@ def get_connect4_config():
         "mcts_bnk_rehydrate_fields": False,
         "exp_bnk_action_weights": False,
         # --- Training ---
-        "num_iters": 2000 * 20,
+        "num_iters": 2100 * 20,
         "learning_rate": 5e-4,
         "weight_decay": 1e-4,
+        "weight_decay_kernels_only": True,
         "use_bf16": False,
         "lr_warmup_steps": buffer_warmup_steps,
         "train_batch_size": batch_size,
@@ -3213,6 +3553,7 @@ def get_connect4_config():
         "diagnostic_period": 50,
         "eval_period": 50,  # run every N cycles
         "eval_max_plies": None,
+        "eval_opening_plies": 3,
         "ckpt_period": None,  # save a checkpoint every N cycles (None = only at end)
         # --- System ---
         "enable_sharding": True,
@@ -3223,8 +3564,8 @@ def get_chess_config():
     board_size = 8
     GAME_MAX_STEPS = 512
 
-    selfplay_bs = 4096
-    train_bs = 4096
+    selfplay_bs = 8192
+    train_bs = 8192
     REPLAY_BUFFER_TOTAL_SIZE = 4096000 * 2
     # -----------------------------------------------------------------------
 
@@ -3246,9 +3587,10 @@ def get_chess_config():
         "use_conv_model": True,
         "conv_width": 384,
         "conv_depth": 32,
-        "conv_use_names": True,
-        "conv_use_derf": True,
         "conv_use_kata_gpool": True,
+        "use_bn_model": True,
+        "nested_bottleneck_ratio": 2,
+        "nested_num_inner_blocks": 2,
         # --- MCTS (1sh) ---
         "mcts_num_simulations": 12,
         "mcts_variant": "1sh",
@@ -3269,9 +3611,10 @@ def get_chess_config():
         "exp_use_root_temperature": True,  # from KataGo
         "exp_root_temperature": 1.5,
         # --- Training ---
-        "num_iters": 128_000 * 20,
+        "num_iters": 459_000 * 20,
         "learning_rate": 1e-4,
         "weight_decay": 1e-4,
+        "weight_decay_kernels_only": True,
         "use_bf16": False,
         "lr_warmup_steps": buffer_warmup_steps,
         "train_batch_size": train_bs,
@@ -3294,8 +3637,186 @@ def get_chess_config():
         # --- Strength eval (vs random + frozen anchor; no external engine) ---
         # Plays one game per legal opening (chess = 20) from both colors.
         "eval_period": 50,  # run every N cycles
+        # Forced opening depth per eval game: enumerate every legal line of this
+        # many plies (1 -> 20 chess openings, 2 -> ~400) and play one game each
+        # from both colors. Deeper = wider opening coverage = lower-variance,
+        # more accurate ladder score, at proportionally more eval games.
+        "eval_opening_plies": 2,
         "eval_max_plies": 200,  # cap match length; unfinished games = draw
+        # Max Elo credited for beating random (rung 0's anchor). At 0, beating
+        # random just anchors the ladder at Elo 0 and all real Elo comes from
+        # beating past selves. Without a cap, ~100% vs random pegs ΔElo at the
+        # clamp ceiling (≈+1600) and inflates the whole ladder. Set None to
+        # disable the cap entirely.
+        "eval_vs_random_max_elo": 0.0,
         "ckpt_period": 800,  # save a checkpoint every 800 cycles
+        # --- System ---
+        "enable_sharding": True,
+        "debug_probe_executables": True,
+    }
+
+
+def get_go_config(board_size=5):
+    # pgx Go uses komi 7.5, so games never draw (score margin is always
+    # non-integer): the env always resolves to a win for one side. We treat
+    # it like hex (env_forbids_draws=True). The action space is board_size**2
+    # board points + 1 pass, and a game can run up to board_size**2 * 2 plies
+    # (pgx's default max_termination_steps), so the buffers are sized for that.
+    board_cfgs = {
+        3: dict(
+            conv_width=64,
+            conv_depth=4,
+            num_iters=(1500 * 10),
+            learning_rate=1e-3,
+            cycle_n_selfplay=10,
+            cycle_n_train=10,
+            num_root_considered=8,
+            num_survivors=4,
+        ),
+        4: dict(
+            conv_width=128,
+            conv_depth=6,
+            num_iters=(2000 * 20),
+            learning_rate=1e-4,
+            cycle_n_selfplay=20,
+            cycle_n_train=20,
+            num_root_considered=16,
+            num_survivors=8,
+        ),
+        5: dict(
+            conv_width=256,
+            conv_depth=8,
+            num_iters=(5000 * 30),
+            learning_rate=1e-4,
+            cycle_n_selfplay=30,
+            cycle_n_train=25,
+            num_root_considered=16,
+            num_survivors=8,
+        ),
+        6: dict(
+            conv_width=256,
+            conv_depth=8,
+            num_iters=(10000 * 40),
+            learning_rate=1e-4,
+            cycle_n_selfplay=40,
+            cycle_n_train=40,
+            num_root_considered=8,
+            num_survivors=4,
+            use_bn_model=True,
+        ),
+        7: dict(
+            conv_width=256,
+            conv_depth=16,
+            num_iters=(20000 * 50),
+            learning_rate=1e-4,
+            cycle_n_selfplay=50,
+            cycle_n_train=50,
+            num_root_considered=8,
+            num_survivors=4,
+            use_bn_model=True,
+        ),
+        8: dict(
+            conv_width=256,
+            conv_depth=32,
+            num_iters=(50000 * 50),
+            learning_rate=1e-4,
+            cycle_n_selfplay=50,
+            cycle_n_train=50,
+            num_root_considered=8,
+            num_survivors=4,
+            use_bn_model=True,
+        ),
+        9: dict(
+            conv_width=256,
+            conv_depth=16,
+            num_iters=(200000 * 50),
+            learning_rate=1e-4,
+            cycle_n_selfplay=50,
+            cycle_n_train=50,
+            num_root_considered=8,
+            num_survivors=4,
+            use_bn_model=True,
+        ),
+    }
+    if board_size not in board_cfgs:
+        raise ValueError(f"Unsupported go board size: {board_size}")
+    board_cfg = board_cfgs[board_size]
+
+    # board points + pass; a game can last up to size**2 * 2 plies.
+    num_actions = board_size * board_size + 1
+    game_max_steps = board_size * board_size * 2
+
+    batch_size = 8192
+    REPLAY_BUFFER_TOTAL_SIZE = 2_048_000
+
+    selfplay_buffer_len = game_max_steps + 20
+    replay_buffer_len = REPLAY_BUFFER_TOTAL_SIZE // batch_size
+    buffer_warmup_steps = (selfplay_buffer_len + replay_buffer_len) * 1
+
+    return {
+        # --- Game ---
+        "env_id": f"go_{board_size}x{board_size}",
+        "game_max_steps": game_max_steps,
+        "num_exploratory_moves": game_max_steps // 2,
+        # komi 7.5 => no draws (one side always wins on score).
+        "env_forbids_draws": True,
+        "env_allows_draws": False,
+        "boardsize": board_size,
+        "game_obs_shape": None,
+        "game_num_actions": None,  # patched from live env in make_alphazero
+        # --- Model ---
+        "use_conv_model": True,
+        "use_bn_model": board_cfg.get("use_bn_model", False),
+        "conv_width": board_cfg["conv_width"],
+        "conv_depth": board_cfg["conv_depth"],
+        "conv_use_kata_gpool": True,
+        # --- MCTS (1sh) ---
+        "mcts_num_simulations": 24,
+        "mcts_variant": "1sh",
+        "mcts_max_m": board_cfg["num_root_considered"],
+        "mcts_num_root_considered": board_cfg["num_root_considered"],
+        "mcts_num_survivors": board_cfg["num_survivors"],
+        "mcts_num_k_actions": num_actions,
+        "mcts_use_gumbel": True,
+        "mcts_gumbel_scale": 1.0,
+        "mcts_epsilon": 1e-8,
+        "mcts_rescale_values": False,
+        "mcts_value_scale": 1.0,
+        "mcts_use_mixed_value": True,
+        "mcts_maxvisit_init": 50,
+        "mcts_bnk_rehydrate_fields": False,
+        "exp_bnk_action_weights": False,
+        "exp_use_root_temperature": True,
+        "exp_root_temperature": 1.3,
+        # --- Training ---
+        "num_iters": board_cfg["num_iters"],
+        "learning_rate": board_cfg["learning_rate"],
+        "weight_decay": 1e-4,
+        "weight_decay_kernels_only": True,
+        "use_bf16": False,
+        "lr_warmup_steps": buffer_warmup_steps,
+        "train_batch_size": batch_size,
+        "cycle_n_selfplay": board_cfg["cycle_n_selfplay"],
+        "cycle_n_train": board_cfg["cycle_n_train"],
+        # --- Self-play & Buffers ---
+        "selfplay_batch_size": batch_size,
+        "selfplay_buffer_add_batch_size": batch_size,
+        "selfplay_buffer_sample_batch_size": batch_size,
+        "selfplay_buffer_min_len": selfplay_buffer_len,
+        "selfplay_buffer_max_len": selfplay_buffer_len,
+        "selfplay_buffer_consume_size": batch_size,
+        "replay_buffer_total_size": REPLAY_BUFFER_TOTAL_SIZE,
+        "replay_buffer_add_batch_size": batch_size,
+        "replay_buffer_sample_batch_size": batch_size,
+        "replay_buffer_min_len": 1,
+        "replay_buffer_max_len": replay_buffer_len,
+        "replay_buffer_warmup_steps": buffer_warmup_steps,
+        # --- Diagnostics & strength eval ---
+        "diagnostic_period": 50,
+        "eval_period": 50,  # run every N cycles
+        "eval_max_plies": None,
+        "eval_opening_plies": 2,
+        "ckpt_period": None,  # save a checkpoint every N cycles (None = only at end)
         # --- System ---
         "enable_sharding": True,
     }
@@ -3513,19 +4034,79 @@ def _run_connect4_diagnostics(model_ts, wenv, config):
     print(f"  MSE vs perfect = {mse:.4f} | directional accuracy = {acc:.3f}")
 
 
+def _run_go_diagnostics(model_ts, wenv, config):
+    """Go diagnostic: policy logits on the empty board and the value head after
+    each non-pass opening move, both laid out as boardsize x boardsize grids.
+
+    The pass action (index boardsize**2) is excluded from both grids; its policy
+    logit is printed inline next to the empty-board value for reference.
+    """
+    boardsize = config["boardsize"]
+    n = boardsize * boardsize  # number of board points (pass is action index n)
+
+    # --- Empty-board policy logits (non-pass actions) + value ---
+    env_state = wenv.init_dummy_estate(batch_size=1)
+    obs = wenv.observe(env_state, env_state.current_player)
+    logits, values = model_ts.apply_fn(
+        {"params": model_ts.params},
+        obs,
+        env_state.legal_action_mask,
+        deterministic=True,
+    )
+    logits = np.array(logits.flatten())
+    pass_logit = float(logits[n])
+    value0 = float(values.flatten()[0])
+    logits_2d = logits[:n].reshape((boardsize, boardsize))
+
+    print(
+        f"\n--- Go policy logits on empty board "
+        f"(value={value0:+.3f}, pass logit={pass_logit:+.2f}) ---"
+    )
+    for r in range(boardsize):
+        print("  " + " ".join(f"{logits_2d[r, c]:+.2f}" for c in range(boardsize)))
+
+    # --- Value head after each non-pass opening move ---
+    # One blank board per opening point; each plays a distinct first move.
+    env_state = wenv.init_dummy_estate(batch_size=n)
+    all_moves = jnp.arange(n)  # 0..n-1: every board point (excludes pass=n)
+    env_state = wenv.step(env_state, all_moves)
+    obs = wenv.observe(env_state, env_state.current_player)
+    _logits, values = model_ts.apply_fn(
+        {"params": model_ts.params},
+        obs,
+        env_state.legal_action_mask,
+        deterministic=True,
+    )
+    values_2d = np.array(values.flatten()).reshape((boardsize, boardsize))
+
+    print(
+        "\n--- Go value head after each opening move "
+        "(value = opponent-to-move perspective; negative => opening side winning) ---"
+    )
+    for r in range(boardsize):
+        print("  " + " ".join(f"{values_2d[r, c]:+.2f}" for c in range(boardsize)))
+
+
 # =============================================================================
 # Entry point
 # =============================================================================
 CONFIG_FACTORIES = {
     "chess": get_chess_config,
     "ttt": get_ttt_config,
+    "connect4": get_connect4_config,
     "hex4": lambda: get_hex_config(board_size=4),
     "hex5": lambda: get_hex_config(board_size=5),
     "hex6": lambda: get_hex_config(board_size=6),
     "hex7": lambda: get_hex_config(board_size=7),
     "hex8": lambda: get_hex_config(board_size=8),
     "hex9": lambda: get_hex_config(board_size=9),
-    "connect4": get_connect4_config,
+    "go3": lambda: get_go_config(board_size=3),
+    "go4": lambda: get_go_config(board_size=4),
+    "go5": lambda: get_go_config(board_size=5),
+    "go6": lambda: get_go_config(board_size=6),
+    "go7": lambda: get_go_config(board_size=7),
+    "go8": lambda: get_go_config(board_size=8),
+    "go9": lambda: get_go_config(board_size=9),
 }
 
 
@@ -3564,6 +4145,11 @@ def parse_args():
         help="skip training; load a checkpoint and play",
     )
     ap.add_argument(
+        "--play-both",
+        action="store_true",
+        help="skip training and the model; enter moves for both players yourself",
+    )
+    ap.add_argument(
         "--play-as",
         type=int,
         default=1,
@@ -3591,10 +4177,25 @@ def run_play(config, args):
     )
 
 
+def run_play_both(config, args):
+    """Load a checkpoint and enter moves for both players (no training).
+
+    The checkpoint is optional here: without one we play with an untrained
+    model's eval display.
+    """
+    ckpt = args.load or args.save or default_ckpt_path(args.env)
+    params = load_params(ckpt) if os.path.exists(ckpt) else None
+    play_both(config, params)
+
+
 def main():
     args = parse_args()
     config = CONFIG_FACTORIES[args.env]()
     config["game_name"] = args.env
+
+    if args.play_both:
+        run_play_both(config, args)
+        return
 
     if args.play_only:
         run_play(config, args)
