@@ -1,6 +1,13 @@
 # nanoAlphaZero
 
-nanoAlphaZero is quite possibly the strongest single-file implementation of AlphaZero out there. Despite its small footprint, it achieves perfect-play results for any solvable game, and with enough train-time and test-time compute, it reaches super-grandmaster Elo in chess. It's also game-agnostic: point it at any two-player board game, adjust the model size, and it learns to play.
+nanoAlphaZero is quite possibly the strongest single-file implementation of AlphaZero out there. Despite its small footprint, it achieves perfect-play results for any solvable game, and with enough train-time and test-time compute, it reaches super-grandmaster Elo in chess. 
+
+<div align="center">
+<img width="900" height="565" alt="elo_multi_hours_light-6-30-26" src="https://github.com/user-attachments/assets/f5e09015-dc98-453b-b953-748c10517038#gh-light-mode-only" />
+<img width="900" height="565" alt="elo_multi_hours-6-30-26" src="https://github.com/user-attachments/assets/8f9bcf59-2b40-49b1-9b68-fad2fba1559b#gh-dark-mode-only" />
+</div>
+
+It's also game-agnostic: point it at any two-player board game, adjust the model size, and it learns to play.
 
 > note: this is a WIP.
 > - all code is optimized for TPUs, including our custom PGX fork ([wtedw/pgx](https://github.com/wtedw/pgx/tree/dcb18cb))
@@ -203,10 +210,11 @@ In-game commands: enter a move (connect4: column `1-7`; ttt/hex: cell number or
 Chess models can be trained with just ~12 MCTS simulations per move. For
 reference, the original AlphaZero used ~800.
 
-The graphs below show win-rate vs Stockfish at 2800 Elo* as training scales.
+The graphs below show score vs Stockfish at 2800 Elo* as training scales.
 Each point is measured over 492 games, played as both player 1 and player 2.
 
-<img width="1185" height="765" alt="sf-winrate" src="https://github.com/user-attachments/assets/dae8203c-a2f1-4781-80b3-a80ce89fe9dc" />
+<img width="1185" height="765" alt="sf_score" src="https://github.com/user-attachments/assets/e86402a2-4054-47e1-a37d-ebc31110ccfd" />
+
 
 All models were trained on a TPUv4-32:
 
