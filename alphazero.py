@@ -3585,7 +3585,7 @@ def get_chess_config():
         "game_num_actions": None,  # patched from live env in make_alphazero
         # --- Model ---
         "use_conv_model": True,
-        "conv_width": 384,
+        "conv_width": 256,
         "conv_depth": 32,
         "conv_use_kata_gpool": True,
         "use_bn_model": True,

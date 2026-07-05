@@ -413,4 +413,5 @@ This project would not have been possible without the amazing work of the follow
 - **Flashbax** — replay buffers
 - **Scaling Scaling Laws** — experiments & model architecture
 - **KataGo** — many methods
+- **[TPU Starter](https://github.com/ayaka14732/tpu-starter)** — TPU setup guide
 - Research supported with Cloud TPUs from Google's TPU Research Cloud (TRC)
