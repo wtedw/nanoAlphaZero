@@ -8,6 +8,8 @@
 #     "chex==0.1.91",
 #     "jax[tpu]==0.8.1",
 #     "numpy",
+#     "safetensors==0.8.0",
+#     "wandb==0.21.0",
 # ]
 # ///
 
@@ -16,14 +18,16 @@
 # =============================================================================
 import atexit
 import functools
+import json
+import math
 import os
-import pickle
 import re
 import sys
+import tempfile
 import time
 from dataclasses import dataclass, field
 from types import SimpleNamespace
-from typing import Any, Callable, Generic, NamedTuple, Optional, Tuple
+from typing import Any, Callable, Generic, NamedTuple, Optional, Sequence, Tuple
 
 import chex
 import flax.linen as nn
@@ -37,6 +41,8 @@ from flax.training import train_state
 from jax import Array
 from jax.scipy.special import erf
 from jax.typing import ArrayLike
+from safetensors import safe_open
+from safetensors.numpy import save_file as save_safetensors_file
 import flashbax as fbx
 from flashbax.buffers.trajectory_buffer import (
     TrajectoryBuffer,
@@ -105,280 +111,670 @@ class RunnerState(NamedTuple):
 # =============================================================================
 # Neural network model
 #
-# A mishmash of architectural ideas pulled from various papers/repos.
-# Feel free to modify them.
-#   - ConvModelReZero: for simpler games. Good for Hex.
-#   - ConvModelNestedBottleneck: for more difficult games like chess or large
-#     Go boards.
-#
-# Sources:
-#   - Policy improvement by planning with Gumbel:
-#       https://openreview.net/forum?id=bERaNdoegnO
-#   - Scaling Scaling Laws with Board Games:
-#       https://arxiv.org/abs/2104.03113
-#   - Accelerating Self-Play Learning in Go (KataGo):
-#       https://arxiv.org/abs/1902.10565
-#   - Stronger Normalization-Free Transformers:
-#       https://arxiv.org/abs/2512.10938
+# KataGo's fixup nested-bottleneck architecture is the sole network used by
+# nanoAlphaZero. The trunk is game-agnostic. Go uses KataGo's native board-point
+# plus pass policy head; other games use a generic action-space policy head.
+# MCTS consumes the scalar P(win)-P(loss), while training uses the raw WDL logits.
 # =============================================================================
-class DerfNorm(nn.Module):
-    features: int
-    init_alpha: float = 0.5
-    init_shift: float = 0.0
+_TRUNC_STD_CORRECTION = 0.87962566103423978
+
+_GAINS = {
+    "relu": math.sqrt(2.0),
+    "elu": math.sqrt(1.55052),
+    "mish": math.sqrt(2.210277),
+    "silu": math.sqrt(2.0),
+    "gelu": math.sqrt(2.351718),
+    "hardswish": math.sqrt(2.0),
+    "identity": 1.0,
+}
+
+
+def _mish(x):
+    return x * jnp.tanh(jax.nn.softplus(x))
+
+
+_ACTS = {
+    "relu": jax.nn.relu,
+    "elu": jax.nn.elu,
+    "mish": _mish,
+    "silu": jax.nn.silu,
+    "gelu": jax.nn.gelu,
+    "hardswish": jax.nn.hard_swish,
+    "identity": lambda x: x,
+}
+
+
+def kata_init(scale: float, activation: str, fan_in: Optional[int] = None):
+    """KataGo's ``init_weights``: trunc normal, std = scale*gain/sqrt(fan_in).
+
+    ``fan_in`` defaults to prod(shape[:-1]), which matches torch's fan-in for
+    both HWIO conv kernels (kh*kw*c_in) and (in, out) dense kernels. Pass it
+    explicitly for biases (KataGo's ``fan_tensor=weight``).
+    """
+    gain = _GAINS[activation]
+
+    def init(key, shape, dtype=jnp.float32):
+        fi = fan_in if fan_in is not None else int(np.prod(shape[:-1]))
+        std = scale * gain / math.sqrt(fi) / _TRUNC_STD_CORRECTION
+        if std < 1e-10:
+            return jnp.zeros(shape, dtype)
+        return std * jax.random.truncated_normal(key, -2.0, 2.0, shape, dtype)
+
+    return init
+
+
+class NormMask(nn.Module):
+    """KataGo's NormMask at norm_kind="fixup": ``(x*(1+gamma) + beta) * mask``.
+
+    ``use_gamma`` corresponds to fixup_use_gamma=True (the second NormActConv
+    of each ResBlock and the closing 1x1 of each nested block). All base
+    configs set gamma_weight_decay_center_1, so gamma is stored centered at 0
+    and applied as (gamma + 1). Also covers BiasMask (use_gamma=False).
+    """
+
+    use_gamma: bool = False
+
+    @nn.compact
+    def __call__(self, x, mask):
+        c = x.shape[-1]
+        beta = self.param("beta", nn.initializers.zeros, (c,))
+        if self.use_gamma:
+            gamma = self.param("gamma", nn.initializers.zeros, (c,))
+            x = x * (gamma + 1.0)
+        return (x + beta) * mask
+
+
+def kata_gpool(x, mask, mask_sum_hw):
+    """KataGPool: masked mean, size-scaled mean, masked max. [N,H,W,C] -> [N,3C].
+
+    Assumes off-board activations are exactly 0 (guaranteed by NormMask) and
+    that the activation maps 0 -> 0 and is > -1, so ``x + (mask - 1)`` makes
+    off-board positions lose the max.
+    """
+    layer_mean = jnp.sum(x, axis=(1, 2)) / mask_sum_hw  # [N, C]
+    s = jnp.sqrt(mask_sum_hw) - 14.0  # [N, 1]
+    layer_max = jnp.max(x + (mask - 1.0), axis=(1, 2))  # [N, C]
+    return jnp.concatenate([layer_mean, layer_mean * (s / 10.0), layer_max], axis=1)
+
+
+def kata_value_head_gpool(x, mask, mask_sum_hw):
+    """KataValueHeadGPool: mean with linear and quadratic board-size features."""
+    layer_mean = jnp.sum(x, axis=(1, 2)) / mask_sum_hw
+    s = jnp.sqrt(mask_sum_hw) - 14.0
+    return jnp.concatenate(
+        [
+            layer_mean,
+            layer_mean * (s / 10.0),
+            layer_mean * (jnp.square(s) / 100.0 - 0.1),
+        ],
+        axis=1,
+    )
+
+
+class KataConvAndGPool(nn.Module):
+    """Regular 3x3 conv branch + gpool branch feeding a bias back in."""
+
+    c_out: int
+    c_gpool: int
+    scale: float  # fixup init scale for this position in the net
+    activation: str
+
+    @nn.compact
+    def __call__(self, x, mask, mask_sum_hw):
+        act = _ACTS[self.activation]
+        # Fixup branch of KataConvAndGPool.initialize: r_scale=0.8 on the
+        # regular conv, sqrt(scale)*sqrt(0.6) on both halves of the g branch.
+        outr = nn.Conv(
+            self.c_out, (3, 3), use_bias=False,
+            kernel_init=kata_init(self.scale * 0.8, self.activation),
+        )(x)
+        g_scale = math.sqrt(self.scale) * math.sqrt(0.6)
+        outg = nn.Conv(
+            self.c_gpool, (3, 3), use_bias=False,
+            kernel_init=kata_init(g_scale, self.activation),
+        )(x)
+        outg = NormMask()(outg, mask)
+        outg = act(outg)
+        outg = kata_gpool(outg, mask, mask_sum_hw)  # [N, 3*c_gpool]
+        outg = nn.Dense(
+            self.c_out, use_bias=False,
+            kernel_init=kata_init(g_scale, self.activation),
+        )(outg)
+        return outr + outg[:, None, None, :]
+
+
+class RepVGGLinearConv(nn.Module):
+    """RVGL's separate 3x3/1x1 parameters evaluated as one fused convolution."""
+
+    c_out: int
+    kernel_size: int
+    scale: float
+    activation: str
 
     @nn.compact
     def __call__(self, x):
-        alpha = self.param(
-            "alpha", lambda rng, shape: self.init_alpha * jnp.ones(shape), (1,)
+        c_in = x.shape[-1]
+        kernel3 = self.param(
+            "kernel_3x3",
+            kata_init(self.scale * 0.8, self.activation),
+            (self.kernel_size, self.kernel_size, c_in, self.c_out),
         )
-        shift = self.param(
-            "shift", lambda rng, shape: self.init_shift * jnp.ones(shape), (1,)
+        kernel1 = self.param(
+            "kernel_1x1",
+            kata_init(self.scale * 0.6, self.activation),
+            (1, 1, c_in, self.c_out),
         )
-        gamma = self.param(
-            "gamma", lambda rng, shape: jnp.ones(shape), (self.features,)
+        center = self.kernel_size // 2
+        combined_kernel = kernel3.at[center, center].add(kernel1[0, 0])
+        combined_kernel = combined_kernel.astype(x.dtype)
+        return jax.lax.conv_general_dilated(
+            lhs=x,
+            rhs=combined_kernel,
+            window_strides=(1, 1),
+            padding="SAME",
+            dimension_numbers=("NHWC", "HWIO", "NHWC"),
         )
-        beta = self.param("beta", lambda rng, shape: jnp.zeros(shape), (self.features,))
-        y = erf(alpha * x + shift)
-        return gamma * y + beta
 
-# [todo] Remove / modify KataValueHeadGPool.
-# Was used during dynamic board size experiments, but worked well with all game envs.
-class KataValueHeadGPool(nn.Module):
-    """
-    Simplified JAX/Flax implementation of KataGo's Value Head Global Pooling.
-    Assumes static board size (no masking).
-    """
+
+class NormActConv(nn.Module):
+    """norm -> act -> conv (or conv+gpool)."""
+
+    c_out: int
+    kernel_size: int
+    scale: float
+    activation: str
+    c_gpool: Optional[int] = None
+    use_gamma: bool = False  # fixup_use_gamma
+    use_rvgl: bool = True
+
     @nn.compact
-    def __call__(self, x):
-        # x shape: [Batch, Height, Width, Channels] (NHWC)
+    def __call__(self, x, mask, mask_sum_hw):
+        out = NormMask(use_gamma=self.use_gamma)(x, mask)
+        out = _ACTS[self.activation](out)
+        if self.c_gpool is not None:
+            return KataConvAndGPool(
+                self.c_out, self.c_gpool, self.scale, self.activation
+            )(out, mask, mask_sum_hw)
+        if self.use_rvgl and self.kernel_size > 1:
+            # KataGo -rvgl: parallel linear 3x3 and 1x1 branches. Their
+            # initialization variances add to one (0.8**2 + 0.6**2 == 1).
+            # Since there is no nonlinearity between the branches, the 1x1
+            # kernel is folded into the 3x3 for the actual convolution while
+            # remaining a separate parameter with its own optimizer state.
+            return RepVGGLinearConv(
+                self.c_out, self.kernel_size, self.scale, self.activation
+            )(out)
+        return nn.Conv(
+            self.c_out, (self.kernel_size, self.kernel_size), use_bias=False,
+            kernel_init=kata_init(self.scale, self.activation),
+        )(out)
 
-        # 1. Calculate Mean over spatial dimensions (H, W -> axes 1, 2)
-        layer_mean = jnp.mean(x, axis=(1, 2), keepdims=True)
 
-        # 2. Calculate offset based on board size
-        # We calculate area dynamically from shape to handle JIT/different board sizes automatically
-        # Shape indices: 0=Batch, 1=Height, 2=Width, 3=Channels
-        height = x.shape[1]
-        width = x.shape[2]
-        hw_area = height * width
+class ResBlock(nn.Module):
+    """Inner two-conv residual block. Returns the residual only."""
 
-        # 14.0 is the centering offset used in KataGo (sqrt(361) approx 19)
-        # For a static 19x19 board, this results in (19 - 14) = 5.0
-        hw_sqrt_offset = jnp.sqrt(hw_area) - 14.0
+    c_main: int
+    c_mid: int
+    fixup_scale: float
+    activation: str
+    c_gpool: Optional[int] = None
+    use_rvgl: bool = True
 
-        # 3. Generate the 3 pooling outputs
-        out_pool1 = layer_mean
-        out_pool2 = layer_mean * (hw_sqrt_offset / 10.0)
-        out_pool3 = layer_mean * ((hw_sqrt_offset ** 2) / 100.0 - 0.1)
-
-        # 4. Concatenate along the channel dimension (axis 3)
-        # Output shape: [Batch, 1, 1, Channels * 3]
-        out = jnp.concatenate((out_pool1, out_pool2, out_pool3), axis=-1)
+    @nn.compact
+    def __call__(self, x, mask, mask_sum_hw):
+        c1_out = self.c_mid - (self.c_gpool or 0)
+        out = NormActConv(
+            c1_out, 3, self.fixup_scale, self.activation,
+            c_gpool=self.c_gpool, use_rvgl=self.use_rvgl,
+        )(x, mask, mask_sum_hw)
+        # Fixup: second conv zero-init, and its NormMask carries a gamma.
+        out = NormActConv(
+            self.c_main, 3, 0.0, self.activation,
+            use_gamma=True, use_rvgl=self.use_rvgl,
+        )(out, mask, mask_sum_hw)
         return out
 
 
-class ReZeroBlock(nn.Module):
-    features: int
+class NestedBottleneckResBlock(nn.Module):
+    """KataGo "bottlenest{L}" block: 1x1 down, L residual ResBlocks, 1x1 up.
+
+    Returns the residual only; the caller adds it to the trunk.
+    """
+
+    c_trunk: int
+    c_mid: int
+    internal_length: int
+    fixup_scale: float
+    activation: str
+    c_gpool: Optional[int] = None
+    use_rvgl: bool = True
 
     @nn.compact
-    def __call__(self, x):
-        identity = x
-        y = nn.relu(x)
-        y = nn.Conv(self.features, (3, 3), padding="SAME", use_bias=False)(y)
-        y = nn.relu(y)
-        y = nn.Conv(self.features, (3, 3), padding="SAME", use_bias=False)(y)
-        alpha = self.param("alpha", nn.initializers.zeros, ())
-        return identity + alpha * y
+    def __call__(self, x, mask, mask_sum_hw):
+        inner_scale = self.fixup_scale ** (1.0 / (1.0 + self.internal_length))
+        out = NormActConv(self.c_mid, 1, inner_scale, self.activation)(
+            x, mask, mask_sum_hw
+        )
+        for i in range(self.internal_length):
+            out = out + ResBlock(
+                self.c_mid, self.c_mid, inner_scale, self.activation,
+                c_gpool=(self.c_gpool if i == 0 else None),
+                use_rvgl=self.use_rvgl,
+            )(out, mask, mask_sum_hw)
+        out = NormActConv(
+            self.c_trunk, 1, 0.0, self.activation, use_gamma=True
+        )(out, mask, mask_sum_hw)
+        return out
 
 
-class ConvModelReZero(nn.Module):
+class GoPolicyHead(nn.Module):
+    """KataGo policy head (version >= 15 pass pathway), single policy output.
+
+    Returns [N, H*W + 1] logits; the last entry is the pass move. Off-board
+    positions get logit - 5000 so they vanish after softmax.
+    """
+
+    c_p1: int
+    c_g1: int
+    activation: str
+
+    @nn.compact
+    def __call__(self, x, mask, mask_sum_hw):
+        act = _ACTS[self.activation]
+        outp = nn.Conv(
+            self.c_p1, (1, 1), use_bias=False,
+            kernel_init=kata_init(0.8, self.activation),
+        )(x)
+        outg = nn.Conv(
+            self.c_g1, (1, 1), use_bias=False,
+            kernel_init=kata_init(1.0, self.activation),
+        )(x)
+        outg = NormMask()(outg, mask)  # BiasMask
+        outg = act(outg)
+        outg = kata_gpool(outg, mask, mask_sum_hw)  # [N, 3*c_g1]
+
+        outpass = nn.Dense(
+            self.c_p1, use_bias=True,
+            kernel_init=kata_init(1.0, self.activation),
+            bias_init=kata_init(0.2, self.activation, fan_in=3 * self.c_g1),
+        )(outg)
+        outpass = act(outpass)
+        outpass = nn.Dense(
+            1, use_bias=False, kernel_init=kata_init(0.3, "identity")
+        )(outpass)  # [N, 1]
+
+        outg = nn.Dense(
+            self.c_p1, use_bias=False,
+            kernel_init=kata_init(0.6, self.activation),
+        )(outg)
+        outp = outp + outg[:, None, None, :]
+        outp = NormMask()(outp, mask)  # bias2
+        outp = act(outp)
+        outp = nn.Conv(
+            1, (1, 1), use_bias=False, kernel_init=kata_init(0.3, "identity")
+        )(outp)  # [N, H, W, 1]
+        outp = outp - (1.0 - mask) * 5000.0
+        n = outp.shape[0]
+        return jnp.concatenate([outp.reshape(n, -1), outpass], axis=1)
+
+
+class GenericPolicyHead(nn.Module):
+    """A plain action-space policy head over the trunk features for non-Go games.
+
+    This is used based on explicit game identity, not action-space shape
+    (e.g. Connect4's column actions). This head has no pass-pathway/gpool
+    machinery, just conv -> norm -> act -> flatten -> Dense(action_space).
+    """
+
     action_space: int
-    conv_width: int = 256
-    conv_depth: int = 32
-    use_kata_gpool: bool = False
+    c_p1: int
+    activation: str
 
     @nn.compact
-    def _trunk(self, obs):
-        x = nn.Conv(
-            self.conv_width, (3, 3), padding="SAME", use_bias=True, name="input_conv"
-        )(obs)
-        for _ in range(self.conv_depth):
-            x = ReZeroBlock(self.conv_width)(x)
-        return x
-
-    @nn.compact
-    def __call__(self, obs, valid, deterministic: bool = False):
-        x = self._trunk(obs)
-
-        # --- Policy head ---
-        p = nn.Conv(2, (1, 1), use_bias=False)(x)
-        p = DerfNorm(2)(p)
-        p = nn.relu(p)
+    def __call__(self, x, mask, mask_sum_hw):
+        act = _ACTS[self.activation]
+        p = nn.Conv(
+            self.c_p1, (1, 1), use_bias=False,
+            kernel_init=kata_init(0.8, self.activation),
+        )(x)
+        p = NormMask()(p, mask)
+        p = act(p)
         p = p.reshape(p.shape[0], -1)
-        logits = nn.Dense(
+        return nn.Dense(
             self.action_space,
             kernel_init=nn.initializers.normal(stddev=1e-2),
             bias_init=nn.initializers.zeros,
-            name="policy_out",
         )(p)
-        masked_logits = jnp.where(valid, logits, jnp.finfo(logits.dtype).min)
 
-        # --- Value head ---
-        if self.use_kata_gpool:
-            v = nn.Conv(16, (1, 1), use_bias=False)(x)
-            v = DerfNorm(16)(v)
-            v = nn.relu(v)
-            v = KataValueHeadGPool()(v)  # [B, 48]
-            v = v.reshape(v.shape[0], -1)
-        else:
-            v = nn.Conv(1, (1, 1), use_bias=False)(x)
-            v = DerfNorm(1)(v)
-            v = nn.relu(v)
-            v = v.reshape(v.shape[0], -1)
 
-        v = nn.Dense(self.conv_width, name="value_dense")(v)
-        v = nn.relu(v)
-        value = nn.Dense(
-            1,
-            kernel_init=nn.initializers.normal(stddev=1e-2),
-            bias_init=nn.initializers.zeros,
-            name="value_out",
-        )(v).squeeze(-1)
-        value = jnp.tanh(value)
+class ChessPolicyHead(nn.Module):
+    """KataGo-style policy head for pgx chess's 64x73 action encoding."""
 
-        return masked_logits, value
-
-class InnerBlock(nn.Module):
-    """Inner residual sub-block at bottleneck width."""
-
-    features: int
+    c_p1: int
+    c_g1: int
+    activation: str
+    num_planes: int = 73
 
     @nn.compact
-    def __call__(self, x):
-        identity = x
-        y = nn.relu(x)
-        y = nn.Conv(self.features, (3, 3), padding="SAME", use_bias=False)(y)
-        y = nn.relu(y)
-        y = nn.Conv(self.features, (3, 3), padding="SAME", use_bias=False)(y)
-        return identity + y
+    def __call__(self, x, mask, mask_sum_hw):
+        act = _ACTS[self.activation]
+        outp = nn.Conv(
+            self.c_p1,
+            (1, 1),
+            use_bias=False,
+            kernel_init=kata_init(0.8, self.activation),
+        )(x)
+        outg = nn.Conv(
+            self.c_g1,
+            (1, 1),
+            use_bias=False,
+            kernel_init=kata_init(1.0, self.activation),
+        )(x)
+        outg = NormMask()(outg, mask)
+        outg = act(outg)
+        outg = kata_gpool(outg, mask, mask_sum_hw)
+        outg = nn.Dense(
+            self.c_p1,
+            use_bias=False,
+            kernel_init=kata_init(0.6, self.activation),
+        )(outg)
+        outp = outp + outg[:, None, None, :]
+        outp = NormMask()(outp, mask)
+        outp = act(outp)
+        outp = nn.Conv(
+            self.num_planes,
+            (1, 1),
+            use_bias=False,
+            kernel_init=kata_init(0.3, "identity"),
+        )(outp)
+        # pgx observes chess after a 90-degree rotation. Undo it so row-major
+        # flattening matches action = from_square * 73 + move_plane.
+        outp = jnp.rot90(outp, k=-1, axes=(1, 2))
+        return outp.reshape(outp.shape[0], -1)
 
-class NestedBottleneckReZeroBlock(nn.Module):
 
-    features: int
-    bottleneck_ratio: int = 2
-    num_inner_blocks: int = 2
+class ValueHead(nn.Module):
+    """KataGo value head, main 3-way {win, loss, noresult} logits only."""
+
+    c_v1: int
+    c_v2: int
+    activation: str
 
     @nn.compact
-    def __call__(self, x):
-        identity = x
-        inner_features = self.features // self.bottleneck_ratio
+    def __call__(self, x, mask, mask_sum_hw):
+        act = _ACTS[self.activation]
+        v1 = nn.Conv(
+            self.c_v1, (1, 1), use_bias=False,
+            kernel_init=kata_init(1.0, self.activation),
+        )(x)
+        v1 = NormMask()(v1, mask)  # bias1
+        v1 = act(v1)
+        pooled = kata_value_head_gpool(v1, mask, mask_sum_hw)  # [N, 3*c_v1]
+        v2 = nn.Dense(
+            self.c_v2, use_bias=True,
+            kernel_init=kata_init(1.0, self.activation),
+            bias_init=kata_init(0.2, self.activation, fan_in=3 * self.c_v1),
+        )(pooled)
+        v2 = act(v2)
+        return nn.Dense(
+            3, use_bias=True,
+            kernel_init=kata_init(1.0, "identity"),
+            bias_init=kata_init(0.2, "identity", fan_in=self.c_v2),
+        )(v2)
 
-        y = nn.relu(x)
-        y = nn.Conv(inner_features, (1, 1), padding="SAME", use_bias=False)(y)
 
-        for _ in range(self.num_inner_blocks):
-            y = InnerBlock(inner_features)(y)
+class KataGoTrunk(nn.Module):
+    """The bXcYnbt trunk only (input conv + nested-bottleneck blocks + final
+    norm/act), shared by the native Go head and the generic action-space head.
 
-        y = nn.relu(y)
-        y = nn.Conv(self.features, (1, 1), padding="SAME", use_bias=False)(y)
+    ``block_gpool[i]`` says whether trunk block i is the "gpool" flavor.
+    Defaults are b10c384nbt. Inputs are NHWC; off-board input features should
+    be zero (they are re-masked defensively anyway).
+    """
 
-        alpha = self.param("alpha", nn.initializers.zeros, ())
-        return identity + alpha * y
+    c_trunk: int = 384
+    c_mid: int = 192
+    c_gpool: int = 64
+    block_gpool: Sequence[bool] = (
+        False, False, True, False, False, True, False, False, True, False,
+    )
+    internal_length: int = 2
+    activation: str = "relu"
+    use_rvgl: bool = True
 
-class ConvModelNestedBottleneck(nn.Module):
+    @nn.compact
+    def __call__(
+        self,
+        input_spatial,  # [N, H, W, C_spatial]
+        input_global=None,  # [N, C_global] or None
+        mask=None,  # [N, H, W, 1] on-board mask, or None for full board
+    ) -> Tuple[jax.Array, jax.Array, jax.Array]:
+        input_spatial = input_spatial.astype(jnp.float32)
+        if mask is None:
+            mask = jnp.ones_like(input_spatial[..., :1])
+        mask_sum_hw = jnp.sum(mask, axis=(1, 2))  # [N, 1]
+
+        out = nn.Conv(
+            self.c_trunk, (3, 3), use_bias=False,
+            kernel_init=kata_init(0.8, self.activation),
+        )(input_spatial * mask)
+        if input_global is not None:
+            out = out + nn.Dense(
+                self.c_trunk, use_bias=False,
+                kernel_init=kata_init(0.6, self.activation),
+            )(input_global.astype(jnp.float32))[:, None, None, :]
+
+        fixup_scale = 1.0 / math.sqrt(len(self.block_gpool))
+        for use_gpool in self.block_gpool:
+            out = out + NestedBottleneckResBlock(
+                self.c_trunk, self.c_mid, self.internal_length,
+                fixup_scale, self.activation,
+                c_gpool=(self.c_gpool if use_gpool else None),
+                use_rvgl=self.use_rvgl,
+            )(out, mask, mask_sum_hw)
+
+        out = NormMask()(out, mask)  # norm_trunkfinal (fixup: bias+mask)
+        out = _ACTS[self.activation](out)
+        return out, mask, mask_sum_hw
+
+
+def value_from_logits(value_logits: jax.Array) -> jax.Array:
+    """[N, 3] {win, loss, noresult} logits -> scalar value in [-1, 1] ([N])."""
+    probs = jax.nn.softmax(value_logits, axis=-1)
+    return probs[..., 0] - probs[..., 1]
+
+
+def _gpool_every_3(n: int) -> Tuple[bool, ...]:
+    """KataGo's nbt configs put the gpool flavor on blocks 3, 6, 9, ... except
+    that a final block is never gpool (b18c384nbt stops at 15)."""
+    return tuple((i % 3 == 0) and (i != n) for i in range(1, n + 1))
+
+
+# Trunk/head sizes lifted from modelconfigs.py (fixup base configs).
+PRESETS = {
+    "b5c192nbt": dict(
+        c_trunk=192, c_mid=96, c_gpool=32,
+        block_gpool=(False, True, False, True, False),
+        c_p1=32, c_g1=32, c_v1=32, c_v2=80,
+    ),
+    "b10c256nbt": dict(
+        c_trunk=256, c_mid=128, c_gpool=64,
+        block_gpool=_gpool_every_3(10),
+        c_p1=32, c_g1=32, c_v1=32, c_v2=96,
+    ),
+    "b10c384nbt": dict(
+        c_trunk=384, c_mid=192, c_gpool=64,
+        block_gpool=_gpool_every_3(10),
+        c_p1=48, c_g1=48, c_v1=48, c_v2=112,
+    ),
+    "b18c384nbt": dict(
+        c_trunk=384, c_mid=192, c_gpool=64,
+        block_gpool=_gpool_every_3(18),
+        c_p1=48, c_g1=48, c_v1=96, c_v2=128,
+    ),
+    "b28c512nbt": dict(
+        c_trunk=512, c_mid=256, c_gpool=64,
+        block_gpool=_gpool_every_3(28),
+        c_p1=64, c_g1=64, c_v1=128, c_v2=144,
+    ),
+}
+
+
+_DYNAMIC_PRESET_RE = re.compile(r"^b(?P<blocks>[1-9]\d*)c(?P<channels>[1-9]\d*)(?:i(?P<internal>[1-9]\d*))?nbt$")
+
+
+def resolve_preset(preset: str) -> dict:
+    """Resolve a fixed or dynamic KataGo-style preset string.
+
+    Fixed presets are lifted from KataGo modelconfigs.py. Dynamic presets use
+    ``b{blocks}c{channels}nbt`` and are intentionally explicit so sweeps can
+    target tiny models without adding many hard-coded names. ``i{internal}``
+    may be inserted before ``nbt`` to override the nested-bottleneck internal
+    length; otherwise KataGo's nbt default of 2 is used.
+    """
+    if preset in PRESETS:
+        return dict(PRESETS[preset])
+
+    match = _DYNAMIC_PRESET_RE.match(preset)
+    if not match:
+        valid = ", ".join(sorted(PRESETS))
+        raise ValueError(
+            f"Unknown KataGo preset {preset!r}. Use a fixed preset ({valid}) "
+            "or dynamic form b{blocks}c{channels}nbt, e.g. b4c16nbt."
+        )
+
+    blocks = int(match.group("blocks"))
+    channels = int(match.group("channels"))
+    internal = int(match.group("internal") or 2)
+    head_channels = max(1, channels // 8)
+    return dict(
+        c_trunk=channels,
+        c_mid=max(1, channels // 2),
+        c_gpool=max(1, channels // 8),
+        block_gpool=_gpool_every_3(blocks),
+        internal_length=internal,
+        c_p1=head_channels,
+        c_g1=head_channels,
+        c_v1=head_channels,
+        c_v2=max(4, channels // 4),
+    )
+
+
+class KataModel(nn.Module):
+    """KataGo-style network matching nanoAlphaZero's model interface:
+
+        masked_logits, value = model(obs, valid)
+
+    obs is a pgx NHWC observation, valid a [B, action_space] legal-move mask,
+    value a scalar in [-1, 1] from the current player's perspective.
+    ``deterministic`` is accepted for signature compatibility (no dropout).
+
+    CHESS ADAPTATION: originally this always used KataGo's native Go head,
+    which only ever emits H*W + 1 logits (a Go board point + one pooled pass
+    move) -- fine for go, but incompatible with chess's 4672-way
+    from/to/promotion move encoding. The trunk itself was never Go-specific
+    (just conv + nested-bottleneck blocks over an [N,H,W,C] tensor), so it's
+    now factored out into KataGoTrunk and shared by game-specific heads:
+    KataGo's own GoPolicyHead for Go, a spatial 73-plane head for chess, or a
+    plain flatten+Dense GenericPolicyHead otherwise. Game identity is explicit
+    so an unrelated game with H*W+1 actions is not mistaken for Go.
+    """
+
     action_space: int
-    conv_width: int = 256
-    conv_depth: int = 32
-    bottleneck_ratio: int = 2
-    num_inner_blocks: int = 2
-    use_kata_gpool: bool = True
+    is_go: bool
+    is_chess: bool = False
+    c_p1_chess: int = 96
+    c_trunk: int = 384
+    c_mid: int = 192
+    c_gpool: int = 64
+    block_gpool: Sequence[bool] = (
+        False, False, True, False, False, True, False, False, True, False,
+    )
+    internal_length: int = 2
+    c_p1: int = 48
+    c_g1: int = 48
+    c_v1: int = 48
+    c_v2: int = 112
+    activation: str = "relu"
+    use_rvgl: bool = True
 
     @nn.compact
-    def _trunk(self, obs):
-        x = nn.Conv(
-            self.conv_width, (3, 3), padding="SAME", use_bias=True, name="input_conv"
-        )(obs)
-        x = nn.relu(x)
-        for _ in range(self.conv_depth):
-            x = NestedBottleneckReZeroBlock(
-                features=self.conv_width,
-                bottleneck_ratio=self.bottleneck_ratio,
-                num_inner_blocks=self.num_inner_blocks,
-            )(x)
-        return x
+    def __call__(
+        self,
+        obs,
+        valid,
+        deterministic: bool = False,
+        return_wdl_logits: bool = False,
+    ):
+        trunk = KataGoTrunk(
+            c_trunk=self.c_trunk, c_mid=self.c_mid, c_gpool=self.c_gpool,
+            block_gpool=self.block_gpool, internal_length=self.internal_length,
+            activation=self.activation, use_rvgl=self.use_rvgl,
+        )
+        out, mask, mask_sum_hw = trunk(obs)
 
-    @nn.compact
-    def __call__(self, obs, valid, deterministic: bool = False):
-        x = self._trunk(obs)
-
-        # --- Policy head (identical to ConvModelReZero) ---
-        p = nn.Conv(2, (1, 1), use_bias=False)(x)
-        p = DerfNorm(2)(p)
-        p = nn.relu(p)
-        p = p.reshape(p.shape[0], -1)
-        logits = nn.Dense(
-            self.action_space,
-            kernel_init=nn.initializers.normal(stddev=1e-2),
-            bias_init=nn.initializers.zeros,
-            name="policy_out",
-        )(p)
-        masked_logits = jnp.where(valid, logits, jnp.finfo(logits.dtype).min)
-
-        # --- Value head (identical to ConvModelReZero) ---
-        if self.use_kata_gpool:
-            v = nn.Conv(16, (1, 1), use_bias=False)(x)
-            v = DerfNorm(16)(v)
-            v = nn.relu(v)
-            v = KataValueHeadGPool()(v)
-            v = v.reshape(v.shape[0], -1)
+        if self.is_go and self.is_chess:
+            raise ValueError("is_go and is_chess are mutually exclusive")
+        if self.is_go:
+            expected_actions = out.shape[1] * out.shape[2] + 1
+            if self.action_space != expected_actions:
+                raise ValueError(
+                    "KataGo's Go policy head requires action_space == H*W+1; "
+                    f"got action_space={self.action_space}, H*W+1={expected_actions}"
+                )
+            # Go: board points + pass, KataGo's own two-pathway policy head.
+            # Keep the historical Flax path so existing Go checkpoints load.
+            policy_logits = GoPolicyHead(
+                self.c_p1, self.c_g1, self.activation, name="PolicyHead_0"
+            )(out, mask, mask_sum_hw)
+        elif self.is_chess:
+            head = ChessPolicyHead(self.c_p1_chess, self.c_g1, self.activation)
+            expected_actions = out.shape[1] * out.shape[2] * head.num_planes
+            if self.action_space != expected_actions:
+                raise ValueError(
+                    "ChessPolicyHead requires action_space == H*W*73; "
+                    f"got action_space={self.action_space}, "
+                    f"H*W*73={expected_actions}"
+                )
+            policy_logits = head(out, mask, mask_sum_hw)
         else:
-            v = nn.Conv(1, (1, 1), use_bias=False)(x)
-            v = DerfNorm(1)(v)
-            v = nn.relu(v)
-            v = v.reshape(v.shape[0], -1)
+            # Other non-Go action encodings.
+            policy_logits = GenericPolicyHead(
+                self.action_space, self.c_p1, self.activation
+            )(out, mask, mask_sum_hw)
 
-        v = nn.Dense(self.conv_width, name="value_dense")(v)
-        v = nn.relu(v)
-        value = nn.Dense(
-            1,
-            kernel_init=nn.initializers.normal(stddev=1e-2),
-            bias_init=nn.initializers.zeros,
-            name="value_out",
-        )(v).squeeze(-1)
-        value = jnp.tanh(value)
-
+        value_logits = ValueHead(self.c_v1, self.c_v2, self.activation)(
+            out, mask, mask_sum_hw
+        )
+        masked_logits = jnp.where(
+            valid, policy_logits, jnp.finfo(policy_logits.dtype).min
+        )
+        value = value_from_logits(value_logits)
+        if return_wdl_logits:
+            return masked_logits, value, value_logits
         return masked_logits, value
 
-def create_conv_model(config, rng, sharding=None):
-    conv_width = config["conv_width"]
-    conv_depth = config["conv_depth"]
-    observation_space = config["game_obs_shape"]
-    action_space = config["game_num_actions"]
+    def sample(self, logits, key, test: bool = False):
+        return (
+            jnp.argmax(logits, axis=-1) if test else jax.random.categorical(key, logits)
+        )
 
-    model = ConvModelReZero(
-        action_space=action_space,
-        conv_width=conv_width,
-        conv_depth=conv_depth,
-        use_kata_gpool=config.get("conv_use_kata_gpool", False),
+def make_model(config, rng, sharding=None):
+    """Build the KataGo-style network using the existing width/depth settings."""
+    preset = config.get(
+        "katago_preset",
+        f"b{config['conv_depth']}c{config['conv_width']}nbt",
     )
-
-    observation = jnp.zeros((1,) + observation_space)
-    valid_action_mask = jnp.ones((1, action_space), dtype=bool)
-    # sharded init path (params replicated across mesh)
-    model_state = init_and_shard_model(
-        config, model, rng, observation, valid_action_mask, sharding
-    )
-
-    return model, model_state
-
-def create_nested_bottleneck_model(config, rng, sharding=None):
-    model = ConvModelNestedBottleneck(
+    env_id = str(config["env_id"])
+    model_kwargs = resolve_preset(preset)
+    model = KataModel(
         action_space=config["game_num_actions"],
-        conv_width=config["conv_width"],
-        conv_depth=config["conv_depth"],
-        bottleneck_ratio=config.get("nested_bottleneck_ratio", 2),
-        num_inner_blocks=config.get("nested_num_inner_blocks", 2),
-        use_kata_gpool=config.get("conv_use_kata_gpool", True),
+        is_go=env_id.startswith("go_"),
+        is_chess=env_id == "chess",
+        c_p1_chess=int(config.get("kata_model_chess_c_p1", 96)),
+        **model_kwargs,
+        activation=config.get("katago_activation", "mish"),
+        use_rvgl=config.get("katago_use_rvgl", True),
     )
     observation = jnp.zeros((1,) + config["game_obs_shape"])
     valid_action_mask = jnp.ones((1, config["game_num_actions"]), dtype=bool)
@@ -388,13 +784,7 @@ def create_nested_bottleneck_model(config, rng, sharding=None):
     return model, model_state
 
 
-def make_model(config, rng, sharding=None):
-    if config.get("use_bn_model", False):
-        return create_nested_bottleneck_model(config, rng, sharding)
-    return create_conv_model(config, rng, sharding)
-
-
-# shards model params as REPLICATED across the mesh when enabled
+# Shard model params as REPLICATED across the mesh when enabled.
 def init_and_shard_model(config, model, rng, obs, valid_mask, sharding):
     use_bf16 = config.get("use_bf16", False)
 
@@ -1803,6 +2193,7 @@ def make_selfplay(
 def make_train(config, model, model_state, data_sharding=None):
     base_learning_rate = config["learning_rate"]
     weight_decay = config.get("weight_decay", 0.0001)
+    wdl_loss_weight = config.get("wdl_loss_weight", 1.0)
     warmup_steps = config.get("lr_warmup_steps", 0)
 
     if warmup_steps > 0:
@@ -1822,12 +2213,12 @@ def make_train(config, model, model_state, data_sharding=None):
 
     max_grad_norm = config.get("max_grad_norm", 1.0)
 
-    # decay conv/dense kernels only. The "kernel" leaf
-    # name covers exactly Conv/Dense weights, so this mask excludes biases, the
-    # Derf norm params (alpha/gamma/beta/shift), and the ReZero alpha.
+    # Decay convolution/dense kernels only. RVGL stores its parallel branches
+    # as kernel_3x3/kernel_1x1; biases and Fixup norm parameters are excluded.
     def _decay_mask_fn(params):
         flat = flax.traverse_util.flatten_dict(params)
-        mask = {path: (path[-1] == "kernel") for path in flat}
+        kernel_names = ("kernel", "kernel_3x3", "kernel_1x1")
+        mask = {path: (path[-1] in kernel_names) for path in flat}
         return flax.traverse_util.unflatten_dict(mask)
 
     adamw_kwargs = dict(weight_decay=weight_decay)
@@ -1870,7 +2261,7 @@ def make_train(config, model, model_state, data_sharding=None):
         # the result away
         batch_size = config["train_batch_size"]
 
-        rng, dropout_key = jax.random.split(state.key)
+        rng, _ = jax.random.split(state.key)
 
         # pin batch to data-parallel sharding so the train step is DP
         if config.get("enable_sharding", False) and data_sharding is not None:
@@ -1902,31 +2293,51 @@ def make_train(config, model, model_state, data_sharding=None):
             action_weights = full_weights.at[batch_idx, k_indices].set(action_weights)
 
         def loss_fn(params):
-            logits, values = state.apply_fn(
+            logits, values, value_logits = state.apply_fn(
                 {"params": params},
                 observations,
                 legal_masks,
                 deterministic=True,
+                return_wdl_logits=True,
             )
 
             predicted_pi = jax.nn.softmax(logits)
             batch_loss_pi = jnp.sum(
                 jax.scipy.special.rel_entr(action_weights, predicted_pi), axis=-1
             )
-            batch_loss_v = optax.l2_loss(values, rewards)
+            # KataGo orders the value classes as {win, loss, no-result/draw}.
+            wdl_labels = jnp.where(
+                rewards == 1, 0, jnp.where(rewards == -1, 1, 2)
+            ).astype(jnp.int32)
+            batch_loss_v = optax.softmax_cross_entropy_with_integer_labels(
+                value_logits, wdl_labels
+            )
 
             masked_loss_pi = batch_loss_pi * is_valid_samples
             masked_loss_v = batch_loss_v * is_valid_samples
 
             loss_pi = jnp.sum(masked_loss_pi) / batch_size
             loss_v = jnp.sum(masked_loss_v) / batch_size
-            total_loss = loss_pi + loss_v
+            total_loss = loss_pi + wdl_loss_weight * loss_v
 
+            value_probs = jax.nn.softmax(value_logits, axis=-1)
+            n_valid = jnp.maximum(jnp.sum(is_valid_samples), 1)
             aux = {
                 "loss_v": loss_v,
                 "loss_pi": loss_pi,
                 "values": values,
                 "rewards": rewards,
+                "wdl_metrics": {
+                    "wdl/p_win_mean": jnp.sum(
+                        value_probs[..., 0] * is_valid_samples
+                    ) / n_valid,
+                    "wdl/p_loss_mean": jnp.sum(
+                        value_probs[..., 1] * is_valid_samples
+                    ) / n_valid,
+                    "wdl/p_draw_mean": jnp.sum(
+                        value_probs[..., 2] * is_valid_samples
+                    ) / n_valid,
+                },
             }
             return total_loss, aux
 
@@ -2121,6 +2532,7 @@ def make_alphazero(config, rng, data_sharding=None):
 
             batch_scalar_metrics, batch_array_metrics = _compute_batch_metrics(batch)
             norm_metrics = aux.get("norm_metrics", {})
+            wdl_metrics = aux.get("wdl_metrics", {})
 
             train_scalar_metrics = {
                 "total_loss": loss,
@@ -2130,6 +2542,7 @@ def make_alphazero(config, rng, data_sharding=None):
                 **drain_scalar_metrics,
                 **agg_sp_scalars,
                 **norm_metrics,
+                **wdl_metrics,
                 **batch_scalar_metrics,
             }
             train_array_metrics = {**agg_sp_arrays, **batch_array_metrics}
@@ -2175,6 +2588,7 @@ def make_alphazero(config, rng, data_sharding=None):
         selfplay_buffer=selfplay_buffer,
         replay_buffer=replay_buffer,
         env=wenv,
+        config=config,
     )
 
 
@@ -2363,6 +2777,67 @@ def _print_config(config):
     print("=" * 60 + "\n", flush=True)
 
 
+def _init_wandb(config: dict):
+    """Initialize optional host-0 experiment tracking."""
+    if not config.get("enable_wandb", False) or jax.process_index() != 0:
+        return None
+    import wandb
+
+    kwargs = {
+        "project": config.get("wandb_project", "nanoAlphaZero"),
+        "config": config,
+    }
+    for config_key, wandb_key in (
+        ("wandb_entity", "entity"),
+        ("wandb_name", "name"),
+        ("wandb_group", "group"),
+        ("wandb_tags", "tags"),
+    ):
+        if config.get(config_key) is not None:
+            kwargs[wandb_key] = config[config_key]
+    run = wandb.init(**kwargs)
+    print(f"✅ W&B run: {run.url}", flush=True)
+    return run
+
+
+def _upload_wandb_checkpoint(
+    wandb_run,
+    path: str,
+    config: dict,
+    *,
+    cycle: int,
+    final: bool = False,
+) -> None:
+    """Upload one locally saved checkpoint as a versioned W&B artifact."""
+    if wandb_run is None:
+        return
+    import wandb
+
+    game_name = config.get("game_name", config["env_id"])
+    artifact_name = config.get(
+        "wandb_artifact_name", f"nanoalphazero-{game_name}"
+    )
+    artifact = wandb.Artifact(
+        artifact_name,
+        type="model",
+        metadata={
+            "cycle": int(cycle),
+            "format": _CHECKPOINT_FORMAT,
+            "format_version": _CHECKPOINT_FORMAT_VERSION,
+            "model_config": checkpoint_model_config(config),
+        },
+    )
+    artifact.add_file(path, name=os.path.basename(path))
+    aliases = ["latest", f"cycle-{int(cycle)}"]
+    if final:
+        aliases.append("final")
+    wandb_run.log_artifact(artifact, aliases=aliases)
+    print(
+        f"☁️  Uploaded checkpoint artifact {artifact_name}:{aliases[-1]}",
+        flush=True,
+    )
+
+
 def run_alphazero(config, ckpt_path=None):
     log_path = _start_run_logfile(config)
     print(f"Logging this run to {log_path}")
@@ -2375,6 +2850,8 @@ def run_alphazero(config, ckpt_path=None):
     run_fn = az.run_fn
     runner_state = az.runner_state
     wenv = az.env
+    resolved_config = az.config
+    wandb_run = _init_wandb(resolved_config)
 
     print("Successfully initialized all components.")
 
@@ -2404,6 +2881,9 @@ def run_alphazero(config, ckpt_path=None):
 
     num_params = sum(x.size for x in jax.tree.leaves(runner_state.model_ts.params))
     print(f"Model has {num_params:,} parameters.")
+    if wandb_run is not None:
+        wandb_run.summary["model/num_params"] = int(num_params)
+        wandb_run.summary["timing/warmup_seconds"] = float(warmup_duration)
 
     # --- Main Training Cycle ---
     total_steps = runner_state.model_ts.step
@@ -2475,6 +2955,7 @@ def run_alphazero(config, ckpt_path=None):
         )
 
     orig_sigint = signal.signal(signal.SIGINT, _handle_sigint)
+    completed_cycle = 0
 
     for cycle_n in range(1, int(n_cycles) + 1):
         cycle_start_time = time.time()
@@ -2487,6 +2968,12 @@ def run_alphazero(config, ckpt_path=None):
 
         # Log last train step's metrics, grouped by phase (selfplay / drain / train)
         last = jax.tree_util.tree_map(lambda x: float(x[-1]), all_scalar_metrics)
+        online_metrics = {
+            **last,
+            "cycle": cycle_n,
+            "timing/cycle_seconds": cycle_duration,
+            "runner_state/train_step": int(runner_state.model_ts.step),
+        }
         print(
             f"[{config.get('game_name', config['env_id'])}] "
             f"Cycle {cycle_n}/{int(n_cycles)} | {cycle_duration:.2f}s\n"
@@ -2635,6 +3122,16 @@ def run_alphazero(config, ckpt_path=None):
 
             # Absolute Elo = height of the current rung + live gap above it.
             live_elo = anchor_elo + float(delta_vs_anchor)
+            online_metrics.update(
+                {
+                    "eval/score_vs_random": float(score_rand),
+                    "eval/elo_vs_random": float(delta_rand),
+                    "eval/score_vs_anchor": float(score_vs_anchor),
+                    "eval/elo_vs_anchor": float(delta_vs_anchor),
+                    "eval/ladder_elo": float(live_elo),
+                    "eval/rung": int(rung),
+                }
+            )
             elo_curve.append(live_elo)
             elo_cycles.append(cycle_n)
             print(
@@ -2674,7 +3171,18 @@ def run_alphazero(config, ckpt_path=None):
 
         if ckpt_period and ckpt_path and cycle_n % ckpt_period == 0:
             print(f"\n--- Checkpoint at cycle {cycle_n} ---", flush=True)
-            save_params(runner_state.model_ts.params, ckpt_path)
+            save_checkpoint(runner_state.model_ts.params, resolved_config, ckpt_path)
+            _upload_wandb_checkpoint(
+                wandb_run,
+                ckpt_path,
+                resolved_config,
+                cycle=cycle_n,
+            )
+            online_metrics["checkpoint/saved"] = 1
+
+        if wandb_run is not None:
+            wandb_run.log(online_metrics, step=cycle_n)
+        completed_cycle = cycle_n
 
         if interrupt["flag"]:
             print(f"Stopping early at cycle {cycle_n} (Ctrl+C).", flush=True)
@@ -2683,6 +3191,19 @@ def run_alphazero(config, ckpt_path=None):
     signal.signal(signal.SIGINT, orig_sigint)  # restore default Ctrl+C handling
     total_duration = time.time() - start_time
     print(f"Training finished in {total_duration:.1f}s.")
+    if ckpt_path:
+        save_checkpoint(runner_state.model_ts.params, resolved_config, ckpt_path)
+        _upload_wandb_checkpoint(
+            wandb_run,
+            ckpt_path,
+            resolved_config,
+            cycle=completed_cycle,
+            final=True,
+        )
+    if wandb_run is not None:
+        wandb_run.summary["timing/training_seconds"] = float(total_duration)
+        wandb_run.summary["cycle/final"] = int(completed_cycle)
+        wandb_run.finish()
     return runner_state
 
 
@@ -2885,35 +3406,155 @@ def evaluate_vs(
 # =============================================================================
 def default_ckpt_path(env_name: str) -> str:
     """Default on-disk location for a saved alphazero checkpoint."""
-    return os.path.join("artifacts", f"alphazero_{env_name}.pkl")
+    return os.path.join("artifacts", f"alphazero_{env_name}.safetensors")
 
 
-def save_params(params, path: str) -> None:
-    """Pickle the model params (converted to numpy) to `path`.
+_CHECKPOINT_FORMAT = "nanoalphazero.flax.params"
+_CHECKPOINT_FORMAT_VERSION = "2"
+_TREE_PATH_ENCODING = "json-pointer-segments-v1"
+_CHECKPOINT_CONFIG_KEYS = (
+    "katago_preset",
+    "katago_activation",
+    "katago_use_rvgl",
+    "kata_model_chess_c_p1",
+    "use_wdl",
+    "env_id",
+    "game_obs_shape",
+    "game_num_actions",
+)
 
-    We store only the learned params pytree (not the optimizer / train state),
-    which is all that's needed to run inference / play against the model.
-    """
+
+def checkpoint_model_config(config: dict) -> dict:
+    """Return the resolved architecture/game settings needed to load params."""
+    resolved = {
+        key: config[key] for key in _CHECKPOINT_CONFIG_KEYS if key in config
+    }
+    resolved.update(
+        {
+            "katago_preset": config.get(
+                "katago_preset",
+                f"b{config['conv_depth']}c{config['conv_width']}nbt",
+            ),
+            "katago_activation": config.get("katago_activation", "mish"),
+            "katago_use_rvgl": config.get("katago_use_rvgl", True),
+            "use_wdl": config.get("use_wdl", True),
+        }
+    )
+    return resolved
+
+
+def apply_checkpoint_model_config(config: dict, model_config: Optional[dict]) -> dict:
+    """Overlay only model/game compatibility settings from a checkpoint."""
+    if not model_config:
+        return config
+    updated = config.copy()
+    updated.update(
+        {
+            key: value
+            for key, value in model_config.items()
+            if key in _CHECKPOINT_CONFIG_KEYS
+        }
+    )
+    if updated.get("game_obs_shape") is not None:
+        updated["game_obs_shape"] = tuple(updated["game_obs_shape"])
+    return updated
+
+
+def _encode_path_segment(segment: Any) -> str:
+    return str(segment).replace("~", "~0").replace("/", "~1")
+
+
+def _decode_path_segment(segment: str) -> str:
+    return segment.replace("~1", "/").replace("~0", "~")
+
+
+def _flatten_checkpoint_params(params) -> dict[str, np.ndarray]:
+    flat = flax.traverse_util.flatten_dict(params)
+    encoded = {}
+    for path, value in flat.items():
+        name = "/".join(_encode_path_segment(segment) for segment in path)
+        if not name or name in encoded:
+            raise ValueError(f"Duplicate or empty encoded parameter path: {path!r}")
+        encoded[name] = np.ascontiguousarray(jax.device_get(value))
+    return dict(sorted(encoded.items()))
+
+
+def _unflatten_checkpoint_params(flat_params: dict[str, jax.Array]) -> dict:
+    decoded = {}
+    for name, value in flat_params.items():
+        path = tuple(_decode_path_segment(segment) for segment in name.split("/"))
+        if not name or path in decoded:
+            raise ValueError(f"Duplicate or empty parameter path in checkpoint: {name!r}")
+        decoded[path] = value
+    return flax.traverse_util.unflatten_dict(decoded)
+
+
+def _require_safetensors_path(path: str) -> None:
+    if not path.endswith(".safetensors"):
+        raise ValueError("Checkpoint path must end in .safetensors")
+
+
+def save_checkpoint(params, config: dict, path: str) -> None:
+    """Atomically save params and resolved model metadata as Safetensors."""
+    _require_safetensors_path(path)
     directory = os.path.dirname(path)
-    if directory:
-        os.makedirs(directory, exist_ok=True)
-    np_params = jax.tree_util.tree_map(lambda x: np.asarray(x), params)
-    with open(path, "wb") as f:
-        pickle.dump(np_params, f)
+    target_dir = directory or "."
+    os.makedirs(target_dir, exist_ok=True)
+    metadata = {
+        "format": _CHECKPOINT_FORMAT,
+        "format_version": _CHECKPOINT_FORMAT_VERSION,
+        "tree_path_encoding": _TREE_PATH_ENCODING,
+        "model_config": json.dumps(
+            checkpoint_model_config(config),
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ),
+    }
+    fd, temporary_path = tempfile.mkstemp(
+        prefix=f".{os.path.basename(path)}.", suffix=".tmp", dir=target_dir
+    )
+    os.close(fd)
+    try:
+        save_safetensors_file(
+            _flatten_checkpoint_params(params), temporary_path, metadata=metadata
+        )
+        os.replace(temporary_path, path)
+    finally:
+        if os.path.exists(temporary_path):
+            os.unlink(temporary_path)
     print(f"✅ Saved model params to {path}")
 
 
-def load_params(path: str):
-    """Load a params pytree previously written by `save_params`."""
+def load_checkpoint(path: str):
+    """Load Safetensors params and return `(params, model_config)`."""
+    _require_safetensors_path(path)
     if not os.path.exists(path):
         raise SystemExit(
             f"No checkpoint found at {path}. Train a model first, or point "
             f"--load at an existing checkpoint."
         )
-    with open(path, "rb") as f:
-        params = pickle.load(f)
+    with safe_open(path, framework="flax") as checkpoint:
+        metadata = checkpoint.metadata() or {}
+        if metadata.get("format") != _CHECKPOINT_FORMAT:
+            raise ValueError(f"Unsupported checkpoint format in {path}")
+        if metadata.get("format_version") != _CHECKPOINT_FORMAT_VERSION:
+            raise ValueError(
+                f"Unsupported checkpoint format version "
+                f"{metadata.get('format_version')!r} in {path}"
+            )
+        if metadata.get("tree_path_encoding") != _TREE_PATH_ENCODING:
+            raise ValueError(f"Unsupported parameter path encoding in {path}")
+        try:
+            model_config = json.loads(metadata["model_config"])
+        except (KeyError, json.JSONDecodeError) as exc:
+            raise ValueError(f"Invalid or missing model_config in {path}") from exc
+        flat_params = {
+            name: checkpoint.get_tensor(name) for name in checkpoint.keys()
+        }
+    params = _unflatten_checkpoint_params(flat_params)
     print(f"✅ Loaded model params from {path}")
-    return params
+    return params, model_config
 
 
 def make_play(config):
@@ -3294,10 +3935,8 @@ def get_ttt_config():
         "game_obs_shape": None,
         "game_num_actions": board_size * board_size,
         # --- Model ---
-        "use_conv_model": True,
         "conv_width": 32,
         "conv_depth": 4,
-        "conv_use_kata_gpool": False,
         # --- MCTS ---
         "mcts_num_simulations": 13,
         "mcts_variant": "1sh",
@@ -3424,12 +4063,8 @@ def get_hex_config(board_size=4):
         "game_obs_shape": None,
         "game_num_actions": None,  # patched from live env in make_alphazero
         # --- Model ---
-        "use_conv_model": True,
-        # "use_bn_model": True,
-        "use_bn_model": False,
         "conv_width": board_cfg["conv_width"],
         "conv_depth": board_cfg["conv_depth"],
-        "conv_use_kata_gpool": True,
         # --- MCTS (1sh) ---
         "mcts_num_simulations": 24,
         "mcts_variant": "1sh",
@@ -3504,12 +4139,8 @@ def get_connect4_config():
         "game_obs_shape": None,
         "game_num_actions": 7,
         # --- Model ---
-        "use_conv_model": True,
-        # "use_bn_model": False,
-        "use_bn_model": True,
-        "conv_width": 256,
+        "conv_width": 128,
         "conv_depth": 8,
-        "conv_use_kata_gpool": True,
         # --- MCTS (1sh) ---
         "mcts_num_simulations": 64,
         "mcts_variant": "1sh",
@@ -3554,7 +4185,7 @@ def get_connect4_config():
         "eval_period": 50,  # run every N cycles
         "eval_max_plies": None,
         "eval_opening_plies": 3,
-        "ckpt_period": None,  # save a checkpoint every N cycles (None = only at end)
+        "ckpt_period": 700,  # save a checkpoint every N cycles (None = only at end)
         # --- System ---
         "enable_sharding": True,
     }
@@ -3584,13 +4215,10 @@ def get_chess_config():
         "game_obs_shape": None,
         "game_num_actions": None,  # patched from live env in make_alphazero
         # --- Model ---
-        "use_conv_model": True,
         "conv_width": 256,
         "conv_depth": 32,
-        "conv_use_kata_gpool": True,
-        "use_bn_model": True,
-        "nested_bottleneck_ratio": 2,
-        "nested_num_inner_blocks": 2,
+        "katago_preset": "b6c192nbt",
+        "kata_model_chess_c_p1": 96,
         # --- MCTS (1sh) ---
         "mcts_num_simulations": 12,
         "mcts_variant": "1sh",
@@ -3612,7 +4240,7 @@ def get_chess_config():
         "exp_root_temperature": 1.5,
         # --- Training ---
         "num_iters": 459_000 * 20,
-        "learning_rate": 1e-4,
+        "learning_rate": 1e-3,
         "weight_decay": 1e-4,
         "weight_decay_kernels_only": True,
         "use_bf16": False,
@@ -3633,7 +4261,7 @@ def get_chess_config():
         "replay_buffer_min_len": 1,
         "replay_buffer_max_len": replay_buffer_len,
         "replay_buffer_warmup_steps": buffer_warmup_steps,
-        "diagnostic_period": 50,
+        "diagnostic_period": 20,
         # --- Strength eval (vs random + frozen anchor; no external engine) ---
         # Plays one game per legal opening (chess = 20) from both colors.
         "eval_period": 50,  # run every N cycles
@@ -3702,7 +4330,6 @@ def get_go_config(board_size=5):
             cycle_n_train=40,
             num_root_considered=8,
             num_survivors=4,
-            use_bn_model=True,
         ),
         7: dict(
             conv_width=256,
@@ -3713,7 +4340,6 @@ def get_go_config(board_size=5):
             cycle_n_train=50,
             num_root_considered=8,
             num_survivors=4,
-            use_bn_model=True,
         ),
         8: dict(
             conv_width=256,
@@ -3724,7 +4350,6 @@ def get_go_config(board_size=5):
             cycle_n_train=50,
             num_root_considered=8,
             num_survivors=4,
-            use_bn_model=True,
         ),
         9: dict(
             conv_width=256,
@@ -3735,7 +4360,6 @@ def get_go_config(board_size=5):
             cycle_n_train=50,
             num_root_considered=8,
             num_survivors=4,
-            use_bn_model=True,
         ),
     }
     if board_size not in board_cfgs:
@@ -3765,11 +4389,8 @@ def get_go_config(board_size=5):
         "game_obs_shape": None,
         "game_num_actions": None,  # patched from live env in make_alphazero
         # --- Model ---
-        "use_conv_model": True,
-        "use_bn_model": board_cfg.get("use_bn_model", False),
         "conv_width": board_cfg["conv_width"],
         "conv_depth": board_cfg["conv_depth"],
-        "conv_use_kata_gpool": True,
         # --- MCTS (1sh) ---
         "mcts_num_simulations": 24,
         "mcts_variant": "1sh",
@@ -4120,7 +4741,7 @@ def parse_args():
         "--save",
         default=None,
         help="path to save params after training "
-        "(default: artifacts/alphazero_<env>.pkl)",
+        "(default: artifacts/alphazero_<env>.safetensors)",
     )
     ap.add_argument(
         "--no-save", action="store_true", help="do not save a checkpoint after training"
@@ -4130,6 +4751,12 @@ def parse_args():
         default=None,
         help="path to load params from (defaults to the save path "
         "when --play-only is set)",
+    )
+    ap.add_argument(
+        "--enable-wandb",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="log training metrics and saved checkpoints to Weights & Biases",
     )
     # --- play ---
     ap.add_argument(
@@ -4168,7 +4795,8 @@ def parse_args():
 def run_play(config, args):
     """Load a checkpoint and play interactively (no training)."""
     save_path = args.save or default_ckpt_path(args.env)
-    params = load_params(args.load or save_path)
+    params, model_config = load_checkpoint(args.load or save_path)
+    config = apply_checkpoint_model_config(config, model_config)
     play_against_model(
         config,
         params,
@@ -4184,7 +4812,11 @@ def run_play_both(config, args):
     model's eval display.
     """
     ckpt = args.load or args.save or default_ckpt_path(args.env)
-    params = load_params(ckpt) if os.path.exists(ckpt) else None
+    if os.path.exists(ckpt):
+        params, model_config = load_checkpoint(ckpt)
+        config = apply_checkpoint_model_config(config, model_config)
+    else:
+        params = None
     play_both(config, params)
 
 
@@ -4192,6 +4824,7 @@ def main():
     args = parse_args()
     config = CONFIG_FACTORIES[args.env]()
     config["game_name"] = args.env
+    config["enable_wandb"] = args.enable_wandb
 
     if args.play_both:
         run_play_both(config, args)
@@ -4205,8 +4838,6 @@ def main():
     save_path = args.save or default_ckpt_path(args.env)
     runner_state = run_alphazero(config, ckpt_path=None if args.no_save else save_path)
     params = runner_state.model_ts.params
-    if not args.no_save:
-        save_params(params, save_path)
     if args.play:
         play_against_model(
             config,

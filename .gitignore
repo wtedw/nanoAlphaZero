@@ -3,6 +3,7 @@ artifacts/
 
 # Run logs
 logs/
+wandb/
 
 # Python
 __pycache__/

@@ -34,7 +34,9 @@ uv run alphazero.py --env ttt
 ## Train
 
 Train a model, then drop into an interactive game against it. The trained params
-auto-save to `artifacts/alphazero_<env>.pkl`.
+and resolved model configuration auto-save to
+`artifacts/alphazero_<env>.safetensors`. Safetensors is the only supported
+checkpoint format.
 
 ```bash
 uv run alphazero.py --env ttt
@@ -53,6 +55,9 @@ Supported games:
 | Connect4    | `connect4`        | reaches perfect play outcomes, can struggle to maintain it |
 | Go          | `go3`–`go9`       | recently added, not yet tested                             |
 
+New chess runs use a spatial KataGo-style policy head over pgx's 64×73 move
+encoding. Checkpoint metadata records the chess policy-head width.
+
 Options:
 
 | flag           | effect                                            |
@@ -60,6 +65,45 @@ Options:
 | `--save PATH`  | custom save path for the checkpoint               |
 | `--no-save`    | train only, don't write a checkpoint              |
 | `--no-play`    | train only, skip the interactive game afterward   |
+| `--enable-wandb` | log metrics and upload versioned model artifacts |
+
+### Weights & Biases
+
+W&B is disabled by default and no network calls are made unless
+`--enable-wandb` is passed.
+
+First authenticate the VM once:
+
+```bash
+uv run --with wandb==0.21.0 wandb login
+```
+
+Then add `--enable-wandb` to the normal training command:
+
+```bash
+uv run alphazero.py --env chess --enable-wandb --no-play
+```
+
+`WANDB_API_KEY` may be set instead of running the login command. The default
+project is `nanoAlphaZero`. The run logs the same scalar metrics printed each
+cycle, along with timing and Elo evaluation metrics.
+
+As long as checkpoint saving is enabled (the default), every periodic
+checkpoint and the final checkpoint are uploaded as versions of
+`nanoalphazero-<env>`, with `latest`, `cycle-<n>`, and `final` aliases. Passing
+`--no-save` still logs metrics but disables both local and online checkpoint
+saving.
+
+The optional `wandb_project`, `wandb_entity`, `wandb_name`, `wandb_group`,
+`wandb_tags`, and `wandb_artifact_name` entries in a game config override the
+corresponding defaults.
+
+Another VM can download the latest checkpoint with:
+
+```bash
+uv run --with wandb==0.21.0 wandb artifact get \
+  <entity>/nanoAlphaZero/nanoalphazero-chess:latest
+```
 
 ### Watch it train (all in the terminal)
 
@@ -159,7 +203,7 @@ Cycle 2000/2000 | 1.75s
     ● total
 
   Training finished in 3627.1s.
-  ✅ Saved model params to artifacts/alphazero_connect4.pkl
+  ✅ Saved model params to artifacts/alphazero_connect4.safetensors
 
   ==================================================
   Playing connect_four.  You are 'X' (player 1).
@@ -185,7 +229,7 @@ and plays in the terminal:
 
 ```bash
 uv run alphazero.py --env connect4 --play-only
-uv run alphazero.py --env hex5 --play-only --load artifacts/alphazero_hex5.pkl
+uv run alphazero.py --env hex5 --play-only --load artifacts/alphazero_hex5.safetensors
 ```
 
 Options:
