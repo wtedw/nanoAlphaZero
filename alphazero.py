@@ -683,7 +683,6 @@ class KataModel(nn.Module):
     action_space: int
     is_go: bool
     is_chess: bool = False
-    c_p1_chess: int = 96
     c_trunk: int = 384
     c_mid: int = 192
     c_gpool: int = 64
@@ -728,7 +727,7 @@ class KataModel(nn.Module):
                 self.c_p1, self.c_g1, self.activation, name="PolicyHead_0"
             )(out, mask, mask_sum_hw)
         elif self.is_chess:
-            head = ChessPolicyHead(self.c_p1_chess, self.c_g1, self.activation)
+            head = ChessPolicyHead(self.c_p1, self.c_g1, self.activation)
             expected_actions = out.shape[1] * out.shape[2] * head.num_planes
             if self.action_space != expected_actions:
                 raise ValueError(
@@ -771,7 +770,6 @@ def make_model(config, rng, sharding=None):
         action_space=config["game_num_actions"],
         is_go=env_id.startswith("go_"),
         is_chess=env_id == "chess",
-        c_p1_chess=int(config.get("kata_model_chess_c_p1", 96)),
         **model_kwargs,
         activation=config.get("katago_activation", "mish"),
         use_rvgl=config.get("katago_use_rvgl", True),
@@ -3416,7 +3414,6 @@ _CHECKPOINT_CONFIG_KEYS = (
     "katago_preset",
     "katago_activation",
     "katago_use_rvgl",
-    "kata_model_chess_c_p1",
     "use_wdl",
     "env_id",
     "game_obs_shape",
@@ -4215,10 +4212,12 @@ def get_chess_config():
         "game_obs_shape": None,
         "game_num_actions": None,  # patched from live env in make_alphazero
         # --- Model ---
-        "conv_width": 256,
-        "conv_depth": 32,
-        "katago_preset": "b6c192nbt",
-        "kata_model_chess_c_p1": 96,
+        "conv_width": 128,
+        "conv_depth": 10,
+        "katago_preset": "b10c128nbt",
+        "katago_activation": "mish",
+        "katago_use_rvgl": True,
+        "use_wdl": True,
         # --- MCTS (1sh) ---
         "mcts_num_simulations": 12,
         "mcts_variant": "1sh",
