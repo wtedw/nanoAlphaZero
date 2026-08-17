@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
-#     "pgx @ git+https://github.com/wtedw/pgx.git@0aefd41",
+#     "pgx1 @ git+https://github.com/wtedw/pgx1.git@fa313c84338d93ab96fc02bc7c658364bf43098f",
 #     "flashbax @ git+https://github.com/instadeepai/flashbax.git@e0199d7bb232c622a19d3c28f9d6b34eb8215eab",
 #     "flax==0.10.1",
 #     "optax==0.2.7",
@@ -36,7 +36,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-import pgx
+import pgx1
 from flax.training import train_state
 from jax import Array
 from jax.scipy.special import erf
@@ -49,7 +49,7 @@ from flashbax.buffers.trajectory_buffer import (
     Experience,
     TrajectoryBufferState,
 )
-from pgx.experimental import auto_reset
+from pgx1.experimental import auto_reset
 
 P = jax.sharding.PartitionSpec
 mesh = jax.sharding.Mesh(jax.devices(), "x")
@@ -448,7 +448,7 @@ class GenericPolicyHead(nn.Module):
 
 
 class ChessPolicyHead(nn.Module):
-    """KataGo-style policy head for pgx chess's 64x73 action encoding."""
+    """KataGo-style policy head for pgx1 chess's 64x73 action encoding."""
 
     c_p1: int
     c_g1: int
@@ -487,7 +487,7 @@ class ChessPolicyHead(nn.Module):
             use_bias=False,
             kernel_init=kata_init(0.3, "identity"),
         )(outp)
-        # pgx observes chess after a 90-degree rotation. Undo it so row-major
+        # pgx1 observes chess after a 90-degree rotation. Undo it so row-major
         # flattening matches action = from_square * 73 + move_plane.
         outp = jnp.rot90(outp, k=-1, axes=(1, 2))
         return outp.reshape(outp.shape[0], -1)
@@ -665,7 +665,7 @@ class KataModel(nn.Module):
 
         masked_logits, value = model(obs, valid)
 
-    obs is a pgx NHWC observation, valid a [B, action_space] legal-move mask,
+    obs is a pgx1 NHWC observation, valid a [B, action_space] legal-move mask,
     value a scalar in [-1, 1] from the current player's perspective.
     ``deterministic`` is accepted for signature compatibility (no dropout).
 
@@ -825,7 +825,9 @@ class WrappedEnv:
 
 def make_env(config):
     env_id = config["env_id"]
-    env = pgx.make(env_id)
+    # Chess carries legality as a packed uint32 bitmask; see make_mcts.
+    env_kwargs = {"use_bitmask": True} if env_id == "chess" else {}
+    env = pgx1.make(env_id, **env_kwargs)
     e_step = env.step
     a_step = auto_reset(e_step, env.init)
     vmap_env_init = jax.jit(jax.vmap(env.init))
@@ -1379,7 +1381,7 @@ def gumbel_muzero_policy_1sh(
 def make_mcts(config, wenv, model):
     is_chess = config["env_id"] == "chess"
 
-    # custom pgx chess exposes legal as packed uint32 bitmask
+    # pgx1 chess exposes legal actions as a packed uint32 bitmask.
     #     (legal_action_bitmask), not legal_action_mask. Unpack on read.
     def _legal_from_state(env_state):
         if is_chess:
@@ -3210,7 +3212,7 @@ def run_alphazero(config, ckpt_path=None):
 # =============================================================================
 # Self-play loss curves don't tell you if the model is getting stronger (both
 # players co-improve). These helpers give a fixed yardstick that works for every
-# pgx game (incl. chess, no external engine): play one game per legal opening
+# pgx1 game (incl. chess, no external engine): play one game per legal opening
 # move (ttt->9, connect4->7, hex4x4->16, chess->20) head-to-head between two
 # param sets and report the win/draw/loss split. Two useful opponents:
 #   * None         -> uniform-random legal play  (sanity: is it learning at all?)
@@ -4284,11 +4286,12 @@ def get_chess_config():
 
 
 def get_go_config(board_size=5):
-    # pgx Go uses komi 7.5, so games never draw (score margin is always
-    # non-integer): the env always resolves to a win for one side. We treat
-    # it like hex (env_forbids_draws=True). The action space is board_size**2
-    # board points + 1 pass, and a game can run up to board_size**2 * 2 plies
-    # (pgx's default max_termination_steps), so the buffers are sized for that.
+    # pgx1 Go defaults komi to a per-size lookup (all X.5 values, 7.5
+    # fallback), so games never draw (score margin is always non-integer):
+    # the env always resolves to a win for one side. We treat it like hex
+    # (env_forbids_draws=True). The action space is board_size**2 board
+    # points + 1 pass, and a game can run up to board_size**2 * 2 plies
+    # (pgx1's default max_terminal_steps), so the buffers are sized for that.
     board_cfgs = {
         3: dict(
             conv_width=64,
@@ -4500,7 +4503,7 @@ unpack_bitmask_vmap = jax.vmap(unpack_bitmask)
 # =============================================================================
 def _run_ttt_diagnostics(model_ts, wenv, config):
     boardsize = config.get("boardsize", 3)
-    env = pgx.make("tic_tac_toe")
+    env = pgx1.make("tic_tac_toe")
     dummy_state = env.init(jax.random.PRNGKey(0))
     obs = env.observe(dummy_state, dummy_state.current_player)
     obs_b = obs[jnp.newaxis, ...]

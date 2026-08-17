@@ -10,9 +10,9 @@ nanoAlphaZero is quite possibly the strongest single-file implementation of Alph
 It's also game-agnostic: point it at any two-player board game, adjust the model size, and it learns to play.
 
 > note: this is a WIP.
-> - all code is optimized for TPUs, including our custom PGX fork ([wtedw/pgx](https://github.com/wtedw/pgx/tree/dcb18cb))
+> - all code is optimized for TPUs, including our game environments ([wtedw/pgx1](https://github.com/wtedw/pgx1))
 > - chess reaches strong play after about 200k updates; smaller games converge much sooner
-> - custom games require their own PGX env implementation
+> - custom games require their own PGX-style env implementation
 
 ## Setup
 
@@ -55,8 +55,8 @@ Supported games:
 | Connect4    | `connect4`        | reaches perfect play outcomes, can struggle to maintain it |
 | Go          | `go3`–`go9`       | recently added, not yet tested                             |
 
-New chess runs use a spatial KataGo-style policy head over pgx's 64×73 move
-encoding. Checkpoint metadata records the chess policy-head width.
+New chess runs use a spatial KataGo-style policy head over pgx1's 64×73 move
+encoding. Checkpoint metadata records the resolved model preset and architecture.
 
 Options:
 
