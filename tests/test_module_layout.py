@@ -11,7 +11,6 @@ def test_tournament_code_is_chess_scoped_and_legacy_eval_is_absent():
 
 
 def test_tournament_runtime_does_not_reference_omctx():
-    source = Path("src/nanoalphazero/eval/chess").read_text() if False else ""
     files = Path("src/nanoalphazero/eval/chess").glob("*.py")
     combined = "\n".join(path.read_text() for path in files)
     assert "import omctx" not in combined

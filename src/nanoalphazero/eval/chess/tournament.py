@@ -28,7 +28,6 @@ from nanoalphazero.eval.chess.config import (
     public_config,
     resolve_path,
     tournament_pairings,
-    validate_runtime_config,
 )
 from nanoalphazero.eval.protocol import PositionBatch
 from nanoalphazero.eval.chess.stockfish import (
@@ -769,27 +768,6 @@ def _format_unit_report(record: dict[str, Any]) -> str:
                 f"({compaction['active_games']} active, "
                 f"{compaction['padding_rows']} padding)"
             )
-    stopping = record.get("stopping")
-    if stopping:
-        lines.append(
-            "  stopping: "
-            f"{stopping['mode']} / {stopping['status']}; "
-            f"{stopping['completed_opening_pairs']} opening pairs complete"
-        )
-        if "llr" in stopping:
-            lines.append(
-                f"    LLR {stopping['llr']:+.3f} in "
-                f"[{stopping['lower_bound']:+.3f}, "
-                f"{stopping['upper_bound']:+.3f}]; "
-                f"penta={stopping['pentanomial_counts']}"
-            )
-        if stopping.get("on_decision") == "stop":
-            lines.append(
-                "    stopped normally at the SPRT decision; "
-                f"{stopping['analyzed_opening_pairs']} ordered pairs analyzed, "
-                f"{stopping['discarded_admitted_games']} admitted games discarded "
-                f"({stopping['discarded_partial_plies']} partial plies)"
-            )
     return "\n".join(lines)
 
 
@@ -828,7 +806,6 @@ def _build_neural_players(config, batch_size, env, players):
 
 def _prepare_paths(config, source, resume, output_root):
     digest = config.get("_run_config_hash", config_hash(config))
-    scheduler = config["tournament"]["scheduler"]
     if resume:
         run_dir = Path(resume).expanduser().resolve()
         manifest = json.loads((run_dir / "manifest.json").read_text())
@@ -944,7 +921,6 @@ def run_tournament(config, source, *, resume=None, output_root=None, skip_bayese
     """Run a fixed-sample resident-v1 chess tournament."""
     from nanoalphazero.eval.wandb_artifacts import materialize_agent_checkpoints
 
-    validate_runtime_config(config)
     config["_run_config_hash"] = config_hash(config)
     _resolve_agent_paths(config)
 

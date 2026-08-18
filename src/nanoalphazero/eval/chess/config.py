@@ -221,10 +221,6 @@ def validate_config(config: dict[str, Any]) -> None:
             raise ValueError("enabled adjudication requires positive threshold_cp")
 
 
-def validate_runtime_config(config: dict[str, Any]) -> None:
-    validate_config(config)
-
-
 def tournament_pairings(config: dict[str, Any]) -> list[tuple[str, str]]:
     configured = config["tournament"].get("pairings")
     if configured is not None:

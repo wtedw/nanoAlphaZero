@@ -12,7 +12,6 @@ import functools
 from typing import NamedTuple
 
 import haiku as hk
-import jax
 import jax.nn as jnn
 import jax.numpy as jnp
 import numpy as np
@@ -174,4 +173,3 @@ def transformer_decoder(targets, config: TransformerConfig):
 def build_transformer_predictor(config: TransformerConfig) -> Predictor:
     model = hk.transform(functools.partial(transformer_decoder, config=config))
     return Predictor(initial_params=model.init, predict=model.apply)
-

@@ -92,12 +92,6 @@ def resolved_mctx_config(agent: dict[str, Any], env, max_plies: int) -> dict[str
             "game_num_actions": env.num_actions,
             "game_max_steps": int(max_plies),
             "enable_sharding": True,
-            "mcts_bnk_rehydrate_fields": False,
-            "mcts_return_search_tree": False,
-            "mcts_return_summary": False,
-            "mcts_use_advantage_weights": False,
-            "mcts_advantage_scale": 1.0,
-            "mcts_use_puct_interior": False,
         }
     )
     config.update(search)
@@ -270,8 +264,10 @@ class MctxPlayer:
             )
             cached = (params, model_config, model)
             _MODEL_CACHE[cache_key] = cached
+        else:
+            _, model_config, _ = cached
+            self.config = apply_checkpoint_model_config(self.config, model_config)
         self.params, model_config, self.model = cached
-        self.config = apply_checkpoint_model_config(self.config, model_config)
         self._run, self.qtransform_config = make_eval_mcts(
             self.config, env, self.model
         )

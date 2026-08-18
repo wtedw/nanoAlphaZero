@@ -2,7 +2,7 @@ import chess
 import numpy as np
 import pytest
 
-from nanoalphazero.eval.chess import searchless as searchless_9m
+from nanoalphazero.eval.chess import searchless
 
 
 def _board(moves: tuple[str, ...] = ()) -> chess.Board:
@@ -38,10 +38,10 @@ CORPUS = (
 
 
 def test_released_model_registry_matches_deepmind_architectures():
-    assert searchless_9m.SEARCHLESS_MODELS == {
-        "9M": searchless_9m.SearchlessModelSpec(8, 256, 8, 1024),
-        "136M": searchless_9m.SearchlessModelSpec(8, 1024, 8, 256),
-        "270M": searchless_9m.SearchlessModelSpec(16, 1024, 8, 128),
+    assert searchless.SEARCHLESS_MODELS == {
+        "9M": searchless.SearchlessModelSpec(8, 256, 8, 1024),
+        "136M": searchless.SearchlessModelSpec(8, 1024, 8, 256),
+        "270M": searchless.SearchlessModelSpec(16, 1024, 8, 128),
     }
 
 
@@ -51,8 +51,8 @@ def test_repetition_v2_matches_v1_for_every_legal_candidate(history):
     moves = list(board.legal_moves)
     before = _snapshot(board)
 
-    v1 = searchless_9m.repetition_draws_v1(board, moves)
-    v2 = searchless_9m.repetition_draws_v2(board, moves)
+    v1 = searchless.repetition_draws_v1(board, moves)
+    v2 = searchless.repetition_draws_v2(board, moves)
 
     np.testing.assert_array_equal(v2, v1)
     assert _snapshot(board) == before
@@ -70,17 +70,17 @@ def test_repetition_v2_matches_v1_for_special_and_terminal_positions(fen):
     moves = list(board.legal_moves)
 
     np.testing.assert_array_equal(
-        searchless_9m.repetition_draws_v2(board, moves),
-        searchless_9m.repetition_draws_v1(board, moves),
+        searchless.repetition_draws_v2(board, moves),
+        searchless.repetition_draws_v1(board, moves),
     )
 
 
 def test_repetition_v2_skips_all_authoritative_checks_without_repeated_history():
     board = chess.Board()
     moves = list(board.legal_moves)
-    stats = searchless_9m.RepetitionCheckStats()
+    stats = searchless.RepetitionCheckStats()
 
-    draws = searchless_9m.repetition_draws_v2(board, moves, stats)
+    draws = searchless.repetition_draws_v2(board, moves, stats)
 
     assert not draws.any()
     assert stats.candidate_checks == len(moves)
@@ -102,10 +102,10 @@ def test_repetition_v2_uses_authoritative_check_for_possible_claims():
         )
     )
     moves = list(board.legal_moves)
-    stats = searchless_9m.RepetitionCheckStats()
+    stats = searchless.RepetitionCheckStats()
 
-    v2 = searchless_9m.repetition_draws_v2(board, moves, stats)
-    v1 = searchless_9m.repetition_draws_v1(board, moves)
+    v2 = searchless.repetition_draws_v2(board, moves, stats)
+    v1 = searchless.repetition_draws_v1(board, moves)
 
     np.testing.assert_array_equal(v2, v1)
     assert stats.authoritative_checks > 0
@@ -134,7 +134,7 @@ def test_repetition_v2_restores_board_when_authoritative_check_raises(monkeypatc
     monkeypatch.setattr(board, "can_claim_threefold_repetition", fail)
 
     with pytest.raises(RuntimeError, match="oracle failure"):
-        searchless_9m.repetition_draws_v2(board, list(board.legal_moves))
+        searchless.repetition_draws_v2(board, list(board.legal_moves))
     assert _snapshot(board) == before
 
 
@@ -145,6 +145,6 @@ def test_select_moves_v2_matches_v1():
     rng = np.random.default_rng(7)
     log_probs = rng.normal(size=(row_count, 128))
 
-    assert searchless_9m.select_moves_v2(boards, move_groups, log_probs) == (
-        searchless_9m.select_moves_v1(boards, move_groups, log_probs)
+    assert searchless.select_moves_v2(boards, move_groups, log_probs) == (
+        searchless.select_moves_v1(boards, move_groups, log_probs)
     )
