@@ -5,6 +5,9 @@ artifacts/
 logs/
 wandb/
 
+# Agents
+plans/
+
 # Python
 __pycache__/
 

@@ -28,7 +28,7 @@ git clone https://github.com/wtedw/nanoAlphaZero.git
 cd nanoAlphaZero
 
 # 3. Train (first run resolves + installs deps)
-uv run alphazero.py --env ttt
+uv run train --env ttt
 ```
 
 ## Train
@@ -39,10 +39,10 @@ and resolved model configuration auto-save to
 checkpoint format.
 
 ```bash
-uv run alphazero.py --env ttt
-uv run alphazero.py --env connect4
-uv run alphazero.py --env hex5
-uv run alphazero.py --env chess
+uv run train --env ttt
+uv run train --env connect4
+uv run train --env hex5
+uv run train --env chess
 ```
 
 Supported games:
@@ -81,7 +81,7 @@ uv run --with wandb==0.21.0 wandb login
 Then add `--enable-wandb` to the normal training command:
 
 ```bash
-uv run alphazero.py --env chess --enable-wandb --no-play
+uv run train --env chess --enable-wandb --no-play
 ```
 
 `WANDB_API_KEY` may be set instead of running the login command. The default
@@ -111,7 +111,7 @@ Metrics are logged straight to the terminal. It periodically prints an ASCII
 loss curve and other env-specific diagnostics:
 
 ```text
-➜  ~ uv run alphazero.py --env connect4
+➜  ~ uv run train --env connect4
 Warmup finished in 26.1s.
 Model has 9,458,308 parameters.
 Starting training for 2000 cycles...
@@ -228,8 +228,8 @@ Play against an already-trained model without retraining — loads the checkpoin
 and plays in the terminal:
 
 ```bash
-uv run alphazero.py --env connect4 --play-only
-uv run alphazero.py --env hex5 --play-only --load artifacts/alphazero_hex5.safetensors
+uv run train --env connect4 --play-only
+uv run train --env hex5 --play-only --load artifacts/alphazero_hex5.safetensors
 ```
 
 Options:
@@ -446,9 +446,27 @@ Cycle 1000/5000 | 8.40s
 
 
 ## Todo
-- Incorporate the full gumbel/muzero MCTS from MCTX
+- Evaluate the full MCTX tournament backend across larger TPU batch sizes
 - Verify larger hex boards still hit perfect play
 - Test Go models against reference opponent
+
+## Chess tournament evaluation
+
+The installable v4 layout includes fixed-sample `resident_v1` chess
+tournaments using the optimized external MCTX fork. Safetensors KataModel
+checkpoints can play Searchless Chess 9M/136M/270M and one Stockfish entrant
+in standard or all-legal-moves mode.
+
+```bash
+uv sync --group dev
+uv run assets fetch
+uv run assets fetch searchless-136m searchless-270m bayeselo
+uv run artifacts fetch --config evals/tournament-chess-v4-example/config.toml
+uv run eval tournament-chess-v4-example
+```
+
+See [docs/chess-tournaments.md](docs/chess-tournaments.md) for configuration,
+resume, adjudication, asset, scoring, and scheduler details.
 
 ## Acknowledgements
 This project would not have been possible without the amazing work of the following:

@@ -1,0 +1,1 @@
+"""Chess-specific tournament evaluation."""

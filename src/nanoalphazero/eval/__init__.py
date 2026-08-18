@@ -1,0 +1,2 @@
+"""Standalone, batched chess evaluation."""
+
