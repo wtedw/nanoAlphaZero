@@ -34,10 +34,6 @@ SEARCH_KEYS = {
     "mcts_use_advantage_weights",
     "mcts_advantage_scale",
     "mcts_use_puct_interior",
-    "exp_use_root_temperature",
-    "exp_root_temperature",
-    "exp_use_all_temp",
-    "exp_all_temp",
 }
 REQUIRED_SEARCH_KEYS = {
     "mcts_variant",
@@ -58,10 +54,6 @@ REQUIRED_SEARCH_KEYS = {
     "mcts_use_advantage_weights",
     "mcts_advantage_scale",
     "mcts_use_puct_interior",
-    "exp_use_root_temperature",
-    "exp_root_temperature",
-    "exp_use_all_temp",
-    "exp_all_temp",
 }
 
 
@@ -99,8 +91,6 @@ def _validate_search(name: str, search: Any) -> None:
         "mcts_return_summary",
         "mcts_use_advantage_weights",
         "mcts_use_puct_interior",
-        "exp_use_root_temperature",
-        "exp_use_all_temp",
     }
     for key in boolean_keys:
         if not isinstance(search[key], bool):
@@ -111,8 +101,6 @@ def _validate_search(name: str, search: Any) -> None:
         "mcts_value_scale",
         "mcts_gumbel_scale",
         "mcts_advantage_scale",
-        "exp_root_temperature",
-        "exp_all_temp",
     }
     numeric_keys.update(
         key

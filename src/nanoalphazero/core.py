@@ -708,6 +708,18 @@ def make_train(config, model, model_state, data_sharding=None):
 # =============================================================================
 # AlphaZero system (self-play + train + buffers + runner_state + run_fn)
 # =============================================================================
+def _print_config(config):
+    """Print the full run config as a sorted key/value table before training."""
+    name = config.get("game_name", config.get("env_id", "?"))
+    print("\n" + "=" * 60)
+    print(f"Run config [{name}]")
+    print("=" * 60)
+    width = max(len(k) for k in config)
+    for k in sorted(config):
+        print(f"  {k:<{width}} : {config[k]}")
+    print("=" * 60 + "\n", flush=True)
+
+
 def make_alphazero(config, rng, data_sharding=None):
     # default to the module-global data-parallel sharding when enabled
     if config.get("enable_sharding", False) and data_sharding is None:
@@ -718,6 +730,8 @@ def make_alphazero(config, rng, data_sharding=None):
     config = config.copy()
     config["game_obs_shape"] = wenv.obs_shape
     config["game_num_actions"] = wenv.num_actions
+
+    _print_config(config)
 
     # thread sharding through model/train/buffers/selfplay
     model, model_state = make_model(

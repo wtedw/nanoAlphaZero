@@ -60,10 +60,6 @@ def test_mctx_opt_returns_legal_actions_on_four_device_resident_batch():
         mcts_use_advantage_weights=False,
         mcts_advantage_scale=1.0,
         mcts_use_puct_interior=False,
-        exp_use_root_temperature=False,
-        exp_root_temperature=1.5,
-        exp_use_all_temp=False,
-        exp_all_temp=1.0,
     )
     model, variables = core.make_model(
         model_config, jax.random.PRNGKey(0), core.REPLICATED_SHARDING

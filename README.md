@@ -67,44 +67,6 @@ Options:
 | `--no-play`    | train only, skip the interactive game afterward   |
 | `--enable-wandb` | log metrics and upload versioned model artifacts |
 
-### Weights & Biases
-
-W&B is disabled by default and no network calls are made unless
-`--enable-wandb` is passed.
-
-First authenticate the VM once:
-
-```bash
-uv run --with wandb==0.21.0 wandb login
-```
-
-Then add `--enable-wandb` to the normal training command:
-
-```bash
-uv run train --env chess --enable-wandb --no-play
-```
-
-`WANDB_API_KEY` may be set instead of running the login command. The default
-project is `nanoAlphaZero`. The run logs the same scalar metrics printed each
-cycle, along with timing and Elo evaluation metrics.
-
-As long as checkpoint saving is enabled (the default), every periodic
-checkpoint and the final checkpoint are uploaded as versions of
-`nanoalphazero-<env>`, with `latest`, `cycle-<n>`, and `final` aliases. Passing
-`--no-save` still logs metrics but disables both local and online checkpoint
-saving.
-
-The optional `wandb_project`, `wandb_entity`, `wandb_name`, `wandb_group`,
-`wandb_tags`, and `wandb_artifact_name` entries in a game config override the
-corresponding defaults.
-
-Another VM can download the latest checkpoint with:
-
-```bash
-uv run --with wandb==0.21.0 wandb artifact get \
-  <entity>/nanoAlphaZero/nanoalphazero-chess:latest
-```
-
 ### Watch it train (all in the terminal)
 
 Metrics are logged straight to the terminal. It periodically prints an ASCII

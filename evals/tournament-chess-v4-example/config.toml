@@ -59,10 +59,6 @@ mcts_return_summary = false
 mcts_use_advantage_weights = false
 mcts_advantage_scale = 1.0
 mcts_use_puct_interior = false
-exp_use_root_temperature = false
-exp_root_temperature = 1.5
-exp_use_all_temp = false
-exp_all_temp = 1.0
 
 [[agents]]
 name = "9M"

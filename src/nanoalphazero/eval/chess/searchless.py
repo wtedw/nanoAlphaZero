@@ -100,6 +100,23 @@ class RepetitionCheckStats:
         }
 
 
+# --- Repetition checking: v1 is the reference, v2 is v1 plus a prefilter. ---
+#
+# `repetition_check_version` picks between two chains of paired functions:
+#
+#     select_moves_v{1,2} -> repetition_draws_v{1,2}
+#                         -> update_scores_with_repetitions_v{1,2}
+#
+# Only the last pair differs in logic. V1 is DeepMind's original: push every
+# legal move and ask python-chess whether the opponent could then claim a draw.
+# V2 first computes the position's repeated reversible-history keys once, skips
+# the moves that provably cannot produce a claim, and runs the *identical* v1
+# check on the ones that survive. Same decisions, fewer push/claim cycles; the
+# skipped fraction is reported as `prefilter_skips`. The two wrapper pairs only
+# thread the chosen variant through and record stats, so v2 is a speed
+# optimization and never a rule change (tests/test_searchless.py pins that).
+
+
 def update_scores_with_repetitions_v1(
     board: chess.Board,
     scores: np.ndarray,

@@ -98,10 +98,6 @@ def resolved_mctx_config(agent: dict[str, Any], env, max_plies: int) -> dict[str
             "mcts_use_advantage_weights": False,
             "mcts_advantage_scale": 1.0,
             "mcts_use_puct_interior": False,
-            "exp_use_root_temperature": False,
-            "exp_root_temperature": 1.5,
-            "exp_use_all_temp": False,
-            "exp_all_temp": 1.0,
         }
     )
     config.update(search)
@@ -161,16 +157,6 @@ def make_eval_mcts(config: dict[str, Any], env, model):
         observation = jax.lax.with_sharding_constraint(observation, sharding)
         legal = jax.lax.with_sharding_constraint(legal, sharding)
         prior_logits, value = model.apply({"params": params}, observation, legal)
-        if config.get("exp_use_root_temperature", False):
-            tau = float(config["exp_root_temperature"])
-            prior_logits = jnp.where(
-                legal, prior_logits / tau, jnp.finfo(prior_logits.dtype).min
-            )
-        if config.get("exp_use_all_temp", False):
-            tau = float(config["exp_all_temp"])
-            prior_logits = jnp.where(
-                legal, prior_logits / tau, jnp.finfo(prior_logits.dtype).min
-            )
         return mctx.RootFnOutput(
             prior_logits=prior_logits,
             value=value,
@@ -193,11 +179,6 @@ def make_eval_mcts(config: dict[str, Any], env, model):
         prior_logits, value = model.apply(
             {"params": params}, observation, legal
         )
-        if config.get("exp_use_all_temp", False):
-            tau = float(config["exp_all_temp"])
-            prior_logits = jnp.where(
-                legal, prior_logits / tau, jnp.finfo(prior_logits.dtype).min
-            )
         rows = jnp.arange(batch_size)
         reward = env_state.rewards[rows, previous_player]
         discount = jnp.where(env_state.terminated, 0, -1).astype(jnp.float32)
