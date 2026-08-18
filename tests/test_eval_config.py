@@ -7,6 +7,11 @@ from nanoalphazero.eval.chess.config import load_config, validate_config
 
 
 EXAMPLE = Path("evals/tournament-chess-v4-example/config.toml")
+DESERT_SNOWBALL = Path(
+    "evals/"
+    "tournament-desert-snowball-checkpoints-vs-searchless270m-"
+    "400sims-512games-per-pair/config.toml"
+)
 
 
 def test_example_config_is_valid_and_explicit():
@@ -18,6 +23,30 @@ def test_example_config_is_valid_and_explicit():
         "136M",
         "270M",
     }
+
+
+def test_desert_snowball_tournament_is_reproducible_baseline():
+    config, _ = load_config(DESERT_SNOWBALL)
+
+    assert config["tournament"]["num_games_per_pair"] == 512
+    assert config["tournament"]["pairings"] == [
+        ["desert-snowball-model34400-400sims", "270M"],
+        ["desert-snowball-model68800-400sims", "270M"],
+    ]
+    assert config["adjudication"]["backend"] == "async_pool"
+
+    candidates = [agent for agent in config["agents"] if agent["kind"] == "kata"]
+    assert [Path(agent["checkpoint"]).name for agent in candidates] == [
+        "model34400.safetensors",
+        "model68800.safetensors",
+    ]
+    for candidate in candidates:
+        search = candidate["search"]
+        assert search["mcts_num_simulations"] == 400
+        assert search["mcts_visit_exponent"] == 0.5
+        assert search["mcts_visit_aggregator"] == "sum"
+        assert search["mcts_maxvisit_init"] == 25.0
+        assert search["mcts_use_opt_backward"] is False
 
 
 def test_rejects_old_scheduler_name():

@@ -200,6 +200,8 @@ def eval_main(argv: Sequence[str] | None = None) -> None:
 _ASSET_CHOICES = [
     "all",
     "bayeselo",
+    "desert-snowball-34400",
+    "desert-snowball-68800",
     "eco-openings",
     "stockfish-16",
     "searchless-9m",

@@ -10,6 +10,8 @@ def test_default_selection_preserves_existing_assets():
     assert assets.SEARCHLESS_136M not in assets._select_assets(None)
     assert assets.SEARCHLESS_270M not in assets._select_assets(None)
     assert assets.STOCKFISH_16 not in assets._select_assets(None)
+    assert assets.DESERT_SNOWBALL_34400 not in assets._select_assets(None)
+    assert assets.DESERT_SNOWBALL_68800 not in assets._select_assets(None)
     assert assets.BAYESELO not in assets._select_assets(None)
 
 
@@ -23,6 +25,12 @@ def test_selection_accepts_cli_names_and_all():
     )
     assert assets._select_assets(["bayeselo"]) == (assets.BAYESELO,)
     assert assets._select_assets(["stockfish-16"]) == (assets.STOCKFISH_16,)
+    assert assets._select_assets(["desert-snowball-34400"]) == (
+        assets.DESERT_SNOWBALL_34400,
+    )
+    assert assets._select_assets(["desert-snowball-68800"]) == (
+        assets.DESERT_SNOWBALL_68800,
+    )
     assert assets._select_assets(["all"]) == (*assets.ASSETS, assets.BAYESELO)
 
 

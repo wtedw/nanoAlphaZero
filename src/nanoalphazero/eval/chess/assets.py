@@ -69,9 +69,40 @@ STOCKFISH_16 = Asset(
     download_size_bytes=41_594_880,
     extracted_size_bytes=40_442_144,
 )
+DESERT_SNOWBALL_34400 = Asset(
+    name="desert_snowball_34400",
+    url=(
+        "https://github.com/wtedw/nanoAlphaZero/releases/download/"
+        "desert-snowball-1028-checkpoints-v1/"
+        "desert-snowball-v42-model34400.safetensors"
+    ),
+    sha256="c8e7780fb0864eb0248fd18fa0e2dad142e49122321f6f9a709c132b48aa7797",
+    relative_path="artifacts/models/desert-snowball/model34400.safetensors",
+    download_size_bytes=29_142_764,
+    extracted_size_bytes=29_142_764,
+)
+DESERT_SNOWBALL_68800 = Asset(
+    name="desert_snowball_68800",
+    url=(
+        "https://github.com/wtedw/nanoAlphaZero/releases/download/"
+        "desert-snowball-1028-checkpoints-v1/"
+        "desert-snowball-v85-model68800.safetensors"
+    ),
+    sha256="086296db4973d851652fb9020bae4ef084bf9ff022b61547ddecca31fccfefe0",
+    relative_path="artifacts/models/desert-snowball/model68800.safetensors",
+    download_size_bytes=29_142_764,
+    extracted_size_bytes=29_142_764,
+)
 
 DEFAULT_ASSETS = (ECO_OPENINGS, SEARCHLESS_9M)
-ASSETS = (*DEFAULT_ASSETS, STOCKFISH_16, SEARCHLESS_136M, SEARCHLESS_270M)
+ASSETS = (
+    *DEFAULT_ASSETS,
+    STOCKFISH_16,
+    DESERT_SNOWBALL_34400,
+    DESERT_SNOWBALL_68800,
+    SEARCHLESS_136M,
+    SEARCHLESS_270M,
+)
 
 BAYESELO = Asset(
     name="bayeselo",
