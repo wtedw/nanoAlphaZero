@@ -9,6 +9,7 @@ from nanoalphazero.eval.chess.config import load_config
 from nanoalphazero.eval import wandb_artifacts
 from nanoalphazero.eval.chess.tournament import (
     _adjudicated_result,
+    _consume_prefetched,
     _create_first_mover_slots,
     _next_resident_size,
     _resolve_agent_paths,
@@ -86,6 +87,27 @@ def test_stockfish_paths_resolve_relative_to_config():
         agent for agent in config["agents"] if agent["kind"] == "stockfish"
     )
     assert stockfish["path"] == expected
+
+
+def test_prefetched_action_rejects_a_changed_board():
+    board = chess.Board()
+    slots = [{"board": board, "plies_played": 0}]
+    prefetched = {
+        "phase": 1,
+        "player": "candidate",
+        "mapping": (0,),
+        "board_keys": ((0, 0, board.fen()),),
+        "actions": "held action",
+    }
+    assert (
+        _consume_prefetched(prefetched, 1, "candidate", [0], slots)
+        == "held action"
+    )
+
+    board.push_uci("e2e4")
+    slots[0]["plies_played"] = 1
+    with pytest.raises(RuntimeError, match="stale adjudication pipeline"):
+        _consume_prefetched(prefetched, 1, "candidate", [0], slots)
 
 
 def test_missing_openings_fail_before_artifact_download(monkeypatch, tmp_path):

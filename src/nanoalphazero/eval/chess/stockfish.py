@@ -296,16 +296,43 @@ class AsyncStockfishPool:
     def pool_size(self) -> int:
         return self._pool_size
 
-    def analyse_batch(self, boards: tuple[chess.Board, ...]):
-        started = time.perf_counter()
+    def submit_batch(self, boards: tuple[chess.Board, ...]):
         chunks = max(1, math.ceil(len(boards) / self.pool_size))
-        results = self._submit(
-            self._analyse_batch(boards),
-            timeout=chunks * (4 * self.protocol_timeout + 2 * self.time_limit),
+        pending = {
+            "started_at": time.perf_counter(),
+            "completed_at": None,
+            "count": len(boards),
+            "timeout": chunks * (
+                4 * self.protocol_timeout + 2 * self.time_limit
+            ),
+        }
+        future = asyncio.run_coroutine_threadsafe(
+            self._analyse_batch(boards), self._loop
         )
-        self._seconds += time.perf_counter() - started
-        self._calls += len(boards)
+        pending["future"] = future
+
+        def completed(_future):
+            pending["completed_at"] = time.perf_counter()
+
+        future.add_done_callback(completed)
+        return pending
+
+    def finish_batch(self, pending):
+        future = pending["future"]
+        try:
+            results = future.result(timeout=pending["timeout"])
+        except TimeoutError:
+            future.cancel()
+            raise
+        completed_at = pending["completed_at"] or time.perf_counter()
+        pending["completed_at"] = completed_at
+        pending["elapsed"] = completed_at - pending["started_at"]
+        self._seconds += pending["elapsed"]
+        self._calls += pending["count"]
         return results
+
+    def analyse_batch(self, boards: tuple[chess.Board, ...]):
+        return self.finish_batch(self.submit_batch(boards))
 
     def stats(self) -> dict[str, Any]:
         return {
@@ -412,6 +439,17 @@ class StockfishAdjudicator:
             hash_mb=int(config.get("hash_mb", 16)),
             protocol_timeout=float(config.get("protocol_timeout", 60.0)),
         )
+        self.can_pipeline = self.backend == "async_pool"
+
+    def submit_batch(self, boards: tuple[chess.Board, ...]):
+        if not self.can_pipeline:
+            raise RuntimeError("threaded adjudication cannot be pipelined")
+        return self._pool.submit_batch(boards)
+
+    def finish_batch(self, pending):
+        if not self.can_pipeline:
+            raise RuntimeError("threaded adjudication cannot be pipelined")
+        return self._pool.finish_batch(pending)
 
     def analyse_batch(self, boards: tuple[chess.Board, ...]):
         return self._pool.analyse_batch(boards)

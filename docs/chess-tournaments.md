@@ -151,3 +151,10 @@ or a pgx/python termination disagreement produces an unscored `*` failure.
 processes concurrently on one event loop and requests only the score field used
 by adjudication. `threaded_pool` retains the previous implementation for
 comparative profiling; both backends apply the same adjudication rule.
+
+The async backend also pipelines one model search while the preceding
+post-move position is being adjudicated. The calculated action is held until
+that adjudication finishes: continuing games consume it, while adjudicated
+games discard it. Phase, player, resident mapping, ply count, and FEN must all
+still match before a held action can be applied. The pipeline never has more
+than one uncommitted action and is disabled when the next entrant is Stockfish.

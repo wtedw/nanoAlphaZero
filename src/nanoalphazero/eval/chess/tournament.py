@@ -447,6 +447,32 @@ def _resident_actions(player, env_state, mapping, slots, seed: int):
     )
 
 
+def _resident_board_keys(mapping, slots):
+    return tuple(
+        None
+        if original < 0
+        else (
+            original,
+            slots[original]["plies_played"],
+            slots[original]["board"].fen(),
+        )
+        for original in mapping
+    )
+
+
+def _consume_prefetched(prefetched, phase, current_player, mapping, slots):
+    if (
+        prefetched["phase"] != phase
+        or prefetched["player"] != current_player
+        or prefetched["mapping"] != tuple(mapping)
+        or prefetched["board_keys"] != _resident_board_keys(mapping, slots)
+    ):
+        raise RuntimeError(
+            "stale adjudication pipeline result before move application"
+        )
+    return prefetched["actions"]
+
+
 def run_resident_v1_unit(
     player_a,
     player_b,
@@ -493,6 +519,11 @@ def run_resident_v1_unit(
     phase = 0
     total_move_seconds = Counter()
     compactions = []
+    prefetched = None
+    pipeline_prefetches = 0
+    pipeline_used = 0
+    pipeline_discarded = 0
+    pipeline_overlap_seconds = 0.0
     if progress is not None:
         progress.update(len(slots), len(mapping), phase, force=True)
     while any(slot["active"] for slot in slots):
@@ -519,18 +550,25 @@ def run_resident_v1_unit(
         action_seed = _stable_seed(
             seed, pairing_id, first_mover, phase, current_player
         )
-        stage_started = time.perf_counter()
-        actions = _resident_actions(
-            players[current_player], env_state, mapping, slots, action_seed
-        )
-        move_elapsed = time.perf_counter() - stage_started
+        if prefetched is None:
+            stage_started = time.perf_counter()
+            actions = _resident_actions(
+                players[current_player], env_state, mapping, slots, action_seed
+            )
+            move_elapsed = time.perf_counter() - stage_started
+            total_move_seconds[current_player] += move_elapsed
+            stage_seconds["resident_player_search"] += move_elapsed
+        else:
+            actions = _consume_prefetched(
+                prefetched, phase, current_player, mapping, slots
+            )
+            prefetched = None
+            pipeline_used += 1
         if actions.shape != (len(mapping),):
             raise ValueError(
                 f"{current_player} returned action shape {actions.shape}; "
                 f"expected {(len(mapping),)}"
             )
-        total_move_seconds[current_player] += move_elapsed
-        stage_seconds["resident_player_search"] += move_elapsed
 
         stage_started = time.perf_counter()
         action_array = jax.device_put(jnp.asarray(actions), env.data_sharding)
@@ -563,16 +601,73 @@ def run_resident_v1_unit(
         )
 
         stage_started = time.perf_counter()
+        terminated = np.asarray(jax.device_get(env_state.terminated))
+        has_immediate_terminal = any(
+            slots[original]["board"].is_game_over()
+            or slots[original]["board"].can_claim_fifty_moves()
+            or slots[original]["board"].is_repetition()
+            or bool(terminated[position])
+            or slots[original]["plies_played"] >= max_plies
+            for position, original in zip(
+                live_positions, moved_originals, strict=True
+            )
+        )
+        next_prefetched = None
         if adjudicator is None:
             infos = [None] * len(moved_originals)
+        elif getattr(adjudicator, "can_pipeline", False):
+            pending = adjudicator.submit_batch(
+                tuple(slots[original]["board"] for original in moved_originals)
+            )
+            next_player = (
+                other if current_player == first_mover else first_mover
+            )
+            if (
+                not has_immediate_terminal
+                and not isinstance(players[next_player], StockfishPlayer)
+            ):
+                next_phase = phase + 1
+                next_seed = _stable_seed(
+                    seed, pairing_id, first_mover, next_phase, next_player
+                )
+                prefetch_started = time.perf_counter()
+                next_actions = _resident_actions(
+                    players[next_player], env_state, mapping, slots, next_seed
+                )
+                prefetch_finished = time.perf_counter()
+                prefetch_elapsed = prefetch_finished - prefetch_started
+                if next_actions.shape != (len(mapping),):
+                    raise ValueError(
+                        f"{next_player} returned prefetched action shape "
+                        f"{next_actions.shape}; expected {(len(mapping),)}"
+                    )
+                total_move_seconds[next_player] += prefetch_elapsed
+                stage_seconds["resident_player_search"] += prefetch_elapsed
+                next_prefetched = {
+                    "phase": next_phase,
+                    "player": next_player,
+                    "mapping": tuple(mapping),
+                    "board_keys": _resident_board_keys(mapping, slots),
+                    "actions": next_actions,
+                }
+                pipeline_prefetches += 1
+            infos = adjudicator.finish_batch(pending)
+            if next_prefetched is not None:
+                pipeline_overlap_seconds += max(
+                    0.0,
+                    min(prefetch_finished, pending["completed_at"])
+                    - max(prefetch_started, pending["started_at"]),
+                )
+            stage_seconds["stockfish_adjudication"] += pending["elapsed"]
         else:
             infos = adjudicator.analyse_batch(
                 tuple(slots[original]["board"] for original in moved_originals)
             )
-        stage_seconds["stockfish_adjudication"] += time.perf_counter() - stage_started
+            stage_seconds["stockfish_adjudication"] += (
+                time.perf_counter() - stage_started
+            )
 
         stage_started = time.perf_counter()
-        terminated = np.asarray(jax.device_get(env_state.terminated))
         for position, original, info in zip(
             live_positions, moved_originals, infos, strict=True
         ):
@@ -624,6 +719,9 @@ def run_resident_v1_unit(
                 _block_tree(env_state)
             stage_seconds["dynamic_compaction"] += time.perf_counter() - stage_started
             if len(mapping) < old_size:
+                if next_prefetched is not None:
+                    pipeline_discarded += 1
+                    next_prefetched = None
                 compactions.append(
                     {
                         "phase": phase,
@@ -633,6 +731,10 @@ def run_resident_v1_unit(
                         "padding_rows": len(mapping) - active_count,
                     }
                 )
+        if active_count:
+            prefetched = next_prefetched
+        elif next_prefetched is not None:
+            pipeline_discarded += 1
         if progress is not None and (phase % 2 == 0 or active_count == 0):
             progress.update(active_count, len(mapping), phase)
 
@@ -642,7 +744,7 @@ def run_resident_v1_unit(
     )
     stage_seconds["build_output_pgn_objects"] += time.perf_counter() - stage_started
     wall_seconds = time.perf_counter() - overall_started
-    measured_seconds = sum(stage_seconds.values())
+    measured_seconds = sum(stage_seconds.values()) - pipeline_overlap_seconds
     return games, {
         "scheduler_version": RESIDENT_V1_VERSION,
         "stage_timings_synchronized": profile_stages,
@@ -651,6 +753,12 @@ def run_resident_v1_unit(
         "move_phase_seconds": dict(total_move_seconds),
         "profile_stage_seconds": dict(stage_seconds),
         "profile_unattributed_seconds": wall_seconds - measured_seconds,
+        "adjudication_pipeline": {
+            "prefetches": pipeline_prefetches,
+            "used": pipeline_used,
+            "discarded": pipeline_discarded,
+            "overlap_seconds": pipeline_overlap_seconds,
+        },
         "profile_batch_size_calls": {
             str(size): count for size, count in sorted(batch_sizes.items())
         },
@@ -747,6 +855,14 @@ def _format_unit_report(record: dict[str, Any]) -> str:
     lines.append("  model move timings:")
     for player, seconds in record.get("move_phase_seconds", {}).items():
         lines.append(f"    {player}: {float(seconds):.3f}s")
+    pipeline = record.get("adjudication_pipeline", {})
+    if pipeline.get("prefetches"):
+        lines.append(
+            "  adjudication pipeline: "
+            f"{pipeline['used']}/{pipeline['prefetches']} lookaheads used, "
+            f"{pipeline['discarded']} discarded, "
+            f"{float(pipeline['overlap_seconds']):.3f}s overlap"
+        )
     batch_calls = record.get("profile_batch_size_calls", {})
     if batch_calls:
         rendered = ", ".join(
