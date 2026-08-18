@@ -19,10 +19,11 @@ pairings = [
 
 [adjudication]
 enabled = false
+backend = "async_pool"
 path = "../../artifacts/stockfish/16/stockfish"
 time_limit = 0.01
 threshold_cp = 1300
-pool_size = 128
+pool_size = 48
 threads = 1
 hash_mb = 16
 

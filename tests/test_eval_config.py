@@ -55,3 +55,12 @@ def test_only_one_stockfish_entrant():
     config["agents"].append(duplicate)
     with pytest.raises(ValueError, match="at most one Stockfish"):
         validate_config(config)
+
+
+def test_rejects_unknown_adjudication_backend():
+    config, _ = load_config(EXAMPLE)
+    config["adjudication"]["enabled"] = True
+    config["adjudication"]["backend"] = "deepmind_per_ply"
+
+    with pytest.raises(ValueError, match="unsupported adjudication backend"):
+        validate_config(config)

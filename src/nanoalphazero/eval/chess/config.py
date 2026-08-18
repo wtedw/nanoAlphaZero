@@ -219,6 +219,9 @@ def validate_config(config: dict[str, Any]) -> None:
             raise ValueError("enabled adjudication requires positive time_limit")
         if int(adjudication.get("threshold_cp", 0)) <= 0:
             raise ValueError("enabled adjudication requires positive threshold_cp")
+        backend = str(adjudication.get("backend", "async_pool"))
+        if backend not in {"async_pool", "threaded_pool"}:
+            raise ValueError(f"unsupported adjudication backend: {backend!r}")
 
 
 def tournament_pairings(config: dict[str, Any]) -> list[tuple[str, str]]:

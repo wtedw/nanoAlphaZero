@@ -132,10 +132,11 @@ Adjudication is globally on or off:
 ```toml
 [adjudication]
 enabled = true
-path = "/usr/local/bin/stockfish"
+backend = "async_pool"
+path = "../../artifacts/stockfish/16/stockfish"
 time_limit = 0.01
 threshold_cp = 1300
-pool_size = 128
+pool_size = 48
 threads = 1
 hash_mb = 16
 ```
@@ -145,3 +146,8 @@ centipawn score beyond `threshold_cp` ends the game as a decisive result; it is
 not converted to a draw. Normal checkmate, stalemate, repetition, fifty-move,
 and insufficient-material results come from python-chess. Reaching `max_plies`
 or a pgx/python termination disagreement produces an unscored `*` failure.
+
+`async_pool` is the default adjudication backend. It runs persistent UCI
+processes concurrently on one event loop and requests only the score field used
+by adjudication. `threaded_pool` retains the previous implementation for
+comparative profiling; both backends apply the same adjudication rule.

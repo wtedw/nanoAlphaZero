@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import chess
 import chess.engine
 import pytest
@@ -9,6 +11,7 @@ from nanoalphazero.eval.chess.tournament import (
     _adjudicated_result,
     _create_first_mover_slots,
     _next_resident_size,
+    _resolve_agent_paths,
     select_openings,
     run_tournament,
 )
@@ -67,6 +70,22 @@ def test_adjudication_assigns_result_from_board_turn():
     assert _adjudicated_result(board, positive, 1300) == "1-0"
     assert _adjudicated_result(board, negative, 1300) == "0-1"
     assert _adjudicated_result(board, positive, 1500) is None
+
+
+def test_stockfish_paths_resolve_relative_to_config():
+    config, _ = load_config("evals/tournament-chess-v4-example/config.toml")
+
+    _resolve_agent_paths(config)
+
+    relative = "../../artifacts/stockfish/16/stockfish"
+    expected = str(
+        (Path(config["_config_dir"]) / relative).resolve()
+    )
+    assert config["adjudication"]["path"] == expected
+    stockfish = next(
+        agent for agent in config["agents"] if agent["kind"] == "stockfish"
+    )
+    assert stockfish["path"] == expected
 
 
 def test_missing_openings_fail_before_artifact_download(monkeypatch, tmp_path):

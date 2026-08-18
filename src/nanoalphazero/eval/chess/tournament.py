@@ -843,6 +843,11 @@ def _resolve_agent_paths(config):
     for agent in config["agents"]:
         if "checkpoint" in agent:
             agent["checkpoint"] = str(resolve_path(config, agent["checkpoint"]))
+        if agent["kind"] == "stockfish" and "path" in agent:
+            agent["path"] = str(resolve_path(config, agent["path"]))
+    adjudication = config.get("adjudication", {})
+    if "path" in adjudication:
+        adjudication["path"] = str(resolve_path(config, adjudication["path"]))
     tournament = config["tournament"]
     tournament["openings"] = str(
         resolve_path(config, tournament.get("openings", "data/eval/eco_openings.pgn"))

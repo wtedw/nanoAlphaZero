@@ -1,10 +1,11 @@
+import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
 import chess
 import chess.engine
 
 from nanoalphazero.eval.chess.searchless_actions import ordered_legal_moves
-from nanoalphazero.eval.chess.stockfish import StockfishPool
+from nanoalphazero.eval.chess.stockfish import AsyncStockfishPool, StockfishPool
 
 
 def test_stockfish_pool_processes_oversized_batches_in_chunks():
@@ -70,3 +71,34 @@ def test_stockfish_pool_restarts_and_retries_timed_out_worker():
 
     assert pool._call_with_recovery(0, call, "position") == ("fresh", "position")
     assert pool._restarts == 1
+
+
+def test_async_adjudicator_chunks_positions_and_requests_only_scores():
+    class FakeEngine:
+        def __init__(self, value):
+            self.value = value
+            self.info_masks = []
+
+        async def analyse(self, board, limit, *, info):
+            del limit
+            self.info_masks.append(info)
+            return {"score": self.value + board}
+
+    engines = [FakeEngine(10), FakeEngine(20)]
+    pool = object.__new__(AsyncStockfishPool)
+    pool._pool_size = 2
+    pool._engines = engines
+    pool.time_limit = 0.01
+    pool.protocol_timeout = 1.0
+
+    results = asyncio.run(pool._analyse_batch((1, 2, 3, 4, 5)))
+
+    assert results == [
+        {"score": 11},
+        {"score": 22},
+        {"score": 13},
+        {"score": 24},
+        {"score": 15},
+    ]
+    assert engines[0].info_masks == [chess.engine.INFO_SCORE] * 3
+    assert engines[1].info_masks == [chess.engine.INFO_SCORE] * 2
