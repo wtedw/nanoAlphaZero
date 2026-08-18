@@ -8,8 +8,8 @@
     "dynamic_batch_min": 32,
     "seed": 1,
     "max_plies": 512,
-    "openings": "/home/tedpsw/nanoAlphaZero/data/eval/eco_openings.pgn",
-    "output_root": "runs",
+    "openings": "data/eval/eco_openings.pgn",
+    "output_root": "evals/tournament-desert-snowball-checkpoints-vs-searchless270m-400sims-512games-per-pair/runs",
     "pairings": [
       [
         "desert-snowball-model34400-400sims",
@@ -24,7 +24,7 @@
   "adjudication": {
     "enabled": true,
     "backend": "async_pool",
-    "path": "/home/tedpsw/nanoAlphaZero-v4/artifacts/stockfish/16/stockfish",
+    "path": "artifacts/stockfish/16/stockfish",
     "time_limit": 0.01,
     "threshold_cp": 1300,
     "pool_size": 48,
@@ -33,7 +33,7 @@
     "protocol_timeout": 60.0
   },
   "bayeselo": {
-    "binary": "../../artifacts/bayeselo/BayesElo/bayeselo"
+    "binary": "artifacts/bayeselo/BayesElo/bayeselo"
   },
   "wandb": {
     "enabled": false,
@@ -43,7 +43,7 @@
     {
       "name": "desert-snowball-model34400-400sims",
       "kind": "kata",
-      "checkpoint": "/home/tedpsw/nanoAlphaZero-v4/artifacts/models/desert-snowball/model34400.safetensors",
+      "checkpoint": "artifacts/models/desert-snowball/model34400.safetensors",
       "seed": 42,
       "search": {
         "mcts_variant": "opt",
@@ -69,7 +69,7 @@
     {
       "name": "desert-snowball-model68800-400sims",
       "kind": "kata",
-      "checkpoint": "/home/tedpsw/nanoAlphaZero-v4/artifacts/models/desert-snowball/model68800.safetensors",
+      "checkpoint": "artifacts/models/desert-snowball/model68800.safetensors",
       "seed": 42,
       "search": {
         "mcts_variant": "opt",
@@ -96,7 +96,7 @@
       "name": "270M",
       "kind": "searchless",
       "model": "270M",
-      "checkpoint": "/home/tedpsw/nanoAlphaZero/artifacts/searchless_chess/270M",
+      "checkpoint": "artifacts/searchless_chess/270M",
       "inference_batch_size": 128,
       "inference_sharding": "data_parallel",
       "repetition_check_version": "v2"

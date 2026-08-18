@@ -8,14 +8,14 @@
     "dynamic_batch_min": 32,
     "seed": 1,
     "max_plies": 512,
-    "openings": "/home/tedpsw/nanoAlphaZero/data/eval/eco_openings.pgn",
-    "output_root": "runs"
+    "openings": "data/eval/eco_openings.pgn",
+    "output_root": "evals/tournament-searchless-all-vs-stockfish16-oracle-50ms-128games-per-pair/runs"
   },
   "adjudication": {
     "enabled": false
   },
   "bayeselo": {
-    "binary": "../../artifacts/bayeselo/BayesElo/bayeselo"
+    "binary": "artifacts/bayeselo/BayesElo/bayeselo"
   },
   "wandb": {
     "enabled": false,
@@ -26,7 +26,7 @@
       "name": "9M",
       "kind": "searchless",
       "model": "9M",
-      "checkpoint": "/home/tedpsw/nanoAlphaZero/artifacts/searchless_chess/9M",
+      "checkpoint": "artifacts/searchless_chess/9M",
       "inference_batch_size": 1024,
       "inference_sharding": "data_parallel",
       "repetition_check_version": "v2"
@@ -35,7 +35,7 @@
       "name": "136M",
       "kind": "searchless",
       "model": "136M",
-      "checkpoint": "/home/tedpsw/nanoAlphaZero/artifacts/searchless_chess/136M",
+      "checkpoint": "artifacts/searchless_chess/136M",
       "inference_batch_size": 256,
       "inference_sharding": "data_parallel",
       "repetition_check_version": "v2"
@@ -44,7 +44,7 @@
       "name": "270M",
       "kind": "searchless",
       "model": "270M",
-      "checkpoint": "/home/tedpsw/nanoAlphaZero/artifacts/searchless_chess/270M",
+      "checkpoint": "artifacts/searchless_chess/270M",
       "inference_batch_size": 128,
       "inference_sharding": "data_parallel",
       "repetition_check_version": "v2"

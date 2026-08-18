@@ -390,7 +390,7 @@
     "protocol_timeout": 60.0,
     "engine_restarts": 0,
     "elo": null,
-    "engine_path": "/home/tedpsw/nanoAlphaZero-v4/artifacts/stockfish/16/stockfish",
+    "engine_path": "artifacts/stockfish/16/stockfish",
     "engine_sha256": "8f60a016dc767e0d648a8665b8ede3e6e4d28c086ad90517ad26f55b9960bd84",
     "engine_id": {
       "name": "Stockfish 16",
@@ -423,8 +423,8 @@
   "nanoalphazero_git_sha": "13d9d96da74157d645388851e05f58084517a205",
   "timestamp": "2026-08-18T12:53:00.443611+00:00",
   "bayeselo": {
-    "binary": "/home/tedpsw/nanoAlphaZero-v4/artifacts/bayeselo/BayesElo/bayeselo",
-    "pgn": "/home/tedpsw/nanoAlphaZero-v4/evals/tournament-desert-snowball-checkpoints-vs-searchless270m-400sims-512games-per-pair/runs/20260818-121855-0a890a3592/games.pgn",
+    "binary": "artifacts/bayeselo/BayesElo/bayeselo",
+    "pgn": "evals/tournament-desert-snowball-checkpoints-vs-searchless270m-400sims-512games-per-pair/runs/20260818-121855-0a890a3592/games.pgn",
     "ratings": {
       "desert-snowball-model68800-400sims": {
         "rank": 1,

@@ -683,8 +683,8 @@
   "nanoalphazero_git_sha": "baac240dadc94ca609476b5e92245b139359bf82",
   "timestamp": "2026-08-18T08:46:34.702172+00:00",
   "bayeselo": {
-    "binary": "/home/tedpsw/nanoAlphaZero/artifacts/bayeselo/BayesElo/bayeselo",
-    "pgn": "/home/tedpsw/nanoAlphaZero-v4/evals/tournament-searchless-all-vs-stockfish16-oracle-50ms-128games-per-pair/runs/20260818-072706-5dc47c444b/games.pgn",
+    "binary": "artifacts/bayeselo/BayesElo/bayeselo",
+    "pgn": "evals/tournament-searchless-all-vs-stockfish16-oracle-50ms-128games-per-pair/runs/20260818-072706-5dc47c444b/games.pgn",
     "ratings": {
       "stockfish16-oracle-50ms": {
         "rank": 1,

@@ -12,6 +12,8 @@ from nanoalphazero.eval.chess.tournament import (
     _consume_prefetched,
     _create_first_mover_slots,
     _next_resident_size,
+    _portable_provenance,
+    _provenance_path_aliases,
     _resolve_agent_paths,
     select_openings,
     run_tournament,
@@ -87,6 +89,41 @@ def test_stockfish_paths_resolve_relative_to_config():
         agent for agent in config["agents"] if agent["kind"] == "stockfish"
     )
     assert stockfish["path"] == expected
+
+
+def test_tournament_provenance_uses_portable_repo_paths():
+    config, _ = load_config(
+        "evals/"
+        "tournament-desert-snowball-checkpoints-vs-searchless270m-"
+        "400sims-512games-per-pair/config.toml"
+    )
+    repo_root = Path.cwd().resolve()
+    aliases = _provenance_path_aliases(config, repo_root)
+    _resolve_agent_paths(config)
+    portable = _portable_provenance(config, repo_root, aliases)
+
+    assert portable["tournament"]["openings"] == "data/eval/eco_openings.pgn"
+    assert portable["adjudication"]["path"] == (
+        "artifacts/stockfish/16/stockfish"
+    )
+    assert portable["agents"][0]["checkpoint"] == (
+        "artifacts/models/desert-snowball/model34400.safetensors"
+    )
+    assert "/home/" not in str(portable)
+
+
+def test_portable_provenance_preserves_external_absolute_paths(tmp_path):
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    value = {
+        "inside": str(repo_root / "runs" / "games.pgn"),
+        "external": "/usr/local/bin/stockfish",
+    }
+
+    assert _portable_provenance(value, repo_root, {}) == {
+        "inside": "runs/games.pgn",
+        "external": "/usr/local/bin/stockfish",
+    }
 
 
 def test_prefetched_action_rejects_a_changed_board():

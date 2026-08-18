@@ -786,6 +786,77 @@ def _write_json(path: Path, value: Any) -> None:
     temporary.replace(path)
 
 
+def _logical_repo_path(
+    config: dict[str, Any], value: str | Path, repo_root: Path
+) -> str:
+    """Return a stable repo-relative path without following local symlinks."""
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = Path(config["_config_dir"]) / path
+    path = Path(os.path.abspath(path))
+    try:
+        return path.relative_to(repo_root).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def _provenance_path_aliases(
+    config: dict[str, Any], repo_root: Path
+) -> dict[str, str]:
+    """Map runtime-resolved paths back to their portable logical locations."""
+    values: list[str | Path] = []
+    tournament = config["tournament"]
+    values.append(tournament.get("openings", "data/eval/eco_openings.pgn"))
+    if tournament.get("output_root"):
+        values.append(tournament["output_root"])
+    adjudication = config.get("adjudication", {})
+    if adjudication.get("path"):
+        values.append(adjudication["path"])
+    bayeselo = config.get("bayeselo", {})
+    if bayeselo.get("binary"):
+        values.append(bayeselo["binary"])
+    for agent in config["agents"]:
+        for key in ("checkpoint", "path"):
+            if agent.get(key):
+                values.append(agent[key])
+    aliases = {}
+    for value in values:
+        portable = _logical_repo_path(config, value, repo_root)
+        aliases[str(value)] = portable
+        aliases[str(resolve_path(config, value))] = portable
+    return aliases
+
+
+def _portable_provenance(
+    value: Any, repo_root: Path, aliases: dict[str, str]
+) -> Any:
+    """Copy provenance data while replacing machine-local repository paths."""
+    if isinstance(value, dict):
+        return {
+            key: _portable_provenance(item, repo_root, aliases)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            _portable_provenance(item, repo_root, aliases) for item in value
+        ]
+    if isinstance(value, tuple):
+        return tuple(
+            _portable_provenance(item, repo_root, aliases) for item in value
+        )
+    if not isinstance(value, str):
+        return value
+    if value in aliases:
+        return aliases[value]
+    path = Path(value)
+    if not path.is_absolute():
+        return value
+    try:
+        return path.relative_to(repo_root).as_posix()
+    except ValueError:
+        return value
+
+
 def _rebuild_pgn(run_dir: Path, units: list[str]) -> Path:
     pgn_path = run_dir / "games.pgn"
     temporary = run_dir / "games.pgn.tmp"
@@ -1043,6 +1114,8 @@ def run_tournament(config, source, *, resume=None, output_root=None, skip_bayese
     from nanoalphazero.eval.wandb_artifacts import materialize_agent_checkpoints
 
     config["_run_config_hash"] = config_hash(config)
+    repo_root = Path(__file__).resolve().parents[4]
+    provenance_aliases = _provenance_path_aliases(config, repo_root)
     _resolve_agent_paths(config)
 
     tournament = config["tournament"]
@@ -1080,7 +1153,10 @@ def run_tournament(config, source, *, resume=None, output_root=None, skip_bayese
     summary_path = run_dir / "summary.json"
     progress_path = run_dir / "progress.json"
 
-    _write_json(run_dir / "resolved.json", public_config(config))
+    _write_json(
+        run_dir / "resolved.json",
+        _portable_provenance(public_config(config), repo_root, provenance_aliases),
+    )
 
     pairings = tournament_pairings(config)
     expected_units = {
@@ -1102,6 +1178,7 @@ def run_tournament(config, source, *, resume=None, output_root=None, skip_bayese
             (run_dir / "bayeselo.txt").write_text(
                 summary["bayeselo"]["raw_output"]
             )
+            summary = _portable_provenance(summary, repo_root, provenance_aliases)
             _write_json(summary_path, summary)
             _maybe_log_wandb(config, run_dir, summary)
             print(f"scored completed tournament with BayesElo: {run_dir}")
@@ -1240,12 +1317,11 @@ def run_tournament(config, source, *, resume=None, output_root=None, skip_bayese
             if "jax" in sys.modules
             else []
         ),
-        "nanoalphazero_git_sha": _git_sha(
-            Path(__file__).resolve().parents[4]
-        ),
+        "nanoalphazero_git_sha": _git_sha(repo_root),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     # Games and the base summary survive missing or crashing external scorers.
+    summary = _portable_provenance(summary, repo_root, provenance_aliases)
     _write_json(summary_path, summary)
     if not skip_bayeselo:
         summary["bayeselo"] = score_pgn(
@@ -1254,6 +1330,7 @@ def run_tournament(config, source, *, resume=None, output_root=None, skip_bayese
         (run_dir / "bayeselo.txt").write_text(
             summary["bayeselo"]["raw_output"]
         )
+    summary = _portable_provenance(summary, repo_root, provenance_aliases)
     _write_json(summary_path, summary)
     _maybe_log_wandb(config, run_dir, summary)
     print(f"wrote {run_dir}")
