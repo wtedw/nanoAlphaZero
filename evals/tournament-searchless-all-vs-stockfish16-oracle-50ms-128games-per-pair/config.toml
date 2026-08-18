@@ -59,7 +59,7 @@ repetition_check_version = "v2"
 [[agents]]
 name = "stockfish16-oracle-50ms"
 kind = "stockfish"
-path = "/usr/local/bin/stockfish"
+path = "../../artifacts/stockfish/16/stockfish"
 mode = "all_moves"
 time_limit = 0.05
 pool_size = 64

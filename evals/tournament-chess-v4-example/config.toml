@@ -19,7 +19,7 @@ pairings = [
 
 [adjudication]
 enabled = false
-path = "/usr/local/bin/stockfish"
+path = "../../artifacts/stockfish/16/stockfish"
 time_limit = 0.01
 threshold_cp = 1300
 pool_size = 128
@@ -90,7 +90,7 @@ repetition_check_version = "v2"
 [[agents]]
 name = "stockfish16-standard-10ms"
 kind = "stockfish"
-path = "/usr/local/bin/stockfish"
+path = "../../artifacts/stockfish/16/stockfish"
 mode = "standard"
 time_limit = 0.01
 pool_size = 128

@@ -422,7 +422,7 @@ in standard or all-legal-moves mode.
 ```bash
 uv sync --group dev
 uv run assets fetch
-uv run assets fetch searchless-136m searchless-270m bayeselo
+uv run assets fetch searchless-136m searchless-270m stockfish-16 bayeselo
 uv run artifacts fetch --config evals/tournament-chess-v4-example/config.toml
 uv run eval tournament-chess-v4-example
 ```

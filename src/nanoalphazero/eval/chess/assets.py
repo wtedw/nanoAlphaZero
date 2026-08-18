@@ -57,9 +57,21 @@ SEARCHLESS_270M = Asset(
     download_size_bytes=2_011_006_753,
     extracted_size_bytes=2_010_889_548,
 )
+STOCKFISH_16 = Asset(
+    name="stockfish_16",
+    url=(
+        "https://github.com/official-stockfish/Stockfish/releases/download/"
+        "sf_16/stockfish-ubuntu-x86-64-avx2.tar"
+    ),
+    sha256="9a461f249ccf64689706782b12e0d00e47cb9474b67ea77f2ba1a66b1e793b17",
+    relative_path="artifacts/stockfish/16",
+    archive="stockfish_binary_tar",
+    download_size_bytes=41_594_880,
+    extracted_size_bytes=40_442_144,
+)
 
 DEFAULT_ASSETS = (ECO_OPENINGS, SEARCHLESS_9M)
-ASSETS = (*DEFAULT_ASSETS, SEARCHLESS_136M, SEARCHLESS_270M)
+ASSETS = (*DEFAULT_ASSETS, STOCKFISH_16, SEARCHLESS_136M, SEARCHLESS_270M)
 
 BAYESELO = Asset(
     name="bayeselo",
@@ -102,11 +114,28 @@ def _safe_extract_tar(archive: Path, destination: Path) -> None:
         tar_file.extractall(destination)
 
 
+def _extract_stockfish_binary(archive: Path, destination: Path) -> None:
+    member_name = "stockfish/stockfish-ubuntu-x86-64-avx2"
+    with tarfile.open(archive, "r:") as tar_file:
+        member = tar_file.getmember(member_name)
+        if not member.isfile():
+            raise ValueError(f"Stockfish archive member is not a file: {member_name}")
+        source = tar_file.extractfile(member)
+        if source is None:
+            raise ValueError(f"could not read Stockfish archive member: {member_name}")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with source, destination.open("wb") as output:
+            shutil.copyfileobj(source, output)
+        destination.chmod(0o755)
+
+
 def _archive_result(asset: Asset, target: Path) -> Path:
     if asset.archive == "searchless_zip":
         return target / Path(asset.url).stem
     if asset.archive == "bayeselo_source":
         return target / "BayesElo" / "bayeselo"
+    if asset.archive == "stockfish_binary_tar":
+        return target / "stockfish"
     raise ValueError(f"unknown archive type {asset.archive!r}")
 
 
@@ -163,6 +192,8 @@ def _archive_is_ready(asset: Asset, result: Path) -> bool:
     if asset.archive == "searchless_zip":
         return (result / "6400000" / "params").exists()
     if asset.archive == "bayeselo_source":
+        return result.is_file() and bool(result.stat().st_mode & 0o111)
+    if asset.archive == "stockfish_binary_tar":
         return result.is_file() and bool(result.stat().st_mode & 0o111)
     return False
 
@@ -223,6 +254,10 @@ def fetch_asset(asset: Asset, root: Path) -> Path:
             shutil.copytree(source, target / "BayesElo", dirs_exist_ok=True)
             marker.write_text(asset.sha256 + "\n")
             return target / "BayesElo" / "bayeselo"
+        if asset.archive == "stockfish_binary_tar":
+            _extract_stockfish_binary(download, result)
+            marker.write_text(asset.sha256 + "\n")
+            return result
         download.replace(target)
     return target
 
@@ -238,8 +273,9 @@ def verify_asset(asset: Asset, root: Path) -> Path:
         )
         if not expected.exists():
             raise FileNotFoundError(f"missing extracted asset {asset.name}: {expected}")
-        if asset.archive == "bayeselo_source" and not expected.stat().st_mode & 0o111:
-            raise PermissionError(f"BayesElo is not executable: {expected}")
+        if asset.archive in {"bayeselo_source", "stockfish_binary_tar"}:
+            if not expected.stat().st_mode & 0o111:
+                raise PermissionError(f"asset is not executable: {expected}")
         marker = _source_marker(asset, target)
         if not _source_marker_matches(asset, target):
             cli_name = asset.name.replace("_", "-")

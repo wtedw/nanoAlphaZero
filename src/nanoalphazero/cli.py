@@ -201,6 +201,7 @@ _ASSET_CHOICES = [
     "all",
     "bayeselo",
     "eco-openings",
+    "stockfish-16",
     "searchless-9m",
     "searchless-136m",
     "searchless-270m",

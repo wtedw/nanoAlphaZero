@@ -9,6 +9,7 @@ def test_default_selection_preserves_existing_assets():
     assert assets._select_assets(None) == assets.DEFAULT_ASSETS
     assert assets.SEARCHLESS_136M not in assets._select_assets(None)
     assert assets.SEARCHLESS_270M not in assets._select_assets(None)
+    assert assets.STOCKFISH_16 not in assets._select_assets(None)
     assert assets.BAYESELO not in assets._select_assets(None)
 
 
@@ -21,6 +22,7 @@ def test_selection_accepts_cli_names_and_all():
         assets.SEARCHLESS_270M,
     )
     assert assets._select_assets(["bayeselo"]) == (assets.BAYESELO,)
+    assert assets._select_assets(["stockfish-16"]) == (assets.STOCKFISH_16,)
     assert assets._select_assets(["all"]) == (*assets.ASSETS, assets.BAYESELO)
 
 
@@ -32,6 +34,12 @@ def test_searchless_archive_result_uses_model_name(tmp_path):
     assert assets._source_marker(assets.SEARCHLESS_136M, target) != (
         assets._source_marker(assets.SEARCHLESS_270M, target)
     )
+
+
+def test_stockfish_archive_result_is_versioned_binary(tmp_path):
+    target = tmp_path / "artifacts" / "stockfish" / "16"
+
+    assert assets._archive_result(assets.STOCKFISH_16, target) == target / "stockfish"
 
 
 def test_verified_archive_source_sha256_uses_model_specific_marker(tmp_path):
@@ -118,4 +126,3 @@ def test_safe_tar_rejects_parent_traversal(monkeypatch, tmp_path):
     monkeypatch.setattr(assets.tarfile, "open", lambda *args, **kwargs: FakeTar())
     with pytest.raises(ValueError, match="unsafe archive member"):
         assets._safe_extract_tar(Path("archive"), tmp_path)
-
