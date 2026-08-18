@@ -1,0 +1,68 @@
+# Full Searchless Chess round robin against the paper-style Stockfish oracle.
+#
+# Stockfish's `all_moves` mode gives every legal root move a separate 50 ms
+# search and chooses the best result. This is intentionally much more costly
+# than ordinary `standard` mode with a 50 ms limit for the whole move.
+#
+# Four entrants, six pairings, 128 color-reversed games per pairing:
+# 768 games total over 64 openings per pairing.
+
+[tournament]
+game = "chess"
+scheduler = "resident_v1"
+num_games_per_pair = 128
+batch_size = 64
+dynamic_batch = true
+dynamic_batch_min = 32
+seed = 1
+max_plies = 512
+openings = "../../data/eval/eco_openings.pgn"
+output_root = "runs"
+
+[adjudication]
+enabled = false
+
+[bayeselo]
+binary = "../../artifacts/bayeselo/BayesElo/bayeselo"
+
+[wandb]
+enabled = false
+project = "nanoAlphaZero-eval"
+
+[[agents]]
+name = "9M"
+kind = "searchless"
+model = "9M"
+checkpoint = "../../artifacts/searchless_chess/9M"
+inference_batch_size = 1024
+inference_sharding = "data_parallel"
+repetition_check_version = "v2"
+
+[[agents]]
+name = "136M"
+kind = "searchless"
+model = "136M"
+checkpoint = "../../artifacts/searchless_chess/136M"
+inference_batch_size = 256
+inference_sharding = "data_parallel"
+repetition_check_version = "v2"
+
+[[agents]]
+name = "270M"
+kind = "searchless"
+model = "270M"
+checkpoint = "../../artifacts/searchless_chess/270M"
+inference_batch_size = 128
+inference_sharding = "data_parallel"
+repetition_check_version = "v2"
+
+[[agents]]
+name = "stockfish16-oracle-50ms"
+kind = "stockfish"
+path = "/usr/local/bin/stockfish"
+mode = "all_moves"
+time_limit = 0.05
+pool_size = 64
+threads = 1
+hash_mb = 16
+protocol_timeout = 60.0

@@ -1,0 +1,768 @@
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "2982"]
+
+1. d4 Nf6 2. c4 e6 3. Nf3 Bb4+ 4. Bd2 Qe7 5. g3 O-O 6. Bg2 Bxd2+ 7. Qxd2 d5 8. O-O Rd8 9. Rc1 c6 10. Qc2 b6 11. Nbd2 Bb7 12. a3 a5 13. cxd5 cxd5 14. Qc7 Qxc7 15. Rxc7 Ba6 16. e3 Ne8 17. Rc3 Nd6 18. Rac1 Kf8 19. Bf1 f6 20. Bh3 Ke7 21. Rc7+ Nd7 22. Bf1 Bxf1 23. Kxf1 b5 24. Nb3 Nc4 25. Nc5 Kd6 26. Rxd7+ Rxd7 27. Nxd7 Kxd7 28. Rc2 g5 29. Ke2 Rb8 30. Nd2 h5 31. Nb3 Kd6 32. h4 a4 33. Nc5 gxh4 34. gxh4 Rg8 35. Rc1 e5 36. Nb7+ Kc6 37. Nc5 Rg7 38. Na6 exd4 39. exd4 Rg4 40. Kd3 Rxh4 41. Nb4+ Kd6 42. Rb1 Rf4 43. Rh1 h4 44. Kc3 Rxf2 45. Nd3 Rf3 46. Rxh4 Nxb2 47. Kxb2 Rxd3 48. Rf4 Ke7 49. Rh4 Kf7 50. Rh7+ Ke6 51. Rh4 Rb3+ 52. Ka2 Kf5 53. Rh8 Ke4 54. Rh4+ Kf3 55. Rh3+ Ke4 56. Rh4+ Kd3 57. Rf4 Kc3 58. Rxf6 Kxd4 59. Rf8 Kc3 60. Rc8+ Kd3 61. Rd8 Ke4 62. Re8+ Kd4 63. Rg8 Kd3 64. Rd8 d4 65. Rh8 Kc4 66. Rc8+ Kd5 67. Rd8+ Ke4 68. Re8+ Kf4 69. Rf8+ Ke4 70. Re8+ Kf3 71. Rf8+ Ke3 72. Re8+ Kf4 73. Rf8+ Ke3 74. Re8+ Kf3 75. Rf8+ Ke2 76. Re8+ Kd2 77. Rf8 d3 78. Rh8 Kd1 79. Rh1+ Kc2 80. Rh2+ d2 81. Rg2 Kc1 82. Rg1+ d1=Q 83. Rxd1+ Kxd1 84. Ka1 Kc1 85. Ka2 Kc2 86. Ka1 Rxa3# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "518"]
+
+1. d4 f5 2. g3 c6 3. Bg2 g6 4. Nf3 Bg7 5. O-O Nh6 6. c4 Nf7 7. Nc3 d5 8. cxd5 cxd5 9. Ng5 e6 10. Nxf7 Kxf7 11. Bf4 Nc6 12. e3 Rf8 13. Nb5 a6 14. Nd6+ Kg8 15. h4 h6 16. Nxc8 Rxc8 17. g4 Qxh4 18. gxf5 gxf5 19. Bg3 Qg4 20. Bf3 Qg5 21. Kh1 f4 22. exf4 Qf6 23. Rc1 Nxd4 24. Rxc8 Rxc8 25. Bg4 Rc2 26. Re1 Rxb2 27. Qc1 Rc2 28. Qb1 Qg6 29. Bd1 Qf5 30. Bxc2 Qh3+ 31. Bh2 Nf3 32. Bh7+ Kh8 33. Qc2 Qxh2# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "2614"]
+
+1. d4 d5 2. c4 c6 3. Nf3 Nf6 4. Nc3 dxc4 5. a4 Bf5 6. Ne5 Na6 7. e4 Nxe4 8. g4 Nxc3 9. Bxc4 Be6 10. Bxe6 fxe6 11. bxc3 Qd5 12. O-O g6 13. c4 Qd6 14. Qf3 O-O-O 15. Nf7 Qxd4 16. Rb1 Bg7 17. Bb2 Qxc4 18. Bxg7 Rd3 19. Qg2 Rg8 20. Ne5 Qd5 21. Nxd3 Qxd3 22. Rbd1 Qb3 23. Bh6 g5 24. Qe4 Rg6 25. Qd4 Rg8 26. Qd7+ Kb8 27. Qxe7 Rc8 28. Rb1 Qb6 29. Bg7 Qc7 30. Be5 b6 31. Qxe6 Kb7 32. Bxc7 Nxc7 33. Qd7 Kb8 34. Rfe1 Nd5 35. Re8 Rxe8 36. Qxe8+ Kb7 37. Qd7+ Nc7 38. Re1 Ka6 39. Qxc6 h5 40. Re5 hxg4 41. Qxc7 b5 42. axb5# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "818"]
+
+1. e4 c6 2. c4 d5 3. cxd5 cxd5 4. exd5 Nf6 5. d4 Nxd5 6. Nf3 g6 7. Qb3 Nc6 8. Nc3 Nxc3 9. Bc4 Nd5 10. Bxd5 e6 11. Bxc6+ bxc6 12. O-O Qd5 13. Qc3 f6 14. Bf4 g5 15. Bg3 Kf7 16. Rfe1 a5 17. Ne5+ fxe5 18. Rxe5 Qd8 19. Qxc6 Ra7 20. Rd1 Bg7 21. d5 Bxe5 22. dxe6+ Bxe6 23. Rxd8 Rxd8 24. Qf3+ Bf6 25. Be5 Kg8 26. Bxf6 g4 27. Qe2 Rd6 28. h3 gxh3 29. Qh5 Rf7 30. Qg5+ Kf8 31. Qc5 Rxf6 32. Qxd6+ Kf7 33. Qc7+ Kg8 34. Qxa5 hxg2 35. Qd8+ Kf7 36. a3 Rg6 37. a4 h5 38. Qc7+ Kf6 39. a5 h4 40. Qf4+ Kg7 41. Qd4+ Kf7 42. Qxh4 Bd5 43. Qh5 Bc6 44. b4 Kg7 45. Qe5+ Kh7 46. Qc7+ Kg8 47. Qc8+ Kg7 48. Qc7+ Kg8 49. b5 Bf3 50. Qc4+ Kg7 51. Qc7+ Kg8 52. b6 Rf6 53. b7 Bxb7 54. Qxb7 Rf7 55. Qxf7+ Kxf7 56. a6 Kg8 57. a7 Kh8 58. Kxg2 Kg8 59. a8=Q+ Kg7 60. Qe4 Kh8 61. Qe7 Kg8 62. f4 Kh8 63. f5 Kg8 64. f6 Kh8 65. Qg7# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "1500"]
+
+1. e4 e5 2. d4 exd4 3. c3 dxc3 4. Bc4 cxb2 5. Bxb2 Qe7 6. Nc3 Nf6 7. Nf3 d5 8. Bxd5 Nxd5 9. Qxd5 c6 10. Qd2 Bg4 11. Nd4 Na6 12. h3 Be6 13. O-O O-O-O 14. Rac1 Qb4 15. Rfd1 Bc5 16. Nce2 Qxd2 17. Rxd2 Rhe8 18. Rdc2 Bf8 19. Nxe6 Rxe6 20. f3 Nb4 21. Nf4 Red6 22. Re2 Rd1+ 23. Rxd1 Rxd1+ 24. Kh2 Nxa2 25. e5 Nb4 26. e6 fxe6 27. Nxe6 Bd6+ 28. g3 g6 29. Ng5 a5 30. Nxh7 a4 31. h4 b5 32. Ng5 Nd3 33. Bf6 a3 34. Re8+ Kb7 35. Ne4 Nc5 36. Nxd6+ Rxd6 37. Be5 Re6 38. Rxe6 Nxe6 39. g4 b4 40. h5 gxh5 41. gxh5 b3 42. h6 Ng5 43. f4 Nh7 44. Bd6 b2 45. Bxa3 b1=Q 46. Be7 Qe4 47. Bg5 Nxg5 48. fxg5 Qh4+ 49. Kg2 Ka6 50. Kf3 Qxg5 51. Ke4 Qxh6 52. Kd4 Qf4+ 53. Kd3 Ka5 54. Kc3 Qe3+ 55. Kc4 Qd2 56. Kb3 Kb5 57. Ka3 Kc4 58. Ka4 Qa2# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "457"]
+
+1. d4 Nf6 2. c4 c5 3. d5 b5 4. a4 bxc4 5. Nc3 g6 6. e4 d6 7. Bxc4 Bg7 8. f4 O-O 9. Nf3 Ba6 10. Bb5 Qa5 11. Bd2 Qb6 12. e5 dxe5 13. fxe5 Ng4 14. Qe2 Bxb5 15. axb5 Nd7 16. e6 Nde5 17. Nxe5 Nxe5 18. Bf4 Qc7 19. O-O fxe6 20. b6 axb6 21. Nb5 Qb8 22. Rxa8 Qxa8 23. Bxe5 Rxf1+ 24. Kxf1 Qf8+ 25. Ke1 exd5 26. Nc7 Qf5 27. Bxg7 Kxg7 28. g4 Qb1+ 29. Kf2 Kg8 30. Nxd5 Qh1 31. Qe6+ Kh8 32. Qe5+ Kg8 33. Nxe7+ Kf8 34. Nd5 Qxd5 35. Qxd5 h5 36. Kf3 hxg4+ 37. Ke4 Kg7 38. Ke5 g3 39. Qd7+ Kh6 40. Kf6 Kh5 41. Qh3# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "2342"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O b5 6. Bb3 Bb7 7. Nc3 Bd6 8. d3 Na5 9. d4 Nxb3 10. axb3 Nxe4 11. Nxe4 Bxe4 12. Re1 Bxf3 13. Qxf3 O-O 14. dxe5 Bc5 15. c3 a5 16. Bf4 c6 17. Qg4 Qe7 18. Bh6 f5 19. Qg3 Qf7 20. e6 dxe6 21. Bf4 Bb6 22. Qf3 Rac8 23. Rad1 Rfd8 24. Rxd8+ Bxd8 25. h3 Bf6 26. Be5 Bxe5 27. Rxe5 Qd7 28. c4 Rd8 29. Qe3 Kf7 30. cxb5 cxb5 31. Qb6 Qc8 32. Rc5 Qb8 33. Rc7+ Kf6 34. Qc5 Rd1+ 35. Kh2 Rd7 36. Qc3+ Kf7 37. g3 Qxc7 38. Qf3 Qa7 39. Qh5+ Kf8 40. Qe2 Qc5 41. h4 Qd4 42. b4 axb4 43. h5 Ke7 44. h6 g5 45. b3 Rd8 46. Qc2 g4 47. Qc7+ Rd7 48. Qc2 Kf7 49. Qe2 Kf8 50. Qe1 Ke7 51. Qe2 Qd2 52. Qf1 Rc7 53. Kg2 Rc2 54. Kh2 Rc1 55. Qxc1 Qxc1 56. Kg2 Qd1 57. Kh2 Qf1 58. f3 gxf3 59. g4 Qg2# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "1228"]
+
+1. e4 c5 2. Nf3 e6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 d6 6. g3 Be7 7. Be3 Nc6 8. Bg2 O-O 9. Qe2 Nxd4 10. Bxd4 e5 11. Be3 Be6 12. O-O Rc8 13. Rfd1 a6 14. a4 Ng4 15. Nd5 Nxe3 16. Nxe3 g6 17. h4 Kh8 18. Nd5 a5 19. Ra3 Rc5 20. Rad3 Bxd5 21. Rxd5 Qb6 22. Rxc5 Qxc5 23. Rd5 Qc7 24. Bf1 b6 25. c3 Qc6 26. Qd1 h5 27. Bd3 Kg7 28. Bc2 Rb8 29. Qe2 Rc8 30. Bb3 Qd7 31. Rb5 Bd8 32. Rd5 Rc5 33. Rd3 b5 34. Qd1 bxa4 35. Rxd6 Qg4 36. Rxd8 axb3 37. Qd6 Rc8 38. Qxe5+ f6 39. Qe7+ Kh6 40. Qf8+ Kh7 41. Qh8# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "652"]
+
+1. e4 d5 2. exd5 Qxd5 3. Nc3 Qa5 4. d4 e5 5. dxe5 Nc6 6. Nf3 Bb4 7. Bd2 Bg4 8. a3 Bxf3 9. Qxf3 Qxe5+ 10. Be2 Ba5 11. O-O-O O-O-O 12. Qxf7 Nf6 13. Qxg7 Rhg8 14. Qh6 Bxc3 15. Bxc3 Qxe2 16. Rxd8+ Nxd8 17. Qxf6 Rxg2 18. Rd1 Rg8 19. Qf5+ Kb8 20. Qxh7 Rf8 21. Bb4 Re8 22. Qd7 Nc6 23. Re1 Qxe1+ 24. Bxe1 Rxe1+ 25. Kd2 Re7 26. Qd5 Re8 27. Qf7 Rd8+ 28. Ke2 Nd4+ 29. Ke1 Nxc2+ 30. Kf1 a6 31. h4 Rd1+ 32. Ke2 Rd8 33. h5 Nd4+ 34. Kf1 Rd6 35. h6 Ka7 36. Qxc7 Rxh6 37. Qc5+ b6 38. Qe7+ Ka8 39. Qf8+ Ka7 40. Qg7+ Ka8 41. Qxh6 Nb5 42. Qxb6 Na7 43. f4 Nc8 44. Qc7 Na7 45. f5 Nb5 46. Qb6 Na7 47. f6 Nc8 48. Qc6+ Kb8 49. f7 a5 50. Qd7 a4 51. f8=Q Ka8 52. Qfxc8# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "1303"]
+
+1. e4 e6 2. d4 Nf6 3. e5 Nd5 4. c4 Nb6 5. Nc3 Nc6 6. Nf3 d6 7. exd6 cxd6 8. Be2 Be7 9. O-O O-O 10. Re1 a6 11. Bf4 d5 12. c5 Nd7 13. h3 b6 14. cxb6 Nxb6 15. Rc1 Bb7 16. Na4 Nxa4 17. Qxa4 Qb6 18. Rc3 Rfc8 19. Rec1 Bf6 20. Rb3 Qa5 21. Qxa5 Nxa5 22. Rxc8+ Rxc8 23. Rb4 Be7 24. Ra4 Bd8 25. b3 Bc6 26. Bxa6 Ra8 27. Rb4 Rxa6 28. Rb8 Ra8 29. Rxa8 Bxa8 30. Bd6 Bb7 31. Bc5 f6 32. b4 Nc4 33. a4 Nb2 34. a5 Ba6 35. Nd2 e5 36. Nb1 exd4 37. Bxd4 Nd3 38. Bc3 Be7 39. b5 Bxb5 40. Bd4 Bb4 41. Nc3 Bxc3 42. Bxc3 Nc1 43. Bd2 Nb3 44. Bb4 d4 45. f3 d3 46. Kf2 d2 47. Bxd2 Nxd2 48. g4 Kf7 49. h4 Ke6 50. h5 Ke5 51. Kg3 Ba6 52. f4+ Ke4 53. g5 h6 54. gxf6 gxf6 55. Kg4 Nf1 56. f5 Ke3 57. Kh4 Kf2 58. Kg4 Ne3+ 59. Kf4 Bb7 60. a6 Bf3 61. a7 Ng2# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "946"]
+
+1. e4 c5 2. d4 cxd4 3. c3 dxc3 4. Nxc3 Nc6 5. Nf3 d6 6. Qb3 Nf6 7. Be2 e6 8. O-O Be7 9. Rd1 e5 10. Be3 O-O 11. Rac1 Ng4 12. Bc5 Nf6 13. h3 h6 14. Bf1 Rb8 15. Qa3 Ne8 16. b4 a6 17. Be3 Nf6 18. Qb2 Be6 19. a4 Rc8 20. Qb1 a5 21. b5 Nb4 22. Nxe5 Re8 23. b6 d5 24. Nc4 Bc5 25. Bxc5 Rxc5 26. Nxa5 Qxb6 27. Nb3 Rxc3 28. Rxc3 Nxe4 29. Rf3 Nc6 30. Bb5 Ne5 31. Re3 Rc8 32. Rc1 Rxc1+ 33. Qxc1 Nc4 34. Rxe4 dxe4 35. Bxc4 e3 36. fxe3 Bxc4 37. Qxc4 Qxe3+ 38. Kf1 g6 39. Nc5 Qe7 40. Qd4 h5 41. Nd3 Qa3 42. Ne1 Qb3 43. Qe4 Qa3 44. Nf3 Kg7 45. Kf2 Qa2+ 46. Kg1 Qa3 47. Kh2 Kf8 48. Qf4 Kg7 49. Qe5+ Kg8 50. a5 Qb4 51. Qb8+ Qf8 52. Qxb7 Qd6+ 53. Kh1 Qd1+ 54. Ng1 Kg7 55. Qb2+ Kh7 56. Qb7 Kh6 57. Qb8 Qa1 58. a6 Qxa6 59. Qh8+ Kg5 60. Nf3+ Kf4 61. Qe5# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "1/2-1/2"]
+[Termination "normal"]
+[OpeningIndex "63"]
+
+1. Nf3 e5 2. Nxe5 d6 3. Nf3 d5 4. d4 Nf6 5. Bg5 h6 6. Bxf6 Qxf6 7. e3 Qb6 8. Qc1 c5 9. Nc3 cxd4 10. Nxd4 Nc6 11. Qd2 Be6 12. O-O-O Be7 13. Na4 Qc7 14. Nc3 O-O-O 15. Ncb5 Qb6 16. Be2 a6 17. Nxc6 bxc6 18. Nd4 c5 19. Nxe6 fxe6 20. c4 d4 21. Qc2 Rhf8 22. Bf3 dxe3 23. fxe3 Bf6 24. a3 Kc7 25. Rxd8 Kxd8 26. Rd1+ Ke7 27. Rd3 Rb8 28. b3 Rc8 29. Kd1 Qb8 30. h3 a5 31. Qd2 Qc7 32. Ke2 Bh4 33. Qb2 Bf6 34. Qd2 Bh4 35. Qb2 Bf6 36. Qb1 Bh4 37. Qa1 Qg3 38. Qg1 Rf8 39. Qf1 e5 40. e4 Rd8 41. Rxd8 Kxd8 42. Qd1+ Ke7 43. Qg1 Ke8 44. Kd3 Qe1 45. Bh5+ Kd8 46. Qxe1 Bxe1 47. Ke2 Bc3 48. Bg6 Ke7 49. h4 Ba1 50. Kf3 Bb2 51. Kg4 Ke6 52. a4 Bc1 53. Kh5 Bd2 54. g4 Bb4 55. g5 Bd2 56. Bf5+ Kf7 57. Bg6+ Ke7 58. Bf5 Kf7 59. Bg6+ Kf8 60. gxh6 Bxh6 61. Kg4 Bf4 62. Bh5 Ke7 63. Kf5 Bg3 64. Bg6 Bh2 65. Bh7 Kf7 66. Bg6+ Ke7 67. Bh7 Kf7 68. h5 Bf4 69. Bg6+ Ke7 70. Bh7 Kf7 71. Bg6+ Ke7 72. Bh7 Kf7 1/2-1/2
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "1346"]
+
+1. e4 e6 2. d4 d5 3. Nd2 Nc6 4. Ngf3 Nf6 5. e5 Nd7 6. c3 f6 7. exf6 Qxf6 8. Bb5 Bd6 9. O-O O-O 10. Nb3 a5 11. Bg5 Qg6 12. Bh4 a4 13. Nbd2 e5 14. dxe5 Ncxe5 15. Bg3 a3 16. b4 c6 17. Be2 Qf6 18. Qb3 Kh8 19. Rae1 Ng6 20. c4 Nf4 21. cxd5 cxd5 22. Bb5 Nb6 23. Qe3 Bxb4 24. Bxf4 Qxf4 25. Qxb6 Bxd2 26. Nxd2 Qxd2 27. Re2 Qb4 28. Re3 Ra6 29. Qc7 Qxb5 30. Rf3 Rg8 31. h3 d4 32. Re1 Rg6 33. Qf7 Qc6 34. Qf4 Rf6 35. Qe4 Qxe4 36. Rxe4 Rxf3 37. gxf3 Rd8 38. Kf1 d3 39. Ke1 d2+ 40. Kd1 Bf5 41. Rc4 Bd3 42. Rc8 Be2+ 43. Kxe2 d1=Q+ 44. Ke3 Qd4+ 45. Ke2 Qd3+ 46. Ke1 Qd1# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "900"]
+
+1. e4 c6 2. d4 d5 3. Nd2 dxe4 4. Nxe4 Nd7 5. Bc4 Ngf6 6. Ng5 e6 7. Qe2 Nb6 8. Bd3 h6 9. N5f3 c5 10. dxc5 Nbd7 11. Bf4 Qa5+ 12. c3 Nxc5 13. Bc2 b6 14. b4 Qa3 15. Bd2 Ba6 16. Qd1 Nce4 17. Ne2 Nxd2 18. Qxd2 Rd8 19. Qc1 Bxb4 20. cxb4 Qxb4+ 21. Kf1 Nd5 22. Rb1 Bxe2+ 23. Kxe2 Qc4+ 24. Ke1 Nf4 25. Qxf4 Qxf4 26. h4 O-O 27. h5 Qc7 28. Bb3 Qc3+ 29. Kf1 Qd3+ 30. Kg1 Qxb1+ 31. Kh2 Qb2 32. Rf1 a5 33. Kg1 b5 34. Re1 a4 35. Bd1 Qxa2 36. Be2 Rd5 37. Bf1 Qb2 38. Re2 a3 39. Ne1 Rd2 40. Rxd2 Qxd2 41. Nf3 Qd1 42. Kh2 Qxf1 43. Nd2 Qxf2 44. Nb3 Rc8 45. Kh1 Rc2 46. Nd2 Rxd2 47. g3 Rd1# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "1360"]
+
+1. e4 e6 2. d4 d5 3. Nd2 c5 4. exd5 Qxd5 5. dxc5 Nf6 6. Nb3 Qxd1+ 7. Kxd1 Nbd7 8. c6 bxc6 9. Nf3 c5 10. Bb5 Rb8 11. c4 Bd6 12. Ke2 a6 13. Ba4 Rb4 14. Bxd7+ Nxd7 15. Rd1 Be7 16. Na5 Bf6 17. Nd2 Ra4 18. Ndb3 h5 19. a3 h4 20. Rd6 Ne5 21. Be3 Nxc4 22. Nxc4 Rxc4 23. Nd2 Rc2 24. Rb1 Rh5 25. Rb6 Rd5 26. Kd1 Rcxd2+ 27. Bxd2 Bg5 28. Rb8 Rxd2+ 29. Ke1 Rd8 30. Rd1 Rxd1+ 31. Kxd1 Kd8 32. Ra8 Kc7 33. Kc2 Kb7 34. Rxc8 Kxc8 35. Kd3 Kb8 36. Kc4 Kc7 37. Kxc5 Bf4 38. h3 Bc1 39. b4 Bxa3 40. Kc4 Kc6 41. Kb3 Bc1 42. Kc4 Bf4 43. Kb3 f6 44. Ka4 Kb6 45. Kb3 Kb5 46. Kc3 f5 47. Kb3 Bb8 48. Kc3 Bc7 49. Kb3 Bd6 50. g3 Bxg3 51. Kc3 Bb8 52. Kb3 Bf4 53. Kc3 Bd6 54. Kd4 Kxb4 55. Kd3 Kb3 56. Ke3 a5 57. Kf3 Kc3 58. Ke3 a4 59. Kf3 a3 60. Kg2 a2 61. Kh1 f4 62. Kg2 a1=Q 63. Kf3 Qd1+ 64. Kg2 f3# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "1446"]
+
+1. e4 e6 2. d4 d5 3. Nc3 Bb4 4. e5 c5 5. a3 Ba5 6. dxc5 Bxc3+ 7. bxc3 Qc7 8. Nf3 Nd7 9. Qd4 Ne7 10. a4 Nf5 11. Qf4 Nxc5 12. c4 O-O 13. Be2 dxc4 14. O-O b6 15. Re1 Bb7 16. Nd4 Nxd4 17. Qxd4 Rfd8 18. Qf4 Be4 19. Ra2 Qc6 20. h4 Rac8 21. Qg3 Kh8 22. Bxc4 Nxa4 23. Ba6 Rc7 24. Bg5 Rg8 25. c4 Nc5 26. Bb5 Qa8 27. Be3 Rd8 28. f3 Bc6 29. Bxc5 bxc5 30. Bxc6 Qxc6 31. Rea1 Qa8 32. Ra6 Rd4 33. Rd6 Qf8 34. h5 h6 35. Ra4 Qe7 36. Kh2 Kg8 37. Kh3 Rd7 38. Raa6 R7xd6 39. exd6 Qf6 40. Kh2 Rh4+ 41. Qxh4 Qxh4+ 42. Kg1 Qd4+ 43. Kh2 Qxc4 44. d7 Qh4+ 45. Kg1 Qd4+ 46. Kh2 Qxd7 47. Ra3 Qc7+ 48. Kh1 Kh7 49. Re3 Qd8 50. Re4 Qd3 51. Rh4 Qd5 52. Kh2 a5 53. Rh3 Qg5 54. Kh1 Qf4 55. Kg1 c4 56. Kf2 Qd2+ 57. Kg3 Qg5+ 58. Kf2 Qd2+ 59. Kg3 Qe1+ 60. Kh2 c3 61. Rg3 c2 62. Rg4 c1=Q 63. Re4 Qf2 64. Rg4 Qcg1+ 65. Kh3 Qh1# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "374"]
+
+1. d4 Nf6 2. Bg5 Ne4 3. Bf4 g5 4. Bc1 d5 5. f3 Nd6 6. Bxg5 Rg8 7. Bf4 c5 8. dxc5 e5 9. Bxe5 Nc4 10. Bd4 Nc6 11. e3 Nxd4 12. exd4 Rxg2 13. Bxg2 Qh4+ 14. Ke2 Bh6 15. Qe1 Qxd4 16. Qc3 Qxc5 17. Na3 Bg7 18. Qe1 Qe3+ 19. Kf1 Nd2+ 20. Qxd2 Qxd2 21. Re1+ Kf8 22. Ne2 Bxb2 23. Nb5 Bd7 24. Nd6 Ba3 25. Nxf7 Re8 26. Ng5 Bb4 27. c3 Bxc3 28. Nxh7+ Kf7 29. Ng5+ Kg7 30. Ne6+ Rxe6 31. Kf2 Qe3+ 32. Kf1 Bxe1 33. Kxe1 Qxe2# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "792"]
+
+1. e4 d6 2. d4 Nf6 3. Nc3 g6 4. Be3 c6 5. Qd2 Nbd7 6. Nf3 Qc7 7. a4 Ng4 8. Bg5 h6 9. Bh4 Ngf6 10. Bc4 Bg7 11. O-O-O O-O 12. e5 dxe5 13. Bg3 Nh5 14. Bxe5 Nxe5 15. Nxe5 Bxe5 16. dxe5 Kh7 17. Qe3 Ng7 18. h4 Qb6 19. Qxb6 axb6 20. b3 h5 21. Rhe1 Bf5 22. Kb2 Kg8 23. Ne4 Bxe4 24. Rxe4 Rfd8 25. Rxd8+ Rxd8 26. Bd3 Ne6 27. Rb4 Nc5 28. Rxb6 Kf8 29. Kc3 Ke8 30. Kc4 Rd5 31. Rb5 Nxd3 32. cxd3 Rd7 33. Rb4 Kd8 34. Kc3 Kc7 35. Rd4 Rxd4 36. Kxd4 Kb6 37. Kc4 Ka5 38. Kc5 Ka6 39. d4 Ka7 40. b4 Kb8 41. Kb6 Kc8 42. f4 Kb8 43. e6 fxe6 44. a5 Kc8 45. a6 bxa6 46. Kxc6 Kd8 47. g3 Kc8 48. Kb6 Kd7 49. Kxa6 e5 50. fxe5 g5 51. d5 Ke8 52. e6 Kf8 53. Kb7 Kg7 54. Kc6 Kh8 55. Kd7 Kg8 56. Kc6 Kh8 57. hxg5 Kh7 58. b5 Kg6 59. Kd7 Kxg5 60. Kc6 Kh6 61. Kd7 Kh7 62. Kxe7 Kg6 63. Ke8 Kf6 64. Kd7 Ke5 65. e7 Kxd5 66. e8=Q Kc5 67. b6 Kxb6 68. Kd6 Ka5 69. Kc5 Ka6 70. Qa8# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "2411"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5 7. Bb3 d6 8. c3 O-O 9. d4 Bg4 10. d5 Na5 11. Bc2 c6 12. dxc6 Qe8 13. h3 Be6 14. Ng5 Bc8 15. c7 h6 16. Nf3 Qc6 17. Nbd2 Qxc7 18. Nf1 Nc4 19. Nh4 Nh7 20. Nf5 Bxf5 21. exf5 Nf6 22. g4 d5 23. h4 h5 24. g5 Ng4 25. Nh2 Nxh2 26. Kxh2 e4+ 27. Kg2 Qe5 28. f6 Bd6 29. Rh1 g6 30. b3 Na3 31. Bxa3 Bxa3 32. b4 Bb2 33. Rb1 Bxc3 34. Qe2 Rac8 35. Rbd1 Bxb4 36. Bb3 Rfd8 37. Rd3 d4 38. f3 e3 39. a4 Bd6 40. Rh3 bxa4 41. Bxa4 Rc7 42. Bb3 Rb8 43. f4 Qe4+ 44. Rf3 Rxb3 45. Rxb3 Rc2 46. Qxc2 Qxc2+ 47. Kh3 Qxb3 48. Kg3 Qb1 49. Rxe3 Qg1+ 50. Kf3 Qxe3+ 51. Kg2 Qe2+ 52. Kg1 Bxf4 53. Kh1 Qf1# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "3014"]
+
+1. d4 Nf6 2. c4 e6 3. Nf3 b6 4. g3 Ba6 5. b3 Bb4+ 6. Bd2 Qe7 7. Bg2 Bb7 8. O-O O-O 9. Bf4 Bxf3 10. Bxf3 d5 11. cxd5 exd5 12. Bg5 c6 13. a3 Bd6 14. b4 Nbd7 15. b5 cxb5 16. Bxd5 Rac8 17. Bg2 h6 18. Bxf6 Nxf6 19. Qd3 b4 20. e4 Rfd8 21. Bh3 Rc7 22. Nd2 bxa3 23. Rfd1 a5 24. Bg2 Bb4 25. Nb1 Rxd4 26. Qxd4 Rd7 27. Qxd7 Nxd7 28. Nxa3 Bxa3 29. Rxa3 Qxa3 30. Rxd7 a4 31. Rd8+ Kh7 32. Bf1 Qc3 33. Ra8 Qb3 34. e5 a3 35. h4 Kg6 36. Ra7 Kf5 37. Re7 a2 38. Bh3+ Ke4 39. Bg2+ Kd4 40. Rd7+ Kc3 41. Rc7+ Kb2 42. Ra7 a1=Q+ 43. Rxa1 Kxa1 44. Kh2 Qc3 45. f4 Qc2 46. Kh3 Qd3 47. Kh2 Qe2 48. Kh3 h5 49. Bd5 Qg4+ 50. Kh2 Qd7 51. Bf3 Qf5 52. Bd5 b5 53. Bb3 Qd7 54. f5 Qxf5 55. Bd5 Qf2+ 56. Kh1 b4 57. e6 fxe6 58. Bxe6 Qe1+ 59. Kg2 Qxe6 60. Kf3 b3 61. g4 b2 62. Kf4 b1=Q 63. gxh5 Qbe1 64. h6 Q1e3# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "969"]
+
+1. e4 c5 2. c3 d5 3. exd5 Qxd5 4. d4 cxd4 5. cxd4 Nc6 6. Nf3 Bg4 7. Nc3 Bxf3 8. Nxd5 Bxd1 9. Nc7+ Kd7 10. Nxa8 Bh5 11. d5 Nd4 12. Be3 Nc2+ 13. Kd2 Nxe3 14. Bb5+ Kd8 15. fxe3 e5 16. dxe6 Nf6 17. Rac1 Ne4+ 18. Kc2 fxe6 19. g4 Bg6 20. Rhd1+ Bd6 21. Bd3 Ke7 22. h4 Nf2 23. Bxg6 Nxd1 24. Kxd1 hxg6 25. Nc7 a6 26. Ke2 Kd7 27. Rf1 Bxc7 28. Rf7+ Kd6 29. Rxg7 Rxh4 30. g5 Bd8 31. Rxg6 Rh5 32. Rg7 Rxg5 33. Rxb7 Rb5 34. Rxb5 axb5 35. Kd3 Bf6 36. b3 Bh8 37. a4 Bg7 38. axb5 Kc5 39. Ke4 Ba1 40. Kf4 Bc3 41. Kg5 e5 42. Kf6 Kb6 43. Ke6 Ba1 44. Kd5 Kxb5 45. Ke6 Kc6 46. Kf5 Kb6 47. Kg6 Kc5 48. Kh7 Kb4 49. Kh8 e4+ 50. Kg8 Bc3 51. Kf8 Kxb3 52. Ke8 Bg7 53. Kf7 Bb2 54. Kg8 Kc3 55. Kh8 Kd2+ 56. Kh7 Kxe3 57. Kg6 Kd4 58. Kf5 e3 59. Kg5 e2 60. Kf6 Kd5+ 61. Kg6 e1=Q 62. Kg5 Qg3+ 63. Kf5 Qg2 64. Kf4 Bc1+ 65. Kf5 Qg5# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "869"]
+
+1. e4 c6 2. d4 d5 3. exd5 cxd5 4. Bd3 Nc6 5. c3 Nf6 6. Bf4 Bg4 7. Qb3 Qd7 8. Nd2 e6 9. h3 Bh5 10. Ngf3 Bxf3 11. Nxf3 Nh5 12. Ne5 Qc7 13. Be3 Bd6 14. g4 Bxe5 15. dxe5 Ng3 16. fxg3 Qxe5 17. Kf2 O-O-O 18. Bf4 Qf6 19. g5 Qe7 20. Qa3 Qxa3 21. bxa3 e5 22. Be3 Rhf8 23. Bc5 Rfe8 24. Rad1 d4 25. cxd4 exd4 26. Rhe1 Rxe1 27. Rxe1 Rd5 28. Bf8 Rxg5 29. h4 Ra5 30. Bxg7 h5 31. Bc4 Rxa3 32. Re2 f6 33. Bxf6 Kc7 34. Bf7 d3 35. Rd2 Ra5 36. Bg5 Rf5+ 37. Bf4+ Kb6 38. Bg6 Ra5 39. Rxd3 Rxa2+ 40. Kf3 a5 41. Bxh5 a4 42. Bf7 Ra1 43. h5 a3 44. Kg4 Kb5 45. Kg5 Nb4 46. Rd8 a2 47. Rd2 Kc6 48. h6 Kb5 49. Rb2 Kc5 50. Rxa2 Nxa2 51. h7 Rh1 52. Bh5 Rxh5+ 53. Kxh5 Nc3 54. h8=Q Nd5 55. Qf8+ Kd4 56. Qg7+ Kc4 57. Qxb7 Kd4 58. Qb8 Nf6+ 59. Kg6 Nd5 60. Qf8 Kc4 61. Qe8 Nc3 62. Kh6 Kd3 63. Qe3+ Kc4 64. Qxc3+ Kxc3 65. Kh7 Kd4 66. Kh8 Kd5 67. Kh7 Ke6 68. Kh8 Kf7 69. Kh7 Kf6 70. Kh6 Kf5 71. Kg7 Ke6 72. g4 Ke7 73. g5 Ke6 74. Kg6 Ke7 75. Kf5 Kd7 76. g6 Kc6 77. Ke4 Kb6 78. Kd4 Kc6 79. g7 Kd7 80. Kc5 Ke6 81. g8=Q+ Kf5 82. Bc1 Kf6 83. Kd6 Kf5 84. Qe6# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "376"]
+
+1. d4 Nf6 2. Bg5 e6 3. e4 h6 4. Bxf6 Qxf6 5. Nc3 Bb4 6. Qd3 c5 7. e5 Qe7 8. O-O-O cxd4 9. Nb5 O-O 10. Nc7 d6 11. Nxa8 dxe5 12. f4 exf4 13. a3 Bc5 14. b4 e5 15. bxc5 Na6 16. Qb5 Bf5 17. Nf3 Rc8 18. Re1 Rxc5 19. Rxe5 Rxc2+ 20. Kd1 Qxa3 21. Re8+ Qf8 22. Rxf8+ Kxf8 23. Qxf5 Rc5 24. Ne5 Rxe5 25. Qxe5 g5 26. Bc4 Nc5 27. Qf6 Ne6 28. Bxe6 Ke8 29. Qxf7+ Kd8 30. Qd7# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "2762"]
+
+1. d4 Nf6 2. c4 e6 3. Nf3 d5 4. Nc3 c5 5. cxd5 Nxd5 6. e4 Nxc3 7. bxc3 cxd4 8. cxd4 Bb4+ 9. Bd2 Bxd2+ 10. Qxd2 O-O 11. Bc4 b6 12. d5 Ba6 13. Bxa6 Nxa6 14. d6 Nc5 15. e5 f6 16. O-O Rc8 17. Rfc1 fxe5 18. Nxe5 Qf6 19. d7 Rcd8 20. Re1 Nxd7 21. Nxd7 Qe7 22. Rad1 Rfe8 23. Re3 e5 24. Rd3 Rc8 25. Qe3 e4 26. Rd5 h6 27. Ne5 Qe6 28. h3 Rc5 29. Qxe4 Rxd5 30. Qxd5 Qxd5 31. Rxd5 Rc8 32. a4 Rc1+ 33. Kh2 Ra1 34. Rd4 Ra2 35. f3 Kh7 36. h4 Re2 37. Nc6 a6 38. f4 Kg6 39. Kg3 Re3+ 40. Kf2 Rc3 41. Ne7+ Kh5 42. f5 Rc2+ 43. Kg3 Rc3+ 44. Kf2 Rc2+ 45. Kg3 Rc3+ 46. Kh2 Rc2 47. Ng6 Rf2 48. Kh3 Rxf5 49. Rd6 Rf6 50. Rxf6 gxf6 51. Nf4# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "199"]
+
+1. c4 e5 2. Nf3 e4 3. Nd4 Nc6 4. e3 Nf6 5. Nc3 g6 6. d3 exd3 7. Bxd3 Bg7 8. O-O O-O 9. h3 Re8 10. Re1 d5 11. Nxc6 bxc6 12. cxd5 cxd5 13. Bd2 Rb8 14. Na4 Ne4 15. Bxe4 dxe4 16. Bc3 Qg5 17. Kh2 Bxc3 18. Nxc3 Rxb2 19. Qa4 Rd8 20. Nxe4 Qe5+ 21. Kg1 Bb7 22. Ng3 Rdd2 23. Nh1 Rxf2 24. Nxf2 Qg3 25. Qe8+ Kg7 26. Qe5+ Qxe5 27. Rab1 Qg3 28. e4 Rxf2 29. Re3 Qxg2# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "87"]
+
+1. Nf3 d5 2. b3 c5 3. e4 dxe4 4. Ne5 Qd4 5. Bb2 Qxb2 6. Nc3 Qa3 7. Bb5+ Bd7 8. Nc4 Qb4 9. Bxd7+ Nxd7 10. a3 Qxc3 11. dxc3 Ngf6 12. O-O g6 13. Qe1 Bg7 14. Nd2 Nd5 15. Nxe4 O-O 16. Rd1 N5f6 17. Qe2 Nxe4 18. Qxe4 Nb6 19. Qxe7 Rfe8 20. Qxc5 Rac8 21. Qa5 Rxc3 22. Rfe1 Rxe1+ 23. Rxe1 Rxc2 24. Re8+ Bf8 25. g3 Nd7 26. Qd8 Rd2 27. Rxf8+ Nxf8 28. Qxd2 Ne6 29. Qd7 Kg7 30. Qxb7 a5 31. Qb8 Ng5 32. Qe5+ f6 33. Qe8 Nf3+ 34. Kf1 Ne5 35. Qe7+ Nf7 36. Qc5 Ne5 37. Qe7+ Nf7 38. Ke2 h6 39. g4 g5 40. a4 Kg6 41. Qf8 f5 42. gxf5+ Kf6 43. Qe8 Kg7 44. Qe7 g4 45. Ke3 h5 46. Kf4 h4 47. Kxg4 Kg8 48. Kh5 Nh8 49. h3 Nf7 50. f6 Kh8 51. Qf8+ Kh7 52. Qg7# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "1041"]
+
+1. e4 c5 2. Nf3 Nf6 3. Nc3 d6 4. d4 cxd4 5. Nxd4 g6 6. f3 Nc6 7. Be3 Bg7 8. Qd2 h5 9. O-O-O Bd7 10. Be2 a6 11. h3 b5 12. g4 b4 13. Nd5 Nxd5 14. exd5 Nxd4 15. Bxd4 Kf8 16. Qxb4 a5 17. Bxg7+ Kxg7 18. Qd4+ Kg8 19. f4 Rb8 20. gxh5 Rb4 21. Qe3 Bf5 22. hxg6 fxg6 23. Bd3 Qf8 24. Bxf5 Qxf5 25. Qxe7 Qxf4+ 26. Kb1 Qf8 27. Qe3 Qf6 28. b3 Rf4 29. Rhe1 a4 30. Qa7 Qf8 31. Re6 Rh6 32. Qd7 Rf1 33. Rxf1 Qxf1+ 34. Kb2 a3+ 35. Kxa3 Qc1+ 36. Ka4 Rh4+ 37. Kb5 Qf1+ 38. c4 Qf7 39. Qd8+ Kg7 40. Qxh4 Qb7+ 41. Ka5 Qa7+ 42. Kb5 Qc5+ 43. Ka4 Qa7+ 44. Kb5 Qc5+ 45. Ka4 Qa7+ 46. Kb4 Qc5+ 47. Kc3 Qa5+ 48. Kd3 Qa7 49. Qf6+ Kg8 50. Re8+ Kh7 51. Qh8# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "1451"]
+
+1. e4 e6 2. d4 d5 3. Nc3 Bb4 4. e5 c5 5. a3 Bxc3+ 6. bxc3 Ne7 7. a4 Qa5 8. Bd2 Nbc6 9. Nf3 Bd7 10. Qc1 c4 11. h4 f6 12. exf6 gxf6 13. Qa3 Rg8 14. h5 e5 15. dxe5 fxe5 16. Ng5 Bf5 17. g4 Bxc2 18. Rc1 h6 19. Rxc2 hxg5 20. h6 Qc7 21. h7 Rh8 22. Bxg5 O-O-O 23. Bf6 Ng6 24. a5 Rxh7 25. Bxd8 Nxd8 26. Rxh7 Qxh7 27. Qc5+ Nc6 28. a6 Nf4 29. Rb2 Qe4+ 30. Kd2 Ne6 31. axb7+ Kd7 32. b8=N+ Nxb8 33. Rb7+ Nc7 34. Qxc7+ Ke6 35. Qe7# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "296"]
+
+1. d4 Nc6 2. c4 e5 3. d5 Nd4 4. e3 Nf5 5. Nf3 Bb4+ 6. Nbd2 Bxd2+ 7. Bxd2 d6 8. Bd3 Nf6 9. Qc2 Ne7 10. O-O O-O 11. h3 h6 12. Nh2 c6 13. dxc6 Nxc6 14. Rfd1 Be6 15. Nf1 Qb6 16. Ng3 Nb4 17. Bxb4 Qxb4 18. a3 Qa5 19. Ne4 Nxe4 20. Bxe4 Rac8 21. b3 b5 22. Rxd6 bxc4 23. b4 Qc7 24. Rc6 Qe7 25. Qc3 Rxc6 26. Bxc6 Qd6 27. Be4 g6 28. a4 a6 29. b5 axb5 30. axb5 Qc5 31. Rb1 Rb8 32. Bc6 Qd6 33. Rb2 Rd8 34. Be4 Rb8 35. Bc6 h5 36. Rd2 Qc5 37. Rd1 Rc8 38. Kh2 h4 39. Rd2 Rb8 40. Rd1 Kg7 41. f4 f6 42. fxe5 Qxe5+ 43. Qxe5 fxe5 44. Kg1 Kf6 45. Kf2 Ke7 46. Ke2 c3 47. Rc1 Bc4+ 48. Kf3 Rc8 49. Kg4 Bd3 50. Rxc3 Bxb5 51. Rc5 Bxc6 52. Rxe5+ Kf6 53. Ra5 Ra8 54. Rxa8 Bxa8 55. Kxh4 Bxg2 56. Kg4 Kg7 57. Kg3 Bc6 58. Kg4 Kh6 59. Kh4 g5+ 60. Kg4 Kg6 61. h4 Bd7+ 62. Kg3 g4 63. Kf4 Kg7 64. Kg3 Kh6 65. Kf4 Bc8 66. Kg3 Bd7 67. Kf4 Kh7 68. Kg3 Kg8 69. Kf4 Kg7 70. Kg3 Kh7 71. Kf4 Kh6 72. Kg3 Bc8 73. Kh2 Be6 74. Kg3 Kh7 75. Kf4 Kg6 76. Ke5 Bg8 77. Kf4 Be6 78. Ke5 Bc4 79. Kf4 Kh5 80. Kg3 Bg8 81. Kf4 Bh7 82. Kg3 Bc2 83. Kf4 Bh7 84. Kg3 Bf5 85. Kf4 Bd3 86. Kg3 Bg6 87. Kf4 Bd3 88. Kg3 Bg6 89. Kf4 Bc2 90. Kg3 Bh7 91. Kf4 Bb1 92. Kg3 Bd3 93. Kf4 Bc2 94. Kg3 Be4 95. Kf4 Bg6 96. Kg3 Bf5 97. Kf4 Bg6 98. Kg3 Bd3 99. Kf4 Ba6 100. Kg3 Bf1 101. Kf4 Ba6 102. Kg3 Bf1 103. Kf4 Kxh4 104. Kf5 g3 105. Kf6 Kh3 106. e4 Bc4 107. Ke7 g2 108. Kd7 g1=Q 109. Ke8 Qa7 110. Kd8 Be6 111. Ke8 Qd7+ 112. Kf8 Qf7# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "2052"]
+
+1. e4 e5 2. Nf3 Nc6 3. Nc3 Nf6 4. Bb5 Bb4 5. O-O O-O 6. d3 d6 7. Ne2 Ne7 8. c3 Ba5 9. Ng3 Ng6 10. d4 c6 11. Bd3 Re8 12. h3 Bc7 13. Qc2 d5 14. Bg5 h6 15. Bxf6 Qxf6 16. exd5 cxd5 17. Bxg6 fxg6 18. dxe5 Bxe5 19. Rfe1 Bd7 20. Rxe5 Rxe5 21. Nxe5 Qxe5 22. Qxg6 Re8 23. Rd1 a5 24. Qb6 Ba4 25. b3 Bc6 26. Qxa5 h5 27. Qb4 h4 28. Qxh4 Qxc3 29. Qf4 Re1+ 30. Rxe1 Qxe1+ 31. Kh2 Qa1 32. f3 Qxa2 33. Nf5 Qa3 34. b4 Qc3 35. Ne7+ Kh7 36. Qh4# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "110"]
+
+1. Nf3 d5 2. g3 c5 3. Bg2 Nc6 4. d4 e6 5. O-O Nf6 6. c4 dxc4 7. Ne5 Bd7 8. Nd2 cxd4 9. Ndxc4 Be7 10. Qb3 Qc8 11. Bf4 O-O 12. Rfd1 Nd5 13. Nxd7 Qxd7 14. Ne5 Qc8 15. Bxd5 exd5 16. Qxd5 Bf6 17. Nd7 Re8 18. Rac1 Rxe2 19. b4 Qe8 20. b5 Ne5 21. Nxf6+ gxf6 22. Rxd4 Ng4 23. Rf1 Ne5 24. Bh6 a6 25. a4 axb5 26. axb5 Rb2 27. Re1 Rxb5 28. Rxe5 Rb1+ 29. Kg2 Rg1+ 30. Kxg1 Ra1+ 31. Kg2 fxe5 32. Qd8 Rg1+ 33. Kxg1 Qxd8 34. Rxd8# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "1622"]
+
+1. e4 e5 2. f4 Nc6 3. Nf3 f5 4. d3 d6 5. Nc3 Be7 6. Be2 Nf6 7. O-O O-O 8. Kh1 exf4 9. Bxf4 fxe4 10. dxe4 Kh8 11. Qd2 Nh5 12. Be3 Bg4 13. Nd5 Nf6 14. Ng5 Qd7 15. Bxg4 Nxg4 16. Bg1 Rae8 17. Rxf8+ Rxf8 18. Nf3 Bd8 19. Qe2 a6 20. h3 Nf6 21. Qd3 Qf7 22. Bh2 Re8 23. Nd2 h6 24. Rf1 Qe6 25. Qb3 b5 26. Qc3 Nxe4 27. Qxc6 Nxd2 28. Rd1 Qf7 29. Nxc7 Bxc7 30. Rxd2 Re1+ 31. Bg1 d5 32. Qc5 Qf4 33. Qxc7 Qxc7 34. Rf2 Kh7 35. c3 Qg3 36. Rf3 Qe5 37. a3 Rd1 38. Rd3 Rxd3 39. c4 Rd2 40. Ba7 Qe2 41. Bf2 Qxf2 42. cxd5 Qxg2# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "2335"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. Nc3 b5 6. Bb3 Bc5 7. d3 d6 8. Nd5 h6 9. c3 O-O 10. Nxf6+ Qxf6 11. Bd5 Bd7 12. Rg1 b4 13. g4 bxc3 14. bxc3 Qg6 15. g5 hxg5 16. Bxg5 Rab8 17. Qd2 Nd4 18. Nh4 Qh5 19. Bf6 Bg4 20. h3 Qxh4 21. Bxh4 Nf3+ 22. Kd1 Nxd2+ 23. Rxg4 c6 24. Bf6 Kh7 25. Rxg7+ Kh6 26. Bb3 Nxb3 27. axb3 Rxb3 28. d4 exd4 29. Rg4 Rfb8 30. cxd4 Bxd4 31. Bxd4 Rd3+ 32. Ke2 Rxd4 33. Rag1 Rb5 34. Rg8 Kh7 35. R8g7+ Kh6 36. f3 Rb1 37. R1g4 Rb2+ 38. Ke3 Rdd2 39. Rg8 Kh7 40. R4g7+ Kh6 41. Rg4 Kh7 42. R8g5 Kh6 43. Kf4 Rd5 44. Rh4# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "2410"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5 7. Bb3 O-O 8. c3 d5 9. exd5 e4 10. dxc6 exf3 11. d4 fxg2 12. Qf3 a5 13. Bg5 a4 14. Bc2 Be6 15. Nd2 Nd5 16. Bxe7 Nxe7 17. Qh5 h6 18. Qxb5 Rb8 19. Qxa4 Rxb2 20. Nf3 Nd5 21. c4 Nb6 22. Qa3 Rxc2 23. d5 Qf6 24. dxe6 fxe6 25. c5 Nd5 26. Rac1 Rxc1 27. Rxc1 Qf5 28. Re1 g5 29. Re5 Qxf3 30. Qxf3 Rxf3 31. Kxg2 Ra3 32. h4 g4 33. Re4 Kf7 34. h5 Rxa2 35. Kg3 Ra8 36. Rxg4 Rg8 37. Rxg8 Kxg8 38. Kg4 Kf7 39. Kf3 Kg7 40. Ke4 Kg8 41. Ke5 Kf7 42. Kd4 Kg7 43. Ke5 Kf7 44. Kd4 Kf6 45. Ke4 Ne7 46. Kd4 Kf5 47. Kc4 e5 48. Kb5 Kg4 49. Ka6 Nd5 50. Kb5 Ne7 51. Ka6 Nd5 52. Kb5 Kf4 53. Ka6 Ne7 54. Kb5 Kf3 55. Ka6 Nd5 56. Kb5 Kxf2 57. Kc4 Nf4 58. Kb5 e4 59. Ka6 e3 60. Kb7 Nd5 61. Kc8 e2 62. Kb8 Ke3 63. Kc8 Kd4 64. Kb8 Kxc5 65. Kc8 Kb6 66. Kd7 e1=Q 67. Kc8 Qe8# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1/2-1/2"]
+[Termination "normal"]
+[OpeningIndex "1751"]
+
+1. e4 e5 2. f4 exf4 3. Nf3 g5 4. d4 g4 5. Nc3 gxf3 6. Qxf3 Nc6 7. Bc4 Nxd4 8. Bxf7+ Kxf7 9. Qh5+ Kg7 10. Qg4+ Kf7 11. Qh5+ Kg7 12. Qg4+ Kf7 13. Qh5+ 1/2-1/2
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "2612"]
+
+1. d4 d5 2. c4 c6 3. Nf3 Nf6 4. Nc3 dxc4 5. a4 Bf5 6. Ne5 Nbd7 7. Nxc4 Qc7 8. g3 e5 9. dxe5 Nxe5 10. Bf4 Nfd7 11. Bg2 g5 12. Bxe5 Nxe5 13. Nxe5 Qxe5 14. a5 a6 15. O-O Be6 16. Qa4 O-O-O 17. Bxc6 Rd4 18. b4 Rxb4 19. Bxb7+ Kxb7 20. Rab1 Qxc3 21. Rfd1 Ka7 22. Rd7+ Kb8 23. Rd8+ Kc7 24. Rxb4 Bxb4 25. Rd3 Qe1+ 26. Kg2 Bh3+ 27. Kxh3 Qf1+ 28. Kg4 Qxe2+ 29. Kh3 Qf1+ 30. Kg4 f5+ 31. Kxg5 Rg8+ 32. Kf6 Rg6+ 33. Kf7 Qxd3 34. Qxb4 Qd5+ 35. Ke8 Qg8+ 36. Qf8 Re6# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "3096"]
+
+1. d4 Nf6 2. c4 e6 3. Nc3 Bb4 4. e3 O-O 5. Bd3 d5 6. cxd5 exd5 7. Bd2 Re8 8. Nge2 Bd6 9. Rc1 c6 10. O-O Nbd7 11. f3 c5 12. Kh1 a6 13. a4 cxd4 14. exd4 h6 15. Qe1 Nf8 16. Qf2 Bd7 17. Rg1 Rc8 18. g4 N6h7 19. f4 Ng6 20. Rcf1 Qh4 21. Bxg6 Qxf2 22. Bxh7+ Kxh7 23. Rxf2 b5 24. b3 b4 25. Nd1 Rc2 26. Be3 h5 27. gxh5 a5 28. f5 Bc8 29. f6 gxf6 30. Rxf6 Re6 31. Rxf7+ Kh8 32. Nf4 Ba6 33. Rgg7 Bxf4 34. Rh7+ Kg8 35. Rhg7+ Kh8 36. Bxf4 Re1+ 37. Rg1 Rxg1+ 38. Kxg1 Kg8 39. Ra7 Bd3 40. h6 Kf8 41. Nf2 Bf5 42. h7 Bxh7 43. Rxh7 Rc3 44. Ng4 Rc6 45. Kf2 Kg8 46. Rc7 Rg6 47. Bg5 Rxg5 48. Nf6+ Kf8 49. Nh7+ Kg8 50. Nxg5 Kf8 51. h4 Ke8 52. h5 Kd8 53. Rf7 Ke8 54. h6 Kd8 55. h7 Kc8 56. h8=Q# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "2675"]
+
+1. d4 d5 2. c4 c6 3. Nf3 Nf6 4. e3 e6 5. Nbd2 Nbd7 6. Bd3 c5 7. O-O Be7 8. Qe2 O-O 9. Rd1 cxd4 10. exd4 b6 11. b3 Bb7 12. Bb2 dxc4 13. bxc4 Qc7 14. Rac1 Rfe8 15. Bc2 Bf8 16. h3 Rad8 17. Ba4 Bc6 18. Bc2 Be7 19. Nf1 Qb7 20. N1d2 Nf8 21. g3 Qa6 22. Ne5 Ba8 23. Kh2 Qxa2 24. Bc3 Qa6 25. Ra1 Qb7 26. f4 N6d7 27. Be4 Qc7 28. Bxa8 Rxa8 29. Qf3 Nxe5 30. fxe5 Nd7 31. Rf1 Rf8 32. Rae1 Bg5 33. Ne4 Be7 34. d5 Nxe5 35. Qf4 f6 36. Bxe5 Qxe5 37. Qxe5 fxe5 38. d6 Bd8 39. Rxf8+ Kxf8 40. c5 Rc8 41. Ra1 a5 42. cxb6 Rc2+ 43. Kh1 Bxb6 44. Rb1 Bd8 45. Rb8 Ke8 46. Ng5 Rc6 47. Nxe6 Rxd6 48. Nxd8 Rxd8 49. Rb5 Ra8 50. Rxe5+ Kd7 51. Rg5 g6 52. Rb5 Kc6 53. Rb1 a4 54. Kg2 a3 55. Kf3 a2 56. Ra1 Ra4 57. Ke3 Kc5 58. Kd3 Kd5 59. Kc3 Ke4 60. Kb3 Ra8 61. Kc4 Ra7 62. Kc5 Ra4 63. Kb5 Ra8 64. Kc6 Ra3 65. Kc5 Kf3 66. g4 g5 67. Kd6 Kg3 68. Ke7 Kxh3 69. Kf8 Kh4 70. Kg8 Ra7 71. Kf8 Kh3 72. Kg8 Kxg4 73. Kf8 h5 74. Kg8 Kh4 75. Kh8 Kh3 76. Kg8 h4 77. Kh8 g4 78. Kg8 g3 79. Kh8 Kg4 80. Kg8 h3 81. Kf8 g2 82. Ke8 h2 83. Kd8 h1=Q 84. Rxh1 gxh1=Q 85. Kc8 Qa8# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "3129"]
+
+1. d4 Nf6 2. c4 g6 3. Nc3 Bg7 4. e4 d6 5. h3 O-O 6. Be3 c5 7. d5 e6 8. Nf3 exd5 9. cxd5 a6 10. a4 Re8 11. Bd3 Nbd7 12. Nd2 Rb8 13. O-O Ne5 14. Be2 Ned7 15. Qc2 Qe7 16. Ra3 b6 17. Re1 h6 18. f4 Nf8 19. Rb3 Qc7 20. Bf2 g5 21. e5 dxe5 22. fxg5 hxg5 23. Nde4 Nxe4 24. Nxe4 Bf5 25. Bxa6 Bg6 26. Bc4 Red8 27. Rg3 Nh7 28. Be3 Kh8 29. Bxg5 Nxg5 30. Rxg5 Bh6 31. Rg4 Qe7 32. Qc3 Ra8 33. b3 Kh7 34. d6 Rxd6 35. Nxd6 Qxd6 36. Qxe5 Qxe5 37. Rxe5 Rd8 38. Re7 Rd1+ 39. Kh2 Bf8 40. Rb7 Bd6+ 41. g3 Rd2+ 42. Kg1 Bh5 43. Rh4 Kg6 44. Bxf7+ Kf6 45. Bxh5 c4 46. Rxc4 Bc5+ 47. Rxc5 bxc5 48. Bf7 Rd3 49. Kf2 Rd2+ 50. Kf3 Rd3+ 51. Kf4 Rd4+ 52. Kf3 Rd3+ 53. Kf4 Rd4+ 54. Ke3 Rd3+ 55. Kxd3 Kg7 56. Ke4 Kh8 57. Kf5 c4 58. Kg6 cxb3 59. Rb8# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "2635"]
+
+1. d4 d5 2. c4 dxc4 3. e3 e5 4. Bxc4 exd4 5. Qb3 Qe7 6. Kf1 d3 7. Nf3 Nd7 8. Qxd3 Ngf6 9. Qc2 g6 10. Nc3 Bg7 11. e4 c6 12. Bf4 O-O 13. Rd1 Ne8 14. h4 h5 15. a3 Ne5 16. Nxe5 Bxe5 17. Bg5 Nf6 18. f4 Bxc3 19. Qxc3 Qxe4 20. Bxf6 b5 21. Ba2 Qxf4+ 22. Qf3 Qc7 23. Kf2 Bg4 24. Qe3 Kh7 25. Rd4 Rae8 26. Qf4 Re2+ 27. Kg3 Re3+ 28. Kh2 Qxf4+ 29. Rxf4 Bf5 30. Bb1 Re6 31. Rxf5 gxf5 32. Bxf5+ Kg8 33. Bxe6 fxe6 34. Bc3 Rf4 35. g3 Rf2+ 36. Kg1 Rc2 37. Rh2 Rc1+ 38. Kf2 Rc2+ 39. Kg1 Rc1+ 40. Kg2 Rc2+ 41. Kh3 Rxh2+ 42. Kxh2 Kh7 43. b4 Kg6 44. Bd4 a6 45. Bc5 Kf5 46. Kh3 e5 47. Be7 Ke6 48. Bc5 Kf5 49. g4+ hxg4+ 50. Kg3 e4 51. Bb6 Kg6 52. Bc5 Kh5 53. Ba7 Kh6 54. Bb6 Kh5 55. Ba7 Kh6 56. Bb6 Kh5 57. Bd4 Kh6 58. Bc5 Kh5 59. Bd4 Kh6 60. Ba7 Kh5 61. Be3 Kg6 62. Kxg4 Kh7 63. Kg5 Kg7 64. h5 Kf7 65. h6 c5 66. h7 Kg7 67. h8=Q+ Kxh8 68. bxc5 Kg8 69. c6 Kf7 70. c7 b4 71. c8=Q Ke7 72. Bc5+ Kf7 73. Qf8+ Ke6 74. Qf5# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "2764"]
+
+1. d4 Nf6 2. c4 e6 3. Nf3 d5 4. Nc3 c5 5. cxd5 Nxd5 6. e3 cxd4 7. exd4 Bb4 8. Bd2 O-O 9. Bd3 Nf6 10. Bg5 Be7 11. Qe2 Nc6 12. Rd1 Nd5 13. h4 Bd7 14. Bb1 Rc8 15. a3 Nxc3 16. bxc3 Qa5 17. Bd2 Qh5 18. g4 Qxg4 19. Bxh7+ Kh8 20. Rg1 Nxd4 21. cxd4 Qh5 22. Bd3 Ba4 23. Rb1 b6 24. Ne5 Qxe2+ 25. Kxe2 Bc2 26. Rbc1 Bxd3+ 27. Kxd3 Rxc1 28. Rxc1 Bxa3 29. Rc7 a5 30. Nxf7+ Kg8 31. Ng5 Rxf2 32. Nxe6 Rg2 33. Ng5 Kf8 34. Bf4 Ke8 35. Ne6 Be7 36. Ra7 Rg6 37. Nc7+ Kf8 38. h5 Rg4 39. Ne6+ Ke8 40. Ke4 a4 41. Nc7+ Kf8 42. Kf5 Rxf4+ 43. Kxf4 Bd6+ 44. Kf5 Bxc7 45. Rxc7 a3 46. Ra7 b5 47. Rd7 b4 48. Ra7 Ke8 49. Ke6 Kd8 50. Ra8+ Kc7 51. Ra6 Kb7 52. Ra4 Kc8 53. d5 Kc7 54. Rxb4 a2 55. d6+ Kc6 56. Rc4+ Kb5 57. Rc1 Kb6 58. d7 Kb7 59. d8=Q Ka6 60. Qb8 Ka5 61. Ra1 Ka4 62. Rxa2# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "429"]
+
+1. d4 Nf6 2. c4 d6 3. Nc3 c6 4. e4 e5 5. Nf3 exd4 6. Nxd4 Be7 7. Bf4 O-O 8. Be2 Re8 9. Qc2 c5 10. Nb3 Nc6 11. Rd1 Bf8 12. O-O b6 13. Rfe1 a5 14. a4 Bb7 15. f3 Ba6 16. Qd2 Ne5 17. Qc1 Bxc4 18. Bxc4 Nxc4 19. Bg5 Ne5 20. f4 Ng6 21. e5 h6 22. Bxf6 gxf6 23. Rf1 fxe5 24. f5 Nf4 25. g3 Nh3+ 26. Kg2 Ng5 27. Nd5 e4 28. Qf4 e3 29. Rfe1 e2 30. Rd2 Re4 31. Qf2 Re5 32. Rexe2 Ne4 33. Rxe4 Rxe4 34. Qf3 Re1 35. Rf2 Qg5 36. h4 Qg7 37. f6 Qg6 38. Ne7+ Bxe7 39. Qxa8+ Bf8 40. Nd2 Qg4 41. Qf3 Qxa4 42. b3 Qd4 43. Nc4 a4 44. Nxb6 Re3 45. Qf5 axb3 46. Nd7 Qe4+ 47. Qxe4 Rxe4 48. Rb2 Rb4 49. Rb1 Rb7 50. Nxf8 Kxf8 51. Kf3 c4 52. Ke2 c3 53. Kd3 c2 54. Ra1 Kg8 55. Kc3 b2 56. Ra8+ Kh7 57. Rh8+ Kxh8 58. Kd3 b1=Q 59. Ke2 c1=Q 60. h5 Qe4+ 61. Kf2 Qce1# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "1053"]
+
+1. e4 c5 2. Nf3 Nc6 3. Bb5 g6 4. O-O Bg7 5. Re1 e5 6. b4 cxb4 7. a3 b3 8. c4 Nge7 9. Ba4 O-O 10. h3 Na5 11. Bxb3 Nxb3 12. Qxb3 d6 13. Nc3 b6 14. Ra2 Nc6 15. Rb2 Na5 16. Qa2 h6 17. Rb1 Nc6 18. Bb2 Kh7 19. d4 Nxd4 20. Nxd4 exd4 21. Nd5 Qg5 22. Qb3 Be6 23. Rbd1 Bxd5 24. cxd5 Rac8 25. Qb4 Qf4 26. Bc1 Qf6 27. Bb2 a5 28. Qxb6 Rb8 29. Qxd4 Rxb2 30. e5 Qxe5 31. Rxe5 Bxe5 32. Qa4 Rfb8 33. f4 Bf6 34. Qd7 Kg7 35. Qxd6 Re8 36. Qc6 Ree2 37. d6 Rec2 38. Qd5 Bd8 39. d7 Re2 40. Qd4+ Kh7 41. Qd5 Kg7 42. h4 h5 43. f5 gxf5 44. Qa8 Bb6+ 45. Kh2 Bc7+ 46. Kg1 Red2 47. Qf3 Bb6+ 48. Kh1 f6 49. Qg3+ Kh7 50. Rxd2 Rxd2 51. Qb3 Rxd7 52. Qxb6 Rd1+ 53. Kh2 Kg6 54. Qa7 Rd5 55. Qa8 Rd4 56. Qg8+ Kh6 57. Qh8+ Kg6 58. Qg8+ Kh6 59. Qf7 Rxh4+ 60. Kg1 Rg4 61. Qxf6+ Rg6 62. Qh8+ Kg5 63. Qd8+ Kh6 64. Qxa5 f4 65. Qf5 Rg4 66. Qf6+ Kh7 67. Qf7+ Kh6 68. Qf6+ Kh7 69. a4 f3 70. Qf7+ Kh6 71. Qxf3 Kg7 72. Qxg4+ hxg4 73. Kf1 Kh8 74. Kf2 Kg8 75. a5 Kh8 76. a6 Kg8 77. a7 Kh8 78. a8=Q+ Kh7 79. Kg3 Kg7 80. Kf4 Kf7 81. Ke5 Kg7 82. Kf5 Kf7 83. Qa7+ Ke8 84. Ke6 Kf8 85. Qf7# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "991"]
+
+1. e4 c5 2. Nc3 Nc6 3. g3 g6 4. Bg2 Bg7 5. d3 d6 6. f4 e6 7. Nf3 Nge7 8. O-O O-O 9. h4 Rb8 10. h5 b5 11. hxg6 fxg6 12. Ne2 e5 13. fxe5 Nxe5 14. Nxe5 Rxf1+ 15. Qxf1 Bxe5 16. Bh6 Bxb2 17. c3 Bxa1 18. Qf6 Bxc3 19. Nxc3 Nf5 20. Qxd8+ Kf7 21. exf5 Bxf5 22. Bd5+ Be6 23. Qd7+ Kf6 24. Qxe6# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "1744"]
+
+1. e4 e5 2. f4 exf4 3. Nf3 g5 4. Bc4 g4 5. O-O gxf3 6. Qxf3 Nc6 7. Qxf4 Qe7 8. Bxf7+ Kd8 9. Nc3 Qe5 10. Qxe5 Nxe5 11. d4 Nxf7 12. Rxf7 Ke8 13. Rxf8+ Kxf8 14. Nb5 c6 15. Nc7 Rb8 16. Bf4 Nf6 17. Bd6+ Kf7 18. Rf1 Kg6 19. Be5 Rf8 20. Bd6 Rf7 21. Re1 b6 22. e5 Nh5 23. Ne8 Ra8 24. Nc7 Bb7 25. e6 dxe6 26. Rxe6+ Rf6 27. Rxf6+ Nxf6 28. Nxa8 Bxa8 29. Bb8 a6 30. Kf2 Nd7 31. Bc7 Kf5 32. Ke3 c5 33. g3 c4 34. b3 b5 35. bxc4 bxc4 36. Bd8 Bg2 37. c3 Nf8 38. a3 Ne6 39. Ba5 Kg4 40. Kf2 Kh3 41. Bb4 Kxh2 42. Bd6 Kh3 43. Bb8 Bd5 44. Bd6 Ng5 45. Ke3 Ne6 46. Bb8 Kh2 47. Bd6 Kg2 48. Bb8 Kh1 49. Kf2 Kh2 50. Bd6 Nd8 51. Be7 Ne6 52. Bf6 Kh3 53. Be7 Kh2 54. Bf6 h6 55. Be7 Kh3 56. Bd6 h5 57. Be7 Ng7 58. Bf6 Nf5 59. Be5 Bh1 60. Bb8 Ne7 61. Bc7 Nd5 62. Ba5 Kg4 63. Bb4 Nxb4 64. axb4 Bd5 65. Ke3 Kg5 66. Ke2 Kh6 67. Ke3 Kg5 68. Ke2 Kg6 69. Ke3 Kf5 70. Kf2 Kg4 71. Ke3 Kxg3 72. Kd2 h4 73. Kc2 h3 74. Kb2 h2 75. b5 h1=Q 76. bxa6 Qd1 77. a7 Be4 78. a8=Q Qb1+ 79. Ka3 Qb3# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "1291"]
+
+1. e4 e6 2. d4 f5 3. exf5 exf5 4. Bd3 Nf6 5. Bxf5 d5 6. Qe2+ Be7 7. Bxc8 Qxc8 8. Nf3 Qf5 9. Qb5+ Nc6 10. Qxb7 Qe6+ 11. Ne5 Nxe5 12. Qxa8+ Kd7 13. Qb7 Rb8 14. Qxb8 Nc6+ 15. Be3 Nxb8 16. O-O Qf5 17. c3 Bd6 18. Nd2 Nc6 19. h3 Ne4 20. Nb3 Qg6 21. Rad1 Ne7 22. Nc5+ Kc8 23. Nd3 Nf5 24. Nf4 Qf7 25. Nd3 Qg6 26. Nf4 Qf7 27. Nd3 Nxe3 28. fxe3 Qg6 29. Ne5 Qg5 30. Rf3 Bxe5 31. dxe5 Qxe5 32. Rd4 Kb7 33. Rb4+ Kc6 34. c4 Nd2 35. cxd5+ Kc5 36. Rff4 g5 37. Rg4 h5 38. Rgd4 Qxe3+ 39. Kh1 Qe1+ 40. Kh2 Nf1+ 41. Kh1 Ng3+ 42. Kh2 Ne2 43. Rbc4+ Kd6 44. Rc6+ Kd7 45. Rc1 Qxc1 46. Rd1 Qxd1 47. h4 Qg1+ 48. Kh3 Qh1# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "398"]
+
+1. d4 Nf6 2. Nf3 b6 3. c3 e5 4. dxe5 Ng8 5. e4 Nc6 6. Bc4 h6 7. Bf4 g5 8. Bg3 Bb7 9. Nbd2 Bg7 10. Bd5 Nge7 11. Nc4 O-O 12. h4 g4 13. Nh2 h5 14. O-O Ba6 15. Qa4 Qc8 16. Ne3 Bxf1 17. Rxf1 Nxe5 18. Bxa8 Qxa8 19. Bxe5 Bxe5 20. Rd1 Qc6 21. Qxc6 dxc6 22. Nhf1 Re8 23. Rd7 b5 24. Ng3 Bxg3 25. fxg3 Ng6 26. Rxc7 Rxe4 27. Kf2 Ra4 28. a3 Ne5 29. Rc8+ Kh7 30. Rd8 Re4 31. b3 a5 32. Rd6 a4 33. Rd4 Rxd4 34. cxd4 axb3 35. Nd1 Nc4 36. Nc3 Nxa3 37. Nd1 Nc4 38. Nc3 b4 39. Nb1 Kg6 40. Ke2 Kf5 41. Kd3 Na3 42. Nd2 b2 43. Ke2 b1=Q 44. Nxb1 Nxb1 45. Kd3 b3 46. Kc4 Ke4 47. Kxb3 Kxd4 48. Kc2 c5 49. Kxb1 c4 50. Kc2 Ke5 51. Kc3 Kd5 52. Kd2 Kd6 53. Ke3 Ke5 54. Kd2 Kd6 55. Ke3 Ke5 56. Kd2 Kd4 57. Kc2 f6 58. Kd2 Kd5 59. Ke3 Ke5 60. Kd2 Kd5 61. Ke3 Ke5 62. Kd2 Ke4 63. Kc3 Kd5 64. Kd2 f5 65. Ke3 Ke5 66. Kd2 Kd6 67. Ke3 Ke5 68. Kd2 Ke4 69. Kc3 Kd5 70. Kd2 Kd6 71. Ke3 Kd5 72. Kd2 Kd4 73. Kc2 Ke3 74. Kc3 Kf2 75. Kd4 Kxg3 76. Ke5 c3 77. Kf6 Kh2 78. Kg7 Kxg2 79. Kh8 Kf3 80. Kg8 c2 81. Kh8 g3 82. Kg8 g2 83. Kf8 c1=Q 84. Ke8 Qc7 85. Kf8 g1=Q 86. Ke8 Qg8# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "3132"]
+
+1. c4 g6 2. Nc3 Bg7 3. e3 Nf6 4. d4 O-O 5. Nf3 d6 6. Be2 Nbd7 7. O-O e5 8. dxe5 dxe5 9. Qc2 e4 10. Nxe4 Nxe4 11. Qxe4 Nc5 12. Qf4 Re8 13. Rd1 Qe7 14. h3 a5 15. Nd4 Be5 16. Qf3 Ne4 17. Bd3 Ng5 18. Qe2 Nxh3+ 19. gxh3 Qg5+ 20. Kh1 Qh6 21. Qf3 Bxh3 22. Kg1 Qg5+ 23. Kh1 Bg4 24. Qg2 Qh5+ 25. Kg1 Bxd1 26. Bd2 Rad8 27. Bc3 c5 28. Bxa5 cxd4 29. Bxd8 Bf3 30. Be2 Bxe2 31. f4 Rxd8 32. fxe5 Bf3 33. e6 Bxg2 34. Kxg2 fxe6 35. e4 Rf8 36. Kg1 Qg4+ 37. Kh1 Rf2 38. Rd1 Qxd1# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "3016"]
+
+1. d4 Nf6 2. c4 e6 3. Nf3 b6 4. g3 Ba6 5. Qa4 Be7 6. Nc3 O-O 7. Bg2 c6 8. Bf4 b5 9. cxb5 cxb5 10. Nxb5 Nd5 11. O-O Nxf4 12. gxf4 Qb6 13. Nc3 Qxb2 14. Ne5 d5 15. Nxd5 exd5 16. Rfb1 Qxe2 17. Bxd5 Nc6 18. Bf3 Qd2 19. Bxc6 Rad8 20. Rd1 Qxf4 21. Qxa6 Rxd4 22. Rxd4 Qxd4 23. Re1 Bc5 24. Qe2 Rd8 25. Qf3 Qd2 26. Qxf7+ Kh8 27. Nd3 Rf8 28. Re8 Qd1+ 29. Kg2 Qg4+ 30. Kf1 Qd1+ 31. Ne1 Qd6 32. Nf3 Qd3+ 33. Kg1 Qb1+ 34. Kg2 Qg6+ 35. Qxg6 hxg6 36. Rxf8+ Bxf8 37. Ne5 Kh7 38. Bd7 Bd6 39. Nf3 Kh6 40. Nd2 Kh5 41. h3 Bc7 42. Nc4 Kg5 43. Kf3 Kh4 44. Ke2 g5 45. Bg4 Bf4 46. Kf3 Bc7 47. Ne3 Bf4 48. Ng2# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "273"]
+
+1. d4 e6 2. c4 b6 3. e4 Bb7 4. Bd3 Nc6 5. Nf3 Nb4 6. Nc3 Nxd3+ 7. Qxd3 Bb4 8. d5 Bxc3+ 9. Qxc3 Qf6 10. Nd4 Ne7 11. O-O O-O 12. Re1 Ng6 13. a4 exd5 14. cxd5 c6 15. dxc6 dxc6 16. Nf5 Qxc3 17. bxc3 Bc8 18. a5 Bxf5 19. exf5 Nh4 20. f6 gxf6 21. Bh6 Rfd8 22. Re4 Nf5 23. Bf4 b5 24. g4 Ng7 25. a6 Ne6 26. Bh6 Rd6 27. f4 f5 28. Re5 fxg4 29. f5 Nd4 30. cxd4 Rxh6 31. Re7 Rd6 32. Rc1 Kg7 33. Rc7 Rad8 34. Rxa7 Rxd4 35. Rxc6 Ra4 36. Rc2 Ra3 37. f6+ Kg6 38. Rb2 h5 39. Kg2 Rd6 40. Ra8 Rdxa6 41. Rg8+ Kxf6 42. Rf2+ Rf3 43. Rxf3+ gxf3+ 44. Kxf3 Rb6 45. Rh8 Kg5 46. Rg8+ Kh4 47. Rd8 b4 48. Rd4+ Kg5 49. Rd5+ f5 50. h4+ Kxh4 51. Kf4 b3 52. Rd1 Kh3 53. Kf3 Kh4 54. Kf4 Rb4+ 55. Kxf5 Kg3 56. Rd3+ Kh4 57. Rd1 b2 58. Rh1+ Kg3 59. Rg1+ Kh2 60. Rb1 Rb5+ 61. Kf4 h4 62. Kg4 h3 63. Kf3 Rb7 64. Kf2 Rb3 65. Ke2 Kg2 66. Kd2 Rf3 67. Kc2 h2 68. Kxb2 h1=R 69. Rxh1 Kxh1 70. Kb1 Rf2 71. Kc1 Kg1 72. Kd1 Kf1 73. Kc1 Ke1 74. Kb1 Kd1 75. Ka1 Kc2 76. Ka2 Rf3 77. Ka1 Ra3# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "892"]
+
+1. e4 c6 2. d4 d5 3. Nc3 dxe4 4. Bc4 Nf6 5. f3 exf3 6. Nxf3 Bf5 7. Bg5 e6 8. Nh4 Bg6 9. Nxg6 hxg6 10. h4 Be7 11. Qd3 Nd5 12. Bxe7 Qxe7 13. O-O-O Nxc3 14. Qxc3 Nd7 15. d5 cxd5 16. Bxd5 Nf6 17. Bc6+ Kf8 18. Bf3 e5 19. g4 e4 20. Rde1 Qd6 21. Bxe4 Qf4+ 22. Kb1 Nxe4 23. Qb4+ Qd6 24. Qxe4 Qc6 25. Qe7+ Kg8 26. Rhf1 Rf8 27. Rf4 f6 28. b3 Rxh4 29. Rc4 Qd5 30. Rc7 Qf7 31. Qc5 b6 32. Qc6 Qxc7 33. Qxc7 f5 34. Re7 Kh8 35. Rxg7 Rc8 36. Qf7 Rh1+ 37. Kb2 Rh2 38. Ka3 b5 39. Qf6 b4+ 40. Ka4 Rc6 41. Qf8# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "1559"]
+
+1. e4 e5 2. Nc3 Nc6 3. f4 exf4 4. d4 Qh4+ 5. Ke2 g5 6. Nf3 Qh5 7. Nd5 f5 8. e5 Kd8 9. Ke1 Nce7 10. Nxe7 Nxe7 11. h4 g4 12. Ng1 Nd5 13. Ne2 Bh6 14. Qd3 d6 15. Qb3 c6 16. c4 Ne3 17. Nxf4 Bxf4 18. Bxe3 Qh6 19. Bxf4 Qxf4 20. Rd1 dxe5 21. d5 c5 22. Be2 Qh6 23. d6 b6 24. Qd3 Bd7 25. Qd5 Rb8 26. b4 cxb4 27. c5 Rc8 28. cxb6 axb6 29. Qb7 Qe3 30. Rd3 Rc1+ 31. Rd1 Rc2 32. Qb8+ Bc8 33. Qc7+ Rxc7 34. dxc7+ Kxc7 35. Rd3 Qc1+ 36. Rd1 Qc3+ 37. Kf1 Rd8 38. Rxd8 Kxd8 39. g3 Bb7 40. Rg1 Bf3 41. Bxf3 gxf3 42. Kf2 Qd2+ 43. Kxf3 e4# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "1667"]
+
+1. e4 e5 2. f4 exf4 3. Bc4 d5 4. exd5 Qh4+ 5. Kf1 Bd6 6. Nc3 Ne7 7. Nf3 Qh6 8. d4 Nd7 9. Ne4 O-O 10. Kf2 Nf6 11. Nxf6+ Qxf6 12. c3 Bg4 13. Re1 Nf5 14. Bd3 Nh4 15. Be4 Rae8 16. Bd2 Qh6 17. h3 f5 18. hxg4 fxe4 19. Rh1 g5 20. Nxh4 e3+ 21. Kg1 gxh4 22. Be1 f3 23. gxf3 e2 24. Qd3 Re3 25. Rxh4 Qxh4 26. Bxh4 Rxd3 27. Re1 Rd1 28. Kf2 Rxe1 29. Kxe1 Re8 30. Bf2 b5 31. b3 Ba3 32. Kd2 Bd6 33. Ke1 h6 34. Kd2 Bf4+ 35. Ke1 b4 36. c4 Kh8 37. Bh4 Kh7 38. c5 Kg6 39. d6 cxd6 40. c6 d5 41. Bf2 Kg7 42. Bh4 Kg8 43. Bf2 Kf8 44. Bh4 Kg8 45. Bf2 Kh7 46. Bh4 Kg7 47. Bf2 Re7 48. Bh4 Re8 49. Bf2 Re7 50. Bh4 Re6 51. Bf2 Kg8 52. Bh4 Kh8 53. c7 Bxc7 54. Bf2 Kg8 55. Bh4 Bf4 56. Bf2 Kg7 57. Bh4 Kf8 58. Bf2 Kf7 59. Bh4 Kg6 60. Bf2 Kg5 61. Bg1 Bd2+ 62. Kxd2 e1=Q+ 63. Kc2 Qc3+ 64. Kd1 Re1# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "1611"]
+
+1. e4 e5 2. f4 Bc5 3. Nf3 d6 4. b4 Bxb4 5. c3 Ba5 6. fxe5 dxe5 7. Na3 Nf6 8. Nc4 Bb6 9. Ncxe5 O-O 10. d4 Nxe4 11. Qc2 Nd6 12. Bd3 h6 13. O-O Nd7 14. Kh1 c5 15. Ba3 Nxe5 16. dxe5 Ne8 17. Qe2 Be6 18. Rad1 Qe7 19. Nd4 Rd8 20. Nxe6 Qxe6 21. Bc4 Qe7 22. Rxd8 Bxd8 23. e6 fxe6 24. Qxe6+ Kh8 25. Rxf8+ Qxf8 26. Bxc5 Nc7 27. Bxf8 Nxe6 28. Bxe6 Bf6 29. Bc5 b6 30. Bd4 Be7 31. Kg1 Kh7 32. Bf7 Bd6 33. Kf2 Kh8 34. Ke2 Bxh2 35. a4 Kh7 36. Kf3 Bd6 37. Ke4 Be7 38. Kf5 Bd6 39. c4 Bb4 40. Bg6+ Kg8 41. Ke5 Be7 42. Ke6 Bb4 43. Be3 Kh8 44. Bd3 Kg8 45. Bd4 h5 46. Bg6 h4 47. Bf2 h3 48. gxh3 Kh8 49. Be3 Kg8 50. Bf2 Kh8 51. Kf7 Bc3 52. Bf5 Bf6 53. Bc2 Bc3 54. Bb3 Kh7 55. Bc2+ Kh6 56. h4 Bd2 57. Bg6 Bg5 58. a5 Bxh4 59. Bxh4 bxa5 60. c5 a4 61. c6 a3 62. c7 a2 63. c8=Q a1=Q 64. Qh8# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "2396"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5 7. Bb3 d6 8. c3 Na5 9. Bc2 c5 10. d4 Qc7 11. Nbd2 O-O 12. Nf1 Bg4 13. Ne3 Bxf3 14. Qxf3 cxd4 15. Nf5 dxc3 16. bxc3 Rfc8 17. Bg5 Bd8 18. Re3 Ne8 19. Qg4 Bxg5 20. Qxg5 Qd8 21. Qh5 g6 22. Qh6 Qf6 23. Rh3 gxf5 24. Rg3+ Qg7 25. Rxg7+ Nxg7 26. exf5 f6 27. Qxf6 Rxc3 28. Be4 Rac8 29. Qh6 R3c7 30. f6 Ne6 31. Bd5 Re8 32. Qh5 Rf7 33. Bxe6 Rxe6 34. Qg4+ Kf8 35. Qxe6 Rb7 36. Qxd6+ Kf7 37. Qxe5 Kg6 38. h4 h6 39. Re1 Nc6 40. h5+ Kh7 41. Qf5+ Kg8 42. Re8+ Kf7 43. Qe6# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "1718"]
+
+1. e4 e5 2. f4 exf4 3. Nf3 Nf6 4. e5 Nh5 5. g4 fxg3 6. d4 d5 7. Qd2 Nc6 8. Qg2 Bg4 9. hxg3 Qd7 10. Nc3 Bb4 11. Bd2 Qf5 12. Be2 Qxc2 13. Rh4 f5 14. Bd1 Qxb2 15. Rb1 Qa3 16. Rb3 Qa5 17. a3 Bxc3 18. Rxc3 Qb6 19. Rb3 Qa6 20. Ng5 Bxd1 21. Ne6 Ke7 22. Nxc7 Qc4 23. Nxd5+ Kf8 24. Rxb7 Bg4 25. Rxg4 Re8 26. Ne3 Qa6 27. Nxf5 Qxb7 28. Bb4+ Re7 29. Bxe7+ Qxe7 30. Nxe7 Nxe7 31. Qa8+ Kf7 32. Qxh8 h6 33. Qd8 g5 34. e6+ Kf6 35. Qf8+ Kxe6 36. Re4+ Kd5 37. Re5+ Kxd4 38. Qxe7 Nxg3 39. Qc5+ Kd3 40. Re3# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "944"]
+
+1. e4 c5 2. d4 cxd4 3. Nf3 e5 4. c3 Nc6 5. cxd4 exd4 6. Nxd4 Nf6 7. Nxc6 bxc6 8. Bd3 d5 9. exd5 Bb4+ 10. Nc3 O-O 11. O-O cxd5 12. Bg5 Be6 13. a3 Bxc3 14. bxc3 h6 15. Be3 Ne4 16. Bd4 Rc8 17. Re1 Nxc3 18. Qf3 Ne4 19. Rxe4 dxe4 20. Qxe4 Bf5 21. Qxf5 g6 22. Qe5 f6 23. Qe4 Qe8 24. Qxe8 Rfxe8 25. Bxg6 Red8 26. Bxa7 Ra8 27. Bc5 Kg7 28. Bh5 Rd3 29. Bf3 Ra5 30. Bb4 Rg5 31. Be2 Rd4 32. Be1 Re4 33. Bf1 Ra4 34. Bd3 Rd5 35. Bc2 Ra7 36. a4 Rb5 37. g3 h5 38. Bc3 Rb8 39. Bf5 h4 40. Kf1 hxg3 41. hxg3 Rh8 42. Kg1 Rh5 43. Bg4 Rg5 44. Be2 Re7 45. Bb5 Rd5 46. Bb4 Rc7 47. Bf1 Rc8 48. Be1 Rcd8 49. Bc3 Rc8 50. Be1 Rcd8 51. Bc4 Rc8 52. Bxd5 Rd8 53. Bc6 Rc8 54. Bf3 Rh8 55. a5 Rg8 56. Bc6 Rc8 57. Bd5 Rc5 58. Ba8 Rxa5 59. Bxa5 Kh8 60. Bd8 Kg7 61. Ra7+ Kg6 62. Be4+ f5 63. Bb1 Kh6 64. Bxf5 Kh5 65. Rh7# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "1601"]
+
+1. e4 e5 2. Nc3 Nf6 3. f4 d5 4. fxe5 Nxe4 5. Nf3 Bg4 6. Qe2 Nxc3 7. bxc3 Be7 8. Qb5+ Nd7 9. Qxd5 O-O 10. Be2 Bxf3 11. Qxf3 Nxe5 12. Qxb7 Rb8 13. Qe4 Bh4+ 14. g3 Bf6 15. d4 Re8 16. dxe5 Bxe5 17. Qf3 Qe7 18. O-O Rb6 19. Ba3 Qe6 20. Rae1 h6 21. Bd3 Rbb8 22. Rxe5 Qxe5 23. Qxf7+ Kh8 24. Qg6 Qe3+ 25. Kg2 Qxd3 26. cxd3 Re2+ 27. Kh3 Re5 28. Bf8 Rg5 29. Bxg7+ Kg8 30. Qf7+ Kh7 31. Bd4+ Rg7 32. Qxg7# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "2898"]
+
+1. d4 Nf6 2. c4 g6 3. Nc3 d5 4. Bf4 Bg7 5. e3 O-O 6. Rc1 c5 7. dxc5 Be6 8. Nf3 Qa5 9. Nd4 Nc6 10. Nxe6 fxe6 11. Qa4 Qxc5 12. Qb5 Qxb5 13. cxb5 Nd8 14. Be2 Nf7 15. O-O Rfc8 16. h4 Nd6 17. Na4 Nfe4 18. Rfd1 Nf5 19. Bd3 Ned6 20. b6 axb6 21. Bxf5 Nxf5 22. Rxc8+ Rxc8 23. Nxb6 Rc2 24. a4 Rxb2 25. Nd7 Rb4 26. Nc5 Kf7 27. h5 gxh5 28. a5 Rb5 29. Rc1 e5 30. Bh2 h4 31. Kf1 Nd6 32. a6 bxa6 33. Nxa6 Bf6 34. Nc7 Ra5 35. f3 h6 36. Bg1 Nf5 37. Bf2 d4 38. e4 Ng3+ 39. Bxg3 hxg3 40. Nd5 Bg5 41. Rd1 Ra4 42. f4 Bxf4 43. Ke2 Kg6 44. Kf3 Kg5 45. Nxf4 exf4 46. e5 Kf5 47. Ke2 Ke4 48. Kf1 d3 49. Re1+ Kd5 50. Rd1 Ke4 51. Re1+ Kd5 52. Rd1 Kd4 53. Re1 Kc3 54. Rc1+ Kd2 55. Rb1 Kc2 56. Re1 d2 57. e6 dxe1=Q+ 58. Kxe1 Kd3 59. Kd1 Ra1# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "2405"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5 7. Bb3 O-O 8. c3 d5 9. exd5 Nxd5 10. Nxe5 Nxe5 11. Rxe5 c6 12. d4 Bd6 13. Re1 Qh4 14. g3 Qh3 15. Be3 Bg4 16. Qd3 Rae8 17. Nd2 Re6 18. a4 Qh5 19. axb5 axb5 20. Nf1 Bf5 21. Qd2 Bg4 22. Bd1 f5 23. Bxg4 Qxg4 24. Qd1 Qh3 25. Bd2 Rg6 26. Qe2 f4 27. Qe4 f3 28. Qxf3 Rxf3 29. c4 bxc4 30. Re8+ Rf8 31. Rxf8+ Bxf8 32. Ra8 Re6 33. Rd8 Re2 34. Ra8 Qf5 35. Bf4 Nxf4 36. gxf4 Qxf4 37. Rxf8+ Kxf8 38. f3 Qxf3 39. Ne3 Re1+ 40. Nf1 Rxf1# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "3156"]
+
+1. d4 Nf6 2. c4 g6 3. Nf3 Bg7 4. g3 O-O 5. Bg2 d6 6. O-O Nbd7 7. Nc3 e5 8. e4 c6 9. h3 exd4 10. Nxd4 Re8 11. Bf4 Nc5 12. Re1 Nfd7 13. Bxd6 Qb6 14. Re2 Ne5 15. Nb3 Ncd3 16. Rb1 Be6 17. c5 Bxb3 18. cxb6 Bxd1 19. Rxd1 Nxb2 20. Rxb2 Nc4 21. Rc2 axb6 22. Bf1 Nxd6 23. Rxd6 b5 24. Rd7 b4 25. Ne2 b5 26. Nd4 Bxd4 27. Rxd4 Ra4 28. Rxc6 b3 29. Rxa4 bxa4 30. axb3 axb3 31. Rb6 Rxe4 32. h4 h5 33. Rb5 Rd4 34. Kg2 Kh7 35. Kf3 Rd1 36. Be2 Rc1 37. Ke3 Rc7 38. Bd3 Kg7 39. Re5 Rb7 40. Rb5 Rxb5 41. Bxb5 b2 42. Bd3 Kf6 43. Kf4 Kg7 44. Kg5 f6+ 45. Kf4 Kh7 46. Ke4 Kh8 47. Kd4 Kg7 48. Kc3 Kf7 49. Bc4+ Kf8 50. Kxb2 Kg7 51. Bb5 Kh8 52. Bc4 Kg7 53. Kc3 Kh8 54. Bf7 Kg7 55. Bxg6 Kxg6 56. Kd4 Kf5 57. f3 Ke6 58. Ke4 f5+ 59. Kd4 Kd6 60. f4 Ke7 61. Ke5 Kf8 62. Kf6 Kg8 63. Ke7 Kh8 64. Ke8 Kg8 65. Kd7 Kh8 66. Ke8 Kg8 67. Ke7 Kh8 68. Kf7 Kh7 69. Kf8 Kh8 70. Kf7 Kh7 71. Kf8 Kh8 72. Ke7 Kh7 73. Kf7 Kh8 74. Kf8 Kh7 75. Kf7 Kh8 76. Ke7 Kh7 77. Ke6 Kg8 78. Kf6 Kh7 79. Ke6 Kg8 80. Kf6 Kh7 81. Kxf5 Kh8 82. Kg6 Kg8 83. Kf6 Kf8 84. Kg6 Kg8 85. Kxh5 Kf8 86. Kg6 Ke8 87. f5 Kd8 88. f6 Ke8 89. f7+ Ke7 90. h5 Kf8 91. h6 Ke7 92. h7 Kd7 93. f8=Q Ke6 94. Qc5 Kd7 95. h8=Q Ke6 96. Qh3# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "stockfish16-oracle-50ms"]
+[Black "9M"]
+[Result "1-0"]
+[Termination "normal"]
+[OpeningIndex "396"]
+
+1. d4 Nf6 2. Nf3 e6 3. Bg5 c5 4. e4 cxd4 5. Qxd4 Nc6 6. Qe3 h6 7. Bxf6 Qxf6 8. Nc3 Bd6 9. g3 b6 10. Bg2 Bc5 11. e5 Qf5 12. Qe2 O-O 13. Nh4 Qg5 14. f4 Qe7 15. O-O-O a5 16. Qg4 a4 17. Nd5 Qd8 18. Nf6+ Kh8 19. Nh5 Rg8 20. Bxc6 Ra5 21. Be4 a3 22. Ng6+ Kh7 23. Nf8+ Kh8 24. Ng6+ Kh7 25. b3 Be3+ 26. Kb1 f5 27. exf6 gxf6 28. Ne5+ f5 29. Bxf5+ exf5 30. Qxf5+ Kh8 31. Nf7# 1-0
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "841"]
+
+1. e4 c6 2. Nc3 d5 3. Nf3 Bg4 4. h3 Bxf3 5. Qxf3 Nf6 6. e5 Nfd7 7. d4 e6 8. Qg3 Qb6 9. f4 Qxd4 10. Be3 Qb4 11. O-O-O h5 12. f5 h4 13. Qe1 exf5 14. g4 hxg3 15. Qxg3 Nc5 16. Bxc5 Qxc5 17. e6 fxe6 18. Qg6+ Kd7 19. Bd3 Rh6 20. Qg2 Rf6 21. Rhe1 Kc7 22. Bxf5 Rxf5 23. Rxe6 Nd7 24. Qg3+ Bd6 25. Qxg7 Raf8 26. Qg4 Rf1 27. a3 R8f4 28. Qe2 Qg1 29. Kb1 Rxd1+ 30. Nxd1 Rd4 31. Kc1 Rxd1+ 32. Qxd1 Bf4+ 33. Kb1 Qxd1+ 34. Ka2 Qxc2 35. Re1 Be5 36. Rxe5 Nxe5 37. a4 Nd3 38. Ka1 Qxb2# 0-1
+
+[Event "nanoAlphaZero resident-v1 tournament: 9M vs stockfish16-oracle-50ms"]
+[Site "?"]
+[Date "2026.08.18"]
+[Round "?"]
+[White "9M"]
+[Black "stockfish16-oracle-50ms"]
+[Result "0-1"]
+[Termination "normal"]
+[OpeningIndex "2521"]
+
+1. d4 g6 2. Nf3 Bg7 3. Bf4 c5 4. c3 cxd4 5. cxd4 Qa5+ 6. Nc3 Nf6 7. Rc1 Ne4 8. b4 Qxb4 9. a3 Qa5 10. Qb3 O-O 11. e3 d6 12. Bc4 e5 13. dxe5 Nc6 14. O-O Nxc3 15. Qxc3 Qxc3 16. Rxc3 dxe5 17. Bg3 e4 18. Nd4 Nxd4 19. exd4 Bxd4 20. Rb3 b6 21. Bd5 Ba6 22. Rd1 Rac8 23. h3 Bc5 24. Bxe4 Rfd8 25. Rbb1 Be2 26. Re1 Bd3 27. Ra1 Bxe4 28. Rxe4 f5 29. Re2 Rd3 30. Bf4 Rxa3 31. Rd1 Ra4 32. g3 Re4 33. Red2 Re6 34. Bg5 a5 35. Rd7 Ra8 36. Rb7 Bf8 37. Rdd7 a4 38. Rxh7 a3 39. Bd2 a2 40. Bc3 a1=Q+ 41. Bxa1 Rxa1+ 42. Kg2 Rae1 43. Rhc7 Bc5 44. Rg7+ Kf8 45. Rbf7+ Ke8 46. Rc7 Re7 47. Rc8+ Kd7 48. Rcg8 Re6 49. Rxg6 Re2 50. R6g7 Rxf2+ 51. Kh1 Rxg7 52. Rxg7+ Kc6 53. h4 b5 54. Rg6+ Kc7 55. Rg7+ Kc6 56. Rg6+ Bd6 57. Rg7 Rc2 58. Rg8 b4 59. Rc8+ Bc7 60. Re8 Kd5 61. Re3 Kd4 62. Rb3 Kc4 63. Rb1 b3 64. h5 Bb8 65. h6 Bxg3 66. Kg1 Bc7 67. h7 Be5 68. Kf1 Bh8 69. Ke1 b2 70. Kf1 Rc1+ 71. Rxc1+ bxc1=Q+ 72. Kg2 Kd3 73. Kg3 Qg1+ 74. Kf3 Kd2 75. Kf4 Qg4# 0-1
+

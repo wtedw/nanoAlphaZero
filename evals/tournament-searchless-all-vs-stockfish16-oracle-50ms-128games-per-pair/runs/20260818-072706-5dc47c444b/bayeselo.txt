@@ -1,0 +1,22 @@
+version 0057, Copyright (C) 1997-2010 Remi Coulom.
+compiled Aug 14 2026 15:35:40.
+This program comes with ABSOLUTELY NO WARRANTY.
+This is free software, and you are welcome to redistribute it
+under the terms and conditions of the GNU General Public License.
+See http://www.gnu.org/copyleft/gpl.html for details.
+ResultSet>ResultSet>ResultSet-EloRating>00:00:00,00
+ResultSet-EloRating>0 left    
+00:00:00,00              
+ResultSet-EloRating>Rank Name                      Elo    +    - games score oppo. draws 
+   1 stockfish16-oracle-50ms   410   49   42   384   96%  -137    7% 
+   2 270M                        3   27   27   384   52%    -1   16% 
+   3 136M                     -102   26   26   384   39%    34   18% 
+   4 9M                       -311   30   32   384   12%   104   14% 
+ResultSet-EloRating>34.5887
+ResultSet-EloRating>126.336
+ResultSet-EloRating>                         st 27 13 9M
+stockfish16-oracle-50ms    100100100
+270M                      0    99100
+136M                      0  0   100
+9M                        0  0  0   
+ResultSet-EloRating>ResultSet>

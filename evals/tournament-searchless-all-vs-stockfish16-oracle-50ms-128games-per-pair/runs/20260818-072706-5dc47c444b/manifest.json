@@ -1,0 +1,20 @@
+{
+  "config_hash": "5dc47c444be4871526a2d8618cfd99e5ae1a62ec018deca447af3b34be8d3ae9",
+  "created_at": "2026-08-18T07:27:06.588188+00:00",
+  "completed_units": [
+    "9M__136M__first-9M",
+    "9M__136M__first-136M",
+    "9M__270M__first-9M",
+    "9M__270M__first-270M",
+    "9M__stockfish16-oracle-50ms__first-9M",
+    "9M__stockfish16-oracle-50ms__first-stockfish16-oracle-50ms",
+    "136M__270M__first-136M",
+    "136M__270M__first-270M",
+    "136M__stockfish16-oracle-50ms__first-136M",
+    "136M__stockfish16-oracle-50ms__first-stockfish16-oracle-50ms",
+    "270M__stockfish16-oracle-50ms__first-270M",
+    "270M__stockfish16-oracle-50ms__first-stockfish16-oracle-50ms"
+  ],
+  "scheduler_version": "resident-v1-mctx-v1",
+  "updated_at": "2026-08-18T08:46:34.600612+00:00"
+}

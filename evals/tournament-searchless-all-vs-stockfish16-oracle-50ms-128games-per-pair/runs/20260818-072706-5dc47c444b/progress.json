@@ -1,0 +1,561 @@
+[
+  {
+    "unit": "9M__136M__first-9M",
+    "player_a": "9M",
+    "player_b": "136M",
+    "opening_offset": 0,
+    "results_from_a": {
+      "losses": 40,
+      "draws": 15,
+      "wins": 9
+    },
+    "scheduler_version": "resident-v1-mctx-v1",
+    "stage_timings_synchronized": false,
+    "first_mover": "9M",
+    "wall_seconds": 32.47471920680255,
+    "move_phase_seconds": {
+      "9M": 8.050375364720821,
+      "136M": 11.059866223484278
+    },
+    "profile_stage_seconds": {
+      "initialize_slots_and_resident_env": 5.592718651518226,
+      "resident_player_search": 19.1102415882051,
+      "resident_step": 4.178882182575762,
+      "decode_validate_and_push_python_boards": 0.35516496002674103,
+      "stockfish_adjudication": 0.00043046101927757263,
+      "termination_and_ply_cap_checks": 0.5321261370554566,
+      "dynamic_compaction": 2.5817455472424626,
+      "build_output_pgn_objects": 0.02401590719819069
+    },
+    "profile_unattributed_seconds": 0.09939377196133137,
+    "profile_batch_size_calls": {
+      "32": 186,
+      "64": 124
+    },
+    "compactions": [
+      {
+        "phase": 124,
+        "active_games": 32,
+        "from_batch_size": 64,
+        "to_batch_size": 32,
+        "padding_rows": 0
+      }
+    ],
+    "move_phases": 310,
+    "games": 64,
+    "plies": 8894,
+    "failures": 0
+  },
+  {
+    "unit": "9M__136M__first-136M",
+    "player_a": "9M",
+    "player_b": "136M",
+    "opening_offset": 0,
+    "results_from_a": {
+      "losses": 44,
+      "draws": 17,
+      "wins": 3
+    },
+    "scheduler_version": "resident-v1-mctx-v1",
+    "stage_timings_synchronized": false,
+    "first_mover": "136M",
+    "wall_seconds": 31.03783016372472,
+    "move_phase_seconds": {
+      "136M": 17.568907926790416,
+      "9M": 11.687225178815424
+    },
+    "profile_stage_seconds": {
+      "initialize_slots_and_resident_env": 0.2799113430082798,
+      "resident_player_search": 29.25613310560584,
+      "resident_step": 0.6630940977483988,
+      "decode_validate_and_push_python_boards": 0.15645214822143316,
+      "stockfish_adjudication": 0.0004360200837254524,
+      "termination_and_ply_cap_checks": 0.5104129165410995,
+      "dynamic_compaction": 0.04214336257427931,
+      "build_output_pgn_objects": 0.02264916803687811
+    },
+    "profile_unattributed_seconds": 0.10659800190478563,
+    "profile_batch_size_calls": {
+      "32": 221,
+      "64": 114
+    },
+    "compactions": [
+      {
+        "phase": 114,
+        "active_games": 32,
+        "from_batch_size": 64,
+        "to_batch_size": 32,
+        "padding_rows": 0
+      }
+    ],
+    "move_phases": 335,
+    "games": 64,
+    "plies": 8285,
+    "failures": 0
+  },
+  {
+    "unit": "9M__270M__first-9M",
+    "player_a": "9M",
+    "player_b": "270M",
+    "opening_offset": 0,
+    "results_from_a": {
+      "losses": 48,
+      "draws": 10,
+      "wins": 6
+    },
+    "scheduler_version": "resident-v1-mctx-v1",
+    "stage_timings_synchronized": false,
+    "first_mover": "9M",
+    "wall_seconds": 32.79855185281485,
+    "move_phase_seconds": {
+      "9M": 9.18339008372277,
+      "270M": 21.65222682710737
+    },
+    "profile_stage_seconds": {
+      "initialize_slots_and_resident_env": 0.29067861195653677,
+      "resident_player_search": 30.83561691083014,
+      "resident_step": 0.5523471496999264,
+      "decode_validate_and_push_python_boards": 0.1749343117699027,
+      "stockfish_adjudication": 0.0004011094570159912,
+      "termination_and_ply_cap_checks": 0.542331357486546,
+      "dynamic_compaction": 0.04567675571888685,
+      "build_output_pgn_objects": 0.26292283553630114
+    },
+    "profile_unattributed_seconds": 0.0936428103595972,
+    "profile_batch_size_calls": {
+      "32": 156,
+      "64": 132
+    },
+    "compactions": [
+      {
+        "phase": 132,
+        "active_games": 32,
+        "from_batch_size": 64,
+        "to_batch_size": 32,
+        "padding_rows": 0
+      }
+    ],
+    "move_phases": 288,
+    "games": 64,
+    "plies": 9237,
+    "failures": 0
+  },
+  {
+    "unit": "9M__270M__first-270M",
+    "player_a": "9M",
+    "player_b": "270M",
+    "opening_offset": 0,
+    "results_from_a": {
+      "losses": 54,
+      "draws": 7,
+      "wins": 3
+    },
+    "scheduler_version": "resident-v1-mctx-v1",
+    "stage_timings_synchronized": false,
+    "first_mover": "270M",
+    "wall_seconds": 32.77522462699562,
+    "move_phase_seconds": {
+      "270M": 20.770596941001713,
+      "9M": 10.482808743603528
+    },
+    "profile_stage_seconds": {
+      "initialize_slots_and_resident_env": 0.2874354114755988,
+      "resident_player_search": 31.25340568460524,
+      "resident_step": 0.5366857945919037,
+      "decode_validate_and_push_python_boards": 0.14157830644398928,
+      "stockfish_adjudication": 0.00037247221916913986,
+      "termination_and_ply_cap_checks": 0.398545166477561,
+      "dynamic_compaction": 0.04430968873202801,
+      "build_output_pgn_objects": 0.02240739669650793
+    },
+    "profile_unattributed_seconds": 0.09048470575362444,
+    "profile_batch_size_calls": {
+      "32": 174,
+      "64": 114
+    },
+    "compactions": [
+      {
+        "phase": 114,
+        "active_games": 32,
+        "from_batch_size": 64,
+        "to_batch_size": 32,
+        "padding_rows": 0
+      }
+    ],
+    "move_phases": 288,
+    "games": 64,
+    "plies": 7599,
+    "failures": 0
+  },
+  {
+    "unit": "9M__stockfish16-oracle-50ms__first-9M",
+    "player_a": "9M",
+    "player_b": "stockfish16-oracle-50ms",
+    "opening_offset": 0,
+    "results_from_a": {
+      "losses": 62,
+      "draws": 2
+    },
+    "scheduler_version": "resident-v1-mctx-v1",
+    "stage_timings_synchronized": false,
+    "first_mover": "9M",
+    "wall_seconds": 677.6117531647906,
+    "move_phase_seconds": {
+      "9M": 4.256150961853564,
+      "stockfish16-oracle-50ms": 671.6970535870641
+    },
+    "profile_stage_seconds": {
+      "initialize_slots_and_resident_env": 0.2671642256900668,
+      "resident_player_search": 675.9532045489177,
+      "resident_step": 0.573927091434598,
+      "decode_validate_and_push_python_boards": 0.16163531597703695,
+      "stockfish_adjudication": 0.0004393095150589943,
+      "termination_and_ply_cap_checks": 0.5027113920077682,
+      "dynamic_compaction": 0.04162289295345545,
+      "build_output_pgn_objects": 0.028072835877537727
+    },
+    "profile_unattributed_seconds": 0.0829755524173379,
+    "profile_batch_size_calls": {
+      "32": 122,
+      "64": 96
+    },
+    "compactions": [
+      {
+        "phase": 96,
+        "active_games": 32,
+        "from_batch_size": 64,
+        "to_batch_size": 32,
+        "padding_rows": 0
+      }
+    ],
+    "move_phases": 218,
+    "games": 64,
+    "plies": 6340,
+    "failures": 0
+  },
+  {
+    "unit": "9M__stockfish16-oracle-50ms__first-stockfish16-oracle-50ms",
+    "player_a": "9M",
+    "player_b": "stockfish16-oracle-50ms",
+    "opening_offset": 0,
+    "results_from_a": {
+      "losses": 63,
+      "draws": 1
+    },
+    "scheduler_version": "resident-v1-mctx-v1",
+    "stage_timings_synchronized": false,
+    "first_mover": "stockfish16-oracle-50ms",
+    "wall_seconds": 627.9115018453449,
+    "move_phase_seconds": {
+      "stockfish16-oracle-50ms": 623.3779685357586,
+      "9M": 3.080057779327035
+    },
+    "profile_stage_seconds": {
+      "initialize_slots_and_resident_env": 0.2639371557161212,
+      "resident_player_search": 626.4580263150856,
+      "resident_step": 0.4758653976023197,
+      "decode_validate_and_push_python_boards": 0.15068914741277695,
+      "stockfish_adjudication": 0.0003766091540455818,
+      "termination_and_ply_cap_checks": 0.4308272982016206,
+      "dynamic_compaction": 0.04170672409236431,
+      "build_output_pgn_objects": 0.02161234710365534
+    },
+    "profile_unattributed_seconds": 0.06846085097640753,
+    "profile_batch_size_calls": {
+      "32": 83,
+      "64": 92
+    },
+    "compactions": [
+      {
+        "phase": 92,
+        "active_games": 30,
+        "from_batch_size": 64,
+        "to_batch_size": 32,
+        "padding_rows": 2
+      }
+    ],
+    "move_phases": 175,
+    "games": 64,
+    "plies": 5962,
+    "failures": 0
+  },
+  {
+    "unit": "136M__270M__first-136M",
+    "player_a": "136M",
+    "player_b": "270M",
+    "opening_offset": 0,
+    "results_from_a": {
+      "losses": 32,
+      "wins": 17,
+      "draws": 15
+    },
+    "scheduler_version": "resident-v1-mctx-v1",
+    "stage_timings_synchronized": false,
+    "first_mover": "136M",
+    "wall_seconds": 35.66293928679079,
+    "move_phase_seconds": {
+      "136M": 11.677264180034399,
+      "270M": 22.191968070343137
+    },
+    "profile_stage_seconds": {
+      "initialize_slots_and_resident_env": 0.2731829658150673,
+      "resident_player_search": 33.869232250377536,
+      "resident_step": 0.5720815313979983,
+      "decode_validate_and_push_python_boards": 0.17247961927205324,
+      "stockfish_adjudication": 0.0004789792001247406,
+      "termination_and_ply_cap_checks": 0.6080041946843266,
+      "dynamic_compaction": 0.0447743684053421,
+      "build_output_pgn_objects": 0.026964886114001274
+    },
+    "profile_unattributed_seconds": 0.09574049152433872,
+    "profile_batch_size_calls": {
+      "32": 163,
+      "64": 128
+    },
+    "compactions": [
+      {
+        "phase": 128,
+        "active_games": 31,
+        "from_batch_size": 64,
+        "to_batch_size": 32,
+        "padding_rows": 1
+      }
+    ],
+    "move_phases": 291,
+    "games": 64,
+    "plies": 8967,
+    "failures": 0
+  },
+  {
+    "unit": "136M__270M__first-270M",
+    "player_a": "136M",
+    "player_b": "270M",
+    "opening_offset": 0,
+    "results_from_a": {
+      "losses": 35,
+      "draws": 16,
+      "wins": 13
+    },
+    "scheduler_version": "resident-v1-mctx-v1",
+    "stage_timings_synchronized": false,
+    "first_mover": "270M",
+    "wall_seconds": 38.27633912861347,
+    "move_phase_seconds": {
+      "270M": 21.427190016023815,
+      "136M": 14.750480193644762
+    },
+    "profile_stage_seconds": {
+      "initialize_slots_and_resident_env": 0.27762716356664896,
+      "resident_player_search": 36.17767020966858,
+      "resident_step": 0.6578335389494896,
+      "decode_validate_and_push_python_boards": 0.1953600151464343,
+      "stockfish_adjudication": 0.0005766870453953743,
+      "termination_and_ply_cap_checks": 0.7756729833781719,
+      "dynamic_compaction": 0.04371550399810076,
+      "build_output_pgn_objects": 0.03397450502961874
+    },
+    "profile_unattributed_seconds": 0.11390852183103561,
+    "profile_batch_size_calls": {
+      "32": 206,
+      "64": 148
+    },
+    "compactions": [
+      {
+        "phase": 148,
+        "active_games": 32,
+        "from_batch_size": 64,
+        "to_batch_size": 32,
+        "padding_rows": 0
+      }
+    ],
+    "move_phases": 354,
+    "games": 64,
+    "plies": 9985,
+    "failures": 0
+  },
+  {
+    "unit": "136M__stockfish16-oracle-50ms__first-136M",
+    "player_a": "136M",
+    "player_b": "stockfish16-oracle-50ms",
+    "opening_offset": 0,
+    "results_from_a": {
+      "losses": 58,
+      "draws": 6
+    },
+    "scheduler_version": "resident-v1-mctx-v1",
+    "stage_timings_synchronized": false,
+    "first_mover": "136M",
+    "wall_seconds": 839.4424837678671,
+    "move_phase_seconds": {
+      "136M": 13.599844198673964,
+      "stockfish16-oracle-50ms": 823.3222941709682
+    },
+    "profile_stage_seconds": {
+      "initialize_slots_and_resident_env": 0.2741460343822837,
+      "resident_player_search": 836.9221383696422,
+      "resident_step": 1.0575012415647507,
+      "decode_validate_and_push_python_boards": 0.20577811542898417,
+      "stockfish_adjudication": 0.0007547885179519653,
+      "termination_and_ply_cap_checks": 0.7339735152199864,
+      "dynamic_compaction": 0.047007097862660885,
+      "build_output_pgn_objects": 0.03683901485055685
+    },
+    "profile_unattributed_seconds": 0.16434559039771557,
+    "profile_batch_size_calls": {
+      "32": 327,
+      "64": 104
+    },
+    "compactions": [
+      {
+        "phase": 104,
+        "active_games": 31,
+        "from_batch_size": 64,
+        "to_batch_size": 32,
+        "padding_rows": 1
+      }
+    ],
+    "move_phases": 431,
+    "games": 64,
+    "plies": 7547,
+    "failures": 0
+  },
+  {
+    "unit": "136M__stockfish16-oracle-50ms__first-stockfish16-oracle-50ms",
+    "player_a": "136M",
+    "player_b": "stockfish16-oracle-50ms",
+    "opening_offset": 0,
+    "results_from_a": {
+      "losses": 62,
+      "draws": 2
+    },
+    "scheduler_version": "resident-v1-mctx-v1",
+    "stage_timings_synchronized": false,
+    "first_mover": "stockfish16-oracle-50ms",
+    "wall_seconds": 784.5196283943951,
+    "move_phase_seconds": {
+      "stockfish16-oracle-50ms": 773.0119334720075,
+      "136M": 9.575763627886772
+    },
+    "profile_stage_seconds": {
+      "initialize_slots_and_resident_env": 0.2778083337470889,
+      "resident_player_search": 782.5876970998943,
+      "resident_step": 0.6687309248372912,
+      "decode_validate_and_push_python_boards": 0.1897888034582138,
+      "stockfish_adjudication": 0.000532795675098896,
+      "termination_and_ply_cap_checks": 0.6207663295790553,
+      "dynamic_compaction": 0.0434791287407279,
+      "build_output_pgn_objects": 0.029071816243231297
+    },
+    "profile_unattributed_seconds": 0.10175316222012043,
+    "profile_batch_size_calls": {
+      "32": 145,
+      "64": 116
+    },
+    "compactions": [
+      {
+        "phase": 116,
+        "active_games": 32,
+        "from_batch_size": 64,
+        "to_batch_size": 32,
+        "padding_rows": 0
+      }
+    ],
+    "move_phases": 261,
+    "games": 64,
+    "plies": 7359,
+    "failures": 0
+  },
+  {
+    "unit": "270M__stockfish16-oracle-50ms__first-270M",
+    "player_a": "270M",
+    "player_b": "stockfish16-oracle-50ms",
+    "opening_offset": 0,
+    "results_from_a": {
+      "losses": 56,
+      "draws": 8
+    },
+    "scheduler_version": "resident-v1-mctx-v1",
+    "stage_timings_synchronized": false,
+    "first_mover": "270M",
+    "wall_seconds": 805.6286100745201,
+    "move_phase_seconds": {
+      "270M": 13.094834631308913,
+      "stockfish16-oracle-50ms": 790.5988700985909
+    },
+    "profile_stage_seconds": {
+      "initialize_slots_and_resident_env": 0.2666008649393916,
+      "resident_player_search": 803.6937047298998,
+      "resident_step": 0.6246300600469112,
+      "decode_validate_and_push_python_boards": 0.2013910822570324,
+      "stockfish_adjudication": 0.0005278699100017548,
+      "termination_and_ply_cap_checks": 0.6715420046821237,
+      "dynamic_compaction": 0.046568396501243114,
+      "build_output_pgn_objects": 0.02739033568650484
+    },
+    "profile_unattributed_seconds": 0.0962547305971384,
+    "profile_batch_size_calls": {
+      "32": 125,
+      "64": 120
+    },
+    "compactions": [
+      {
+        "phase": 120,
+        "active_games": 30,
+        "from_batch_size": 64,
+        "to_batch_size": 32,
+        "padding_rows": 2
+      }
+    ],
+    "move_phases": 245,
+    "games": 64,
+    "plies": 7851,
+    "failures": 0
+  },
+  {
+    "unit": "270M__stockfish16-oracle-50ms__first-stockfish16-oracle-50ms",
+    "player_a": "270M",
+    "player_b": "stockfish16-oracle-50ms",
+    "opening_offset": 0,
+    "results_from_a": {
+      "losses": 57,
+      "draws": 6,
+      "wins": 1
+    },
+    "scheduler_version": "resident-v1-mctx-v1",
+    "stage_timings_synchronized": false,
+    "first_mover": "stockfish16-oracle-50ms",
+    "wall_seconds": 763.3457194212824,
+    "move_phase_seconds": {
+      "stockfish16-oracle-50ms": 750.5401714388281,
+      "270M": 11.045415877364576
+    },
+    "profile_stage_seconds": {
+      "initialize_slots_and_resident_env": 0.25853395462036133,
+      "resident_player_search": 761.5855873161927,
+      "resident_step": 0.565137323923409,
+      "decode_validate_and_push_python_boards": 0.1867689685896039,
+      "stockfish_adjudication": 0.00045222509652376175,
+      "termination_and_ply_cap_checks": 0.5938778547570109,
+      "dynamic_compaction": 0.04258962720632553,
+      "build_output_pgn_objects": 0.025063585489988327
+    },
+    "profile_unattributed_seconds": 0.0877085654065013,
+    "profile_batch_size_calls": {
+      "32": 112,
+      "64": 110
+    },
+    "compactions": [
+      {
+        "phase": 110,
+        "active_games": 32,
+        "from_batch_size": 64,
+        "to_batch_size": 32,
+        "padding_rows": 0
+      }
+    ],
+    "move_phases": 222,
+    "games": 64,
+    "plies": 7239,
+    "failures": 0
+  }
+]
