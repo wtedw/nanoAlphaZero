@@ -50,7 +50,7 @@ project = "nanoAlphaZero-eval"
 [[agents]]
 name = "trim-glade-6-model10400-1600sims"
 kind = "kata"
-artifact_path = "tdoubleu/chessv6/trim-glade-6-checkpoint:v12"
+artifact_path = "tdoubleu/nanoAlphaZero/trim-glade-6-checkpoint:v12"
 artifact_filename = "model10400.safetensors"
 seed = 42
 
@@ -77,7 +77,7 @@ mcts_use_puct_interior = false
 [[agents]]
 name = "trim-glade-6-model20800-1600sims"
 kind = "kata"
-artifact_path = "tdoubleu/chessv6/trim-glade-6-checkpoint:v25"
+artifact_path = "tdoubleu/nanoAlphaZero/trim-glade-6-checkpoint:v25"
 artifact_filename = "model20800.safetensors"
 seed = 42
 
@@ -104,7 +104,7 @@ mcts_use_puct_interior = false
 [[agents]]
 name = "trim-glade-6-model10400-3200sims"
 kind = "kata"
-artifact_path = "tdoubleu/chessv6/trim-glade-6-checkpoint:v12"
+artifact_path = "tdoubleu/nanoAlphaZero/trim-glade-6-checkpoint:v12"
 artifact_filename = "model10400.safetensors"
 seed = 42
 
@@ -131,7 +131,7 @@ mcts_use_puct_interior = false
 [[agents]]
 name = "trim-glade-6-model20800-3200sims"
 kind = "kata"
-artifact_path = "tdoubleu/chessv6/trim-glade-6-checkpoint:v25"
+artifact_path = "tdoubleu/nanoAlphaZero/trim-glade-6-checkpoint:v25"
 artifact_filename = "model20800.safetensors"
 seed = 42
 
