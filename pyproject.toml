@@ -1,0 +1,42 @@
+[project]
+name = "nanoalphazero"
+version = "0.3.0"
+description = "A compact, TPU-first AlphaZero implementation and chess evaluation toolkit"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "chex==0.1.91",
+    "dm-haiku==0.0.16",
+    "flashbax",
+    "flax==0.10.1",
+    "jax==0.8.1",
+    "libtpu==0.0.30; sys_platform == 'linux'",
+    "mctx",
+    "numpy>=2.0",
+    "optax==0.2.7",
+    "orbax-checkpoint==0.11.30",
+    "pgx1",
+    "python-chess==1.999",
+    "safetensors==0.8.0",
+    "scipy>=1.14",
+    "wandb==0.21.0",
+]
+
+[project.scripts]
+train = "nanoalphazero.cli:train_main"
+eval = "nanoalphazero.cli:eval_main"
+assets = "nanoalphazero.cli:assets_main"
+artifacts = "nanoalphazero.cli:artifacts_main"
+bayeselo = "nanoalphazero.cli:bayeselo_main"
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+pgx1 = { git = "https://github.com/wtedw/pgx1.git", rev = "fa313c84338d93ab96fc02bc7c658364bf43098f" }
+mctx = { git = "https://github.com/wtedw/mctx", rev = "6cf1a39" }
+flashbax = { git = "https://github.com/instadeepai/flashbax.git", rev = "e0199d7bb232c622a19d3c28f9d6b34eb8215eab" }
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
