@@ -1,6 +1,9 @@
 # Saved model checkpoints
 artifacts/
 
+# Local datasets and evaluation assets
+data/
+
 # Run logs
 logs/
 wandb/
