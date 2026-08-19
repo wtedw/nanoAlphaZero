@@ -453,16 +453,19 @@ Cycle 1000/5000 | 8.40s
 
 
 ## Todo
-- Evaluate the full MCTX tournament backend across larger TPU batch sizes
+
+- Add documentation for `mcts.py`'s Gumbel MuZero implementation
+- Add documentation for how to support custom games
 - Verify larger hex boards still hit perfect play
 - Test Go models against reference opponent
 
 ## Acknowledgements
+
 This project would not have been possible without the amazing work of the following:
 - **MCTX** — search algorithm ([paper](https://openreview.net/forum?id=bERaNdoegnO))
 - **PGX** — game environments
 - **Flashbax** — replay buffers
 - **Scaling Scaling Laws** — experiments & model architecture
-- **KataGo** — many methods
+- **KataGo** — model architecture and countless training methods
 - **[TPU Starter](https://github.com/ayaka14732/tpu-starter)** — TPU setup guide
 - Research supported with Cloud TPUs from Google's TPU Research Cloud (TRC)
