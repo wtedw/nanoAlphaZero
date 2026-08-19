@@ -22,11 +22,24 @@ from pathlib import Path
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.transforms import blended_transform_factory
 
 
 HERE = Path(__file__).resolve().parent
 AGENT_RE = re.compile(r"desert-snowball-model(?P<checkpoint>\d+)-(?P<sims>\d+)sims")
 HEADER_RE = re.compile(r'^\[([^ ]+) "(.*)"\]$')
+PLOT = {
+    "title": "Chess Elo vs. test-time compute",
+    "x_label": "MCTS simulations per move",
+    "y_label": "Elo difference vs. 270M",
+    "baseline": 0.0,
+    "baseline_label": "270M transformer · 2895 Lichess Blitz*",
+    "caption": "*Reported Lichess rating; points show relative Elo over 512 games each.",
+    "series": {
+        34400: {"label": "~24h", "color": "#2f78c4"},
+        68800: {"label": "~48h", "color": "#1f6b34"},
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -251,20 +264,31 @@ def write_csv(results: list[Result]) -> None:
 
 
 def write_figure(results: list[Result]) -> None:
+    plt.style.use("seaborn-v0_8-whitegrid")
     mpl.rcParams.update(
         {
             "font.family": "DejaVu Sans",
-            "font.size": 10,
-            "axes.titleweight": "bold",
             "axes.spines.top": False,
             "axes.spines.right": False,
             "svg.hashsalt": "nanoalphazero-desert-snowball-scaling-v1",
         }
     )
-    colors = {34400: "#2563eb", 68800: "#e46f2a"}
-    labels = {34400: "model34400 (under 24h)", 68800: "model68800 (48h)"}
+    fig, ax = plt.subplots(figsize=(9.5, 6), dpi=110, constrained_layout=False)
+    fig.patch.set_facecolor("white")
+    fig.subplots_adjust(left=0.105, right=0.97, top=0.88, bottom=0.19)
 
-    fig, ax = plt.subplots(figsize=(7.2, 4.4), constrained_layout=True)
+    baseline = float(PLOT["baseline"])
+    ymax = max(result.score_elo for result in results)
+    ylim_top = ymax * 1.15
+    ylim_bottom = -ylim_top * 0.42
+    ax.set_ylim(ylim_bottom, ylim_top)
+    ax.set_facecolor("#f2f7f2")
+    ax.axhspan(ylim_bottom, baseline, color="white", zorder=0)
+    ax.axhspan(baseline, ylim_top, color="#eef5ee", zorder=0)
+    ax.set_axisbelow(True)
+    ax.grid(True, color="#ffffff", linewidth=1.0)
+
+    series = PLOT["series"]
     for checkpoint in (34400, 68800):
         rows = sorted(
             (result for result in results if result.checkpoint == checkpoint),
@@ -272,32 +296,84 @@ def write_figure(results: list[Result]) -> None:
         )
         x = np.asarray([result.simulations for result in rows])
         y = np.asarray([result.score_elo for result in rows])
-        yerr = np.asarray(
-            [
-                [result.score_elo - result.elo_ci_low for result in rows],
-                [result.elo_ci_high - result.score_elo for result in rows],
-            ]
-        )
-        ax.errorbar(
+        style = series[checkpoint]
+        ax.plot(
             x,
             y,
-            yerr=yerr,
             marker="o",
-            markersize=6,
+            markersize=8,
+            markerfacecolor=style["color"],
+            markeredgecolor="white",
+            markeredgewidth=1.2,
             linewidth=2.2,
-            capsize=3.5,
-            color=colors[checkpoint],
-            label=labels[checkpoint],
+            solid_joinstyle="round",
+            solid_capstyle="round",
+            color=style["color"],
+            label=style["label"],
+            zorder=3,
         )
 
-    ax.axhline(0, color="#64748b", linewidth=1, linestyle="--", zorder=0)
+    baseline_line = ax.axhline(
+        baseline,
+        color="#d2601a",
+        linestyle="--",
+        linewidth=1.8,
+        zorder=2,
+    )
+    baseline_line.set_dashes((7, 5))
+    label_transform = blended_transform_factory(ax.transAxes, ax.transData)
+    ax.text(
+        0.995,
+        baseline + (ylim_top - ylim_bottom) * 0.018,
+        PLOT["baseline_label"],
+        transform=label_transform,
+        ha="right",
+        va="bottom",
+        fontsize=11,
+        fontstyle="italic",
+        color="#d2601a",
+        zorder=4,
+    )
+
     ax.set_xscale("log", base=2)
     ax.set_xticks([400, 800, 1600, 3200], labels=["400", "800", "1,600", "3,200"])
-    ax.set_xlabel("MCTS simulations per move")
-    ax.set_ylabel("Score-derived Elo difference vs 270M")
-    ax.set_title("Desert Snowball test-time scaling")
-    ax.grid(axis="y", color="#cbd5e1", linewidth=0.7, alpha=0.65)
-    ax.legend(frameon=False, loc="upper left")
+    ax.set_xlim(320, 10_000)
+    ax.set_xlabel(PLOT["x_label"], fontsize=13, color="#333333", labelpad=10)
+    ax.set_ylabel(PLOT["y_label"], fontsize=13, color="#333333", labelpad=10)
+    ax.set_title(
+        PLOT["title"],
+        fontsize=15,
+        fontweight="bold",
+        color="#1a1a2e",
+        pad=15,
+    )
+    ax.tick_params(axis="both", which="both", labelsize=11, colors="#555555", length=0)
+    for spine_name in ("left", "bottom"):
+        ax.spines[spine_name].set_color("#cccccc")
+        ax.spines[spine_name].set_linewidth(0.8)
+    legend = ax.legend(
+        title="Training time",
+        loc="upper left",
+        frameon=True,
+        facecolor="white",
+        edgecolor="#dddddd",
+        framealpha=0.95,
+        borderpad=0.8,
+        labelspacing=0.6,
+        fontsize=12,
+    )
+    legend.get_title().set_fontsize(11)
+    legend.get_title().set_color("#666666")
+    fig.text(
+        0.1,
+        0.03,
+        PLOT["caption"],
+        ha="left",
+        fontsize=9.5,
+        fontstyle="italic",
+        color="#777777",
+    )
+
     output_path = HERE / "test-time-scaling.svg"
     fig.savefig(output_path, metadata={"Date": None})
     plt.close(fig)
