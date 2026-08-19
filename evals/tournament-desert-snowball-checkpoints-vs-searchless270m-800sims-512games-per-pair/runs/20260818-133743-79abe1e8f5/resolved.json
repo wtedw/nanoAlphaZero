@@ -1,0 +1,105 @@
+{
+  "tournament": {
+    "game": "chess",
+    "scheduler": "resident_v1",
+    "num_games_per_pair": 512,
+    "batch_size": 256,
+    "dynamic_batch": true,
+    "dynamic_batch_min": 32,
+    "seed": 1,
+    "max_plies": 512,
+    "openings": "data/eval/eco_openings.pgn",
+    "output_root": "runs",
+    "pairings": [
+      [
+        "desert-snowball-model34400-800sims",
+        "270M"
+      ],
+      [
+        "desert-snowball-model68800-800sims",
+        "270M"
+      ]
+    ]
+  },
+  "adjudication": {
+    "enabled": true,
+    "backend": "async_pool",
+    "path": "artifacts/stockfish/16/stockfish",
+    "time_limit": 0.01,
+    "threshold_cp": 1300,
+    "pool_size": 48,
+    "threads": 1,
+    "hash_mb": 16,
+    "protocol_timeout": 60.0
+  },
+  "bayeselo": {
+    "binary": "../../artifacts/bayeselo/BayesElo/bayeselo"
+  },
+  "wandb": {
+    "enabled": false,
+    "project": "nanoAlphaZero-eval"
+  },
+  "agents": [
+    {
+      "name": "desert-snowball-model34400-800sims",
+      "kind": "kata",
+      "checkpoint": "artifacts/models/desert-snowball/model34400.safetensors",
+      "seed": 42,
+      "search": {
+        "mcts_variant": "opt",
+        "mcts_num_simulations": 800,
+        "mcts_max_m": 128,
+        "mcts_num_k_actions": 128,
+        "mcts_visit_exponent": 0.5,
+        "mcts_visit_aggregator": "sum",
+        "mcts_maxvisit_init": 25.0,
+        "mcts_value_scale": 1.0,
+        "mcts_rescale_values": false,
+        "mcts_use_mixed_value": true,
+        "mcts_gumbel_scale": 0.0,
+        "mcts_use_opt_backward": false,
+        "mcts_bnk_rehydrate_fields": false,
+        "mcts_return_search_tree": false,
+        "mcts_return_summary": false,
+        "mcts_use_advantage_weights": false,
+        "mcts_advantage_scale": 1.0,
+        "mcts_use_puct_interior": false
+      }
+    },
+    {
+      "name": "desert-snowball-model68800-800sims",
+      "kind": "kata",
+      "checkpoint": "artifacts/models/desert-snowball/model68800.safetensors",
+      "seed": 42,
+      "search": {
+        "mcts_variant": "opt",
+        "mcts_num_simulations": 800,
+        "mcts_max_m": 128,
+        "mcts_num_k_actions": 128,
+        "mcts_visit_exponent": 0.5,
+        "mcts_visit_aggregator": "sum",
+        "mcts_maxvisit_init": 25.0,
+        "mcts_value_scale": 1.0,
+        "mcts_rescale_values": false,
+        "mcts_use_mixed_value": true,
+        "mcts_gumbel_scale": 0.0,
+        "mcts_use_opt_backward": false,
+        "mcts_bnk_rehydrate_fields": false,
+        "mcts_return_search_tree": false,
+        "mcts_return_summary": false,
+        "mcts_use_advantage_weights": false,
+        "mcts_advantage_scale": 1.0,
+        "mcts_use_puct_interior": false
+      }
+    },
+    {
+      "name": "270M",
+      "kind": "searchless",
+      "model": "270M",
+      "checkpoint": "artifacts/searchless_chess/270M",
+      "inference_batch_size": 128,
+      "inference_sharding": "data_parallel",
+      "repetition_check_version": "v2"
+    }
+  ]
+}

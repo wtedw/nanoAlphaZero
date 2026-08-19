@@ -1,0 +1,20 @@
+version 0057, Copyright (C) 1997-2010 Remi Coulom.
+compiled Aug 18 2026 12:18:35.
+This program comes with ABSOLUTELY NO WARRANTY.
+This is free software, and you are welcome to redistribute it
+under the terms and conditions of the GNU General Public License.
+See http://www.gnu.org/copyleft/gpl.html for details.
+ResultSet>ResultSet>ResultSet-EloRating>00:00:00,00
+ResultSet-EloRating>0 left    
+00:00:00,00              
+ResultSet-EloRating>Rank Name                                 Elo    +    - games score oppo. draws 
+   1 desert-snowball-model68800-800sims    88   19   19   512   74%   -89   20% 
+   2 desert-snowball-model34400-800sims     1   18   18   512   63%   -89   26% 
+   3 270M                                 -89   13   13  1024   32%    44   23% 
+ResultSet-EloRating>27.9639
+ResultSet-EloRating>97.5264
+ResultSet-EloRating>                                    de de 27
+desert-snowball-model68800-800sims     99100
+desert-snowball-model34400-800sims   0    99
+270M                                 0  0   
+ResultSet-EloRating>ResultSet>
