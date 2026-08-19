@@ -254,14 +254,14 @@ def _upload_wandb_checkpoint(
     )
 
 
-def run_alphazero(config, ckpt_path=None):
+def run_alphazero(config, ckpt_path=None, *, custom_env=None):
     log_path = _start_run_logfile(config)
     print(f"Logging this run to {log_path}")
 
     rng = jax.random.PRNGKey(42)
 
     rng, az_rng = jax.random.split(rng)
-    az = make_alphazero(config, az_rng)
+    az = make_alphazero(config, az_rng, custom_env=custom_env)
 
     run_fn = az.run_fn
     runner_state = az.runner_state

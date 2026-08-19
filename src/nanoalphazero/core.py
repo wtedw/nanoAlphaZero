@@ -136,11 +136,80 @@ class WrappedEnv:
         return f"WrappedEnv(obs_shape={self.obs_shape}, num_actions={self.num_actions})"
 
 
-def make_env(config):
-    env_id = config["env_id"]
-    # chess carries legality as a packed uint32 bitmask; see make_mcts
-    env_kwargs = {"use_bitmask": True} if env_id == "chess" else {}
-    env = pgx1.make(env_id, **env_kwargs)
+def _validate_custom_env(env) -> None:
+    """Fail early when an injected environment cannot satisfy the generic path."""
+    required = ("init", "step", "observe", "num_actions")
+    missing = [name for name in required if not hasattr(env, name)]
+    if missing:
+        raise TypeError(
+            "Custom environment is missing required attributes: "
+            + ", ".join(missing)
+        )
+
+    if hasattr(env, "num_players") and env.num_players != 2:
+        raise ValueError(
+            "Custom environments must have exactly two players; "
+            f"got num_players={env.num_players}"
+        )
+    if not isinstance(env.num_actions, int) or env.num_actions < 1:
+        raise ValueError(
+            "Custom environment num_actions must be a positive integer; "
+            f"got {env.num_actions!r}"
+        )
+
+    state = env.init(jax.random.PRNGKey(0))
+    state_fields = (
+        "current_player",
+        "rewards",
+        "terminated",
+        "truncated",
+        "legal_action_mask",
+    )
+    missing = [name for name in state_fields if not hasattr(state, name)]
+    if missing:
+        raise TypeError(
+            "Custom environment state is missing required attributes: "
+            + ", ".join(missing)
+        )
+
+    rewards = jnp.asarray(state.rewards)
+    if rewards.shape != (2,):
+        raise ValueError(
+            "Custom environment state.rewards must have shape (2,); "
+            f"got {rewards.shape}"
+        )
+    legal = jnp.asarray(state.legal_action_mask)
+    if legal.shape != (env.num_actions,):
+        raise ValueError(
+            "Custom environment state.legal_action_mask must have shape "
+            f"({env.num_actions},); got {legal.shape}"
+        )
+    if legal.dtype != jnp.bool_:
+        raise TypeError(
+            "Custom environment state.legal_action_mask must have boolean dtype; "
+            f"got {legal.dtype}"
+        )
+
+    observation = jnp.asarray(env.observe(state, state.current_player))
+    if observation.ndim != 3:
+        raise ValueError(
+            "Custom environment observations must have shape (H, W, C); "
+            f"got {observation.shape}"
+        )
+    if observation.dtype != jnp.bool_:
+        raise TypeError(
+            "Custom environment observations must have boolean dtype; "
+            f"got {observation.dtype}"
+        )
+
+
+def _wrap_env(env, *, validate=True):
+    """Batch and JIT a raw PGX-style environment for nanoAlphaZero."""
+    if isinstance(env, WrappedEnv):
+        return env
+    if validate:
+        _validate_custom_env(env)
+
     e_step = env.step
     a_step = auto_reset(e_step, env.init)
     vmap_env_init = jax.jit(jax.vmap(env.init))
@@ -154,19 +223,15 @@ def make_env(config):
         rng_keys = jax.random.split(rng_key, batch_size)
         return vmap_env_init(rng_keys)
 
-    batch_size = 1
-    keys = jax.random.split(jax.random.PRNGKey(42), batch_size)
+    keys = jax.random.split(jax.random.PRNGKey(42), 1)
     env_state = vmap_env_init(keys)
 
     vmap_observe_fn = jax.jit(jax.vmap(env.observe))
     es_obs = vmap_observe_fn(env_state, env_state.current_player)
 
-    pgx_num_actions = env.num_actions
-    pgx_obs_shape = jnp.squeeze(es_obs, axis=0).shape
-
     return WrappedEnv(
-        obs_shape=pgx_obs_shape,
-        num_actions=pgx_num_actions,
+        obs_shape=tuple(es_obs.shape[1:]),
+        num_actions=env.num_actions,
         init=vmap_env_init,
         step=vmap_env_step,
         autostep=vmap_auto_step,
@@ -175,6 +240,18 @@ def make_env(config):
         observe=vmap_observe_fn,
         replay_batch=getattr(env, "replay_batch", None),
     )
+
+
+def make_env(config, *, custom_env=None):
+    """Resolve a built-in game or wrap an explicitly supplied environment."""
+    if custom_env is not None:
+        return _wrap_env(custom_env)
+
+    env_id = config["env_id"]
+    # chess carries legality as a packed uint32 bitmask; see make_mcts
+    env_kwargs = {"use_bitmask": True} if env_id == "chess" else {}
+    env = pgx1.make(env_id, **env_kwargs)
+    return _wrap_env(env, validate=False)
 
 
 
@@ -720,12 +797,12 @@ def _print_config(config):
     print("=" * 60 + "\n", flush=True)
 
 
-def make_alphazero(config, rng, data_sharding=None):
+def make_alphazero(config, rng, data_sharding=None, *, custom_env=None):
     # default to the module-global data-parallel sharding when enabled
     if config.get("enable_sharding", False) and data_sharding is None:
         data_sharding = DATA_PARALLEL_SHARDING
 
-    wenv = make_env(config)
+    wenv = make_env(config, custom_env=custom_env)
     # Derive actual obs/action dimensions from the live environment
     config = config.copy()
     config["game_obs_shape"] = wenv.obs_shape
@@ -930,10 +1007,12 @@ def make_alphazero(config, rng, data_sharding=None):
 
 # Compatibility wrappers for callers that imported host-side helpers from core.
 # New code should import these from training, play, checkpoint, config, or cli.
-def run_alphazero(config, ckpt_path=None):
+def run_alphazero(config, ckpt_path=None, *, custom_env=None):
     from nanoalphazero.training import run_alphazero as _run_alphazero
 
-    return _run_alphazero(config, ckpt_path=ckpt_path)
+    return _run_alphazero(
+        config, ckpt_path=ckpt_path, custom_env=custom_env
+    )
 
 
 def all_opening_actions(wenv, config, plies=1):
@@ -954,27 +1033,35 @@ def evaluate_vs(*args, **kwargs):
     return _evaluate_vs(*args, **kwargs)
 
 
-def make_play(config):
+def make_play(config, *, custom_env=None):
     from nanoalphazero.play import make_play as _make_play
 
-    return _make_play(config)
+    return _make_play(config, custom_env=custom_env)
 
 
-def play_against_model(config, params=None, *, human_player=0, num_simulations=None):
+def play_against_model(
+    config,
+    params=None,
+    *,
+    custom_env=None,
+    human_player=0,
+    num_simulations=None,
+):
     from nanoalphazero.play import play_against_model as _play_against_model
 
     return _play_against_model(
         config,
         params,
+        custom_env=custom_env,
         human_player=human_player,
         num_simulations=num_simulations,
     )
 
 
-def play_both(config, params=None):
+def play_both(config, params=None, *, custom_env=None):
     from nanoalphazero.play import play_both as _play_both
 
-    return _play_both(config, params)
+    return _play_both(config, params, custom_env=custom_env)
 
 
 def parse_args():

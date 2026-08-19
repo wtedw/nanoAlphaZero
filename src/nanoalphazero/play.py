@@ -13,7 +13,7 @@ from nanoalphazero.mcts import make_mcts
 from nanoalphazero.model import make_model
 
 
-def make_play(config):
+def make_play(config, *, custom_env=None):
     """Build a single-game (batch=1) inference setup: env, model, MCTS fn.
 
     Sharding is disabled so a batch of one plays cleanly on a single device.
@@ -21,7 +21,7 @@ def make_play(config):
     config = config.copy()
     config["enable_sharding"] = False
 
-    wenv = make_env(config)
+    wenv = make_env(config, custom_env=custom_env)
     config["game_obs_shape"] = wenv.obs_shape
     config["game_num_actions"] = wenv.num_actions
 
@@ -170,7 +170,14 @@ def _print_model_eval(model, params, wenv, state, env_id, W):
         )
 
 
-def play_against_model(config, params=None, *, human_player=0, num_simulations=None):
+def play_against_model(
+    config,
+    params=None,
+    *,
+    custom_env=None,
+    human_player=0,
+    num_simulations=None,
+):
     """Play an interactive terminal game against the trained model.
 
     `human_player` is 0 (you move first) or 1 (model moves first).
@@ -181,7 +188,9 @@ def play_against_model(config, params=None, *, human_player=0, num_simulations=N
         print("Playing against chess model currently not supported.")
         return
 
-    wenv, model, model_state, run_mcts_fn, config = make_play(config)
+    wenv, model, model_state, run_mcts_fn, config = make_play(
+        config, custom_env=custom_env
+    )
     H, W = wenv.obs_shape[0], wenv.obs_shape[1]
 
     if params is None:
@@ -278,7 +287,7 @@ def play_against_model(config, params=None, *, human_player=0, num_simulations=N
     print("=" * 50)
 
 
-def play_both(config, params=None):
+def play_both(config, params=None, *, custom_env=None):
     """Interactive terminal game where you enter moves for BOTH players.
 
     You control player 1 and player 2 yourself; the model never moves, but its
@@ -290,7 +299,9 @@ def play_both(config, params=None):
         print("Playing both sides for chess is currently not supported.")
         return
 
-    wenv, model, model_state, run_mcts_fn, config = make_play(config)
+    wenv, model, model_state, run_mcts_fn, config = make_play(
+        config, custom_env=custom_env
+    )
     H, W = wenv.obs_shape[0], wenv.obs_shape[1]
 
     if params is None:
@@ -363,4 +374,3 @@ def play_both(config, params=None):
         print("Draw.")
     print(f"Rewards [P1, P2] = {rewards.tolist()}")
     print("=" * 50)
-

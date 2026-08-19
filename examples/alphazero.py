@@ -818,16 +818,86 @@ class WrappedEnv:
     init_dummy_estate: Callable
     single_estate: Any
     observe: Optional[Callable] = None
+    replay_batch: Optional[Callable] = None
 
     def __repr__(self) -> str:
         return f"WrappedEnv(obs_shape={self.obs_shape}, num_actions={self.num_actions})"
 
 
-def make_env(config):
-    env_id = config["env_id"]
-    # Chess carries legality as a packed uint32 bitmask; see make_mcts.
-    env_kwargs = {"use_bitmask": True} if env_id == "chess" else {}
-    env = pgx1.make(env_id, **env_kwargs)
+def _validate_custom_env(env) -> None:
+    """Fail early when an injected environment cannot satisfy the generic path."""
+    required = ("init", "step", "observe", "num_actions")
+    missing = [name for name in required if not hasattr(env, name)]
+    if missing:
+        raise TypeError(
+            "Custom environment is missing required attributes: "
+            + ", ".join(missing)
+        )
+
+    if hasattr(env, "num_players") and env.num_players != 2:
+        raise ValueError(
+            "Custom environments must have exactly two players; "
+            f"got num_players={env.num_players}"
+        )
+    if not isinstance(env.num_actions, int) or env.num_actions < 1:
+        raise ValueError(
+            "Custom environment num_actions must be a positive integer; "
+            f"got {env.num_actions!r}"
+        )
+
+    state = env.init(jax.random.PRNGKey(0))
+    state_fields = (
+        "current_player",
+        "rewards",
+        "terminated",
+        "truncated",
+        "legal_action_mask",
+    )
+    missing = [name for name in state_fields if not hasattr(state, name)]
+    if missing:
+        raise TypeError(
+            "Custom environment state is missing required attributes: "
+            + ", ".join(missing)
+        )
+
+    rewards = jnp.asarray(state.rewards)
+    if rewards.shape != (2,):
+        raise ValueError(
+            "Custom environment state.rewards must have shape (2,); "
+            f"got {rewards.shape}"
+        )
+    legal = jnp.asarray(state.legal_action_mask)
+    if legal.shape != (env.num_actions,):
+        raise ValueError(
+            "Custom environment state.legal_action_mask must have shape "
+            f"({env.num_actions},); got {legal.shape}"
+        )
+    if legal.dtype != jnp.bool_:
+        raise TypeError(
+            "Custom environment state.legal_action_mask must have boolean dtype; "
+            f"got {legal.dtype}"
+        )
+
+    observation = jnp.asarray(env.observe(state, state.current_player))
+    if observation.ndim != 3:
+        raise ValueError(
+            "Custom environment observations must have shape (H, W, C); "
+            f"got {observation.shape}"
+        )
+    if observation.dtype != jnp.bool_:
+        raise TypeError(
+            "Custom environment observations must have boolean dtype; "
+            f"got {observation.dtype}"
+        )
+
+
+def _wrap_env(env, *, validate=True):
+    """Batch and JIT a raw PGX-style environment for nanoAlphaZero."""
+    if isinstance(env, WrappedEnv):
+        return env
+    if validate:
+        _validate_custom_env(env)
+
     e_step = env.step
     a_step = auto_reset(e_step, env.init)
     vmap_env_init = jax.jit(jax.vmap(env.init))
@@ -841,26 +911,32 @@ def make_env(config):
         rng_keys = jax.random.split(rng_key, batch_size)
         return vmap_env_init(rng_keys)
 
-    batch_size = 1
-    keys = jax.random.split(jax.random.PRNGKey(42), batch_size)
+    keys = jax.random.split(jax.random.PRNGKey(42), 1)
     env_state = vmap_env_init(keys)
-
     vmap_observe_fn = jax.jit(jax.vmap(env.observe))
     es_obs = vmap_observe_fn(env_state, env_state.current_player)
 
-    pgx_num_actions = env.num_actions
-    pgx_obs_shape = jnp.squeeze(es_obs, axis=0).shape
-
     return WrappedEnv(
-        obs_shape=pgx_obs_shape,
-        num_actions=pgx_num_actions,
+        obs_shape=tuple(es_obs.shape[1:]),
+        num_actions=env.num_actions,
         init=vmap_env_init,
         step=vmap_env_step,
         autostep=vmap_auto_step,
         init_dummy_estate=init_dummy_estate,
         single_estate=single_estate,
         observe=vmap_observe_fn,
+        replay_batch=getattr(env, "replay_batch", None),
     )
+
+
+def make_env(config, *, custom_env=None):
+    if custom_env is not None:
+        return _wrap_env(custom_env)
+
+    env_id = config["env_id"]
+    # Chess carries legality as a packed uint32 bitmask; see make_mcts.
+    env_kwargs = {"use_bitmask": True} if env_id == "chess" else {}
+    return _wrap_env(pgx1.make(env_id, **env_kwargs), validate=False)
 
 
 
@@ -2384,12 +2460,12 @@ def make_train(config, model, model_state, data_sharding=None):
 # =============================================================================
 # AlphaZero system (self-play + train + buffers + runner_state + run_fn)
 # =============================================================================
-def make_alphazero(config, rng, data_sharding=None):
+def make_alphazero(config, rng, data_sharding=None, *, custom_env=None):
     # default to the module-global data-parallel sharding when enabled
     if config.get("enable_sharding", False) and data_sharding is None:
         data_sharding = DATA_PARALLEL_SHARDING
 
-    wenv = make_env(config)
+    wenv = make_env(config, custom_env=custom_env)
     # Derive actual obs/action dimensions from the live environment
     config = config.copy()
     config["game_obs_shape"] = wenv.obs_shape
@@ -2838,14 +2914,14 @@ def _upload_wandb_checkpoint(
     )
 
 
-def run_alphazero(config, ckpt_path=None):
+def run_alphazero(config, ckpt_path=None, *, custom_env=None):
     log_path = _start_run_logfile(config)
     print(f"Logging this run to {log_path}")
 
     rng = jax.random.PRNGKey(42)
 
     rng, az_rng = jax.random.split(rng)
-    az = make_alphazero(config, az_rng)
+    az = make_alphazero(config, az_rng, custom_env=custom_env)
 
     run_fn = az.run_fn
     runner_state = az.runner_state
@@ -3556,7 +3632,7 @@ def load_checkpoint(path: str):
     return params, model_config
 
 
-def make_play(config):
+def make_play(config, *, custom_env=None):
     """Build a single-game (batch=1) inference setup: env, model, MCTS fn.
 
     Sharding is disabled so a batch of one plays cleanly on a single device.
@@ -3564,7 +3640,7 @@ def make_play(config):
     config = config.copy()
     config["enable_sharding"] = False
 
-    wenv = make_env(config)
+    wenv = make_env(config, custom_env=custom_env)
     config["game_obs_shape"] = wenv.obs_shape
     config["game_num_actions"] = wenv.num_actions
 
@@ -3713,7 +3789,14 @@ def _print_model_eval(model, params, wenv, state, env_id, W):
         )
 
 
-def play_against_model(config, params=None, *, human_player=0, num_simulations=None):
+def play_against_model(
+    config,
+    params=None,
+    *,
+    custom_env=None,
+    human_player=0,
+    num_simulations=None,
+):
     """Play an interactive terminal game against the trained model.
 
     `human_player` is 0 (you move first) or 1 (model moves first).
@@ -3724,7 +3807,9 @@ def play_against_model(config, params=None, *, human_player=0, num_simulations=N
         print("Playing against chess model currently not supported.")
         return
 
-    wenv, model, model_state, run_mcts_fn, config = make_play(config)
+    wenv, model, model_state, run_mcts_fn, config = make_play(
+        config, custom_env=custom_env
+    )
     H, W = wenv.obs_shape[0], wenv.obs_shape[1]
 
     if params is None:
@@ -3822,7 +3907,7 @@ def play_against_model(config, params=None, *, human_player=0, num_simulations=N
     print("=" * 50)
 
 
-def play_both(config, params=None):
+def play_both(config, params=None, *, custom_env=None):
     """Interactive terminal game where you enter moves for BOTH players.
 
     You control player 1 and player 2 yourself; the model never moves, but its
@@ -3834,7 +3919,9 @@ def play_both(config, params=None):
         print("Playing both sides for chess is currently not supported.")
         return
 
-    wenv, model, model_state, run_mcts_fn, config = make_play(config)
+    wenv, model, model_state, run_mcts_fn, config = make_play(
+        config, custom_env=custom_env
+    )
     H, W = wenv.obs_shape[0], wenv.obs_shape[1]
 
     if params is None:
@@ -4851,4 +4938,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
