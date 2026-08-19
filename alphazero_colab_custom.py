@@ -38,7 +38,7 @@ from pathlib import Path
 
 import jax
 
-PACKAGE_REF = "a32e0141bc0f5977fba3672bf24831dc315562e9"
+PACKAGE_REF = "e14e431079510334c1ad8c0543a4caf80cbd4417"
 print("JAX:", jax.__version__)
 print("Devices:", jax.devices())
 if not jax.devices() or jax.devices()[0].platform != "tpu":
