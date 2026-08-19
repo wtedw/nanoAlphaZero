@@ -1,0 +1,463 @@
+{
+  "config_hash": "79abe1e8f5cacef3308efbbaa5a84b97f55a5b209b854b09002554886347f39a",
+  "scheduler_version": "resident-v1-mctx-v1",
+  "games_in_pgn": 1024,
+  "expected_games": 1024,
+  "elapsed_seconds_this_process": 4624.000585554168,
+  "pair_batch_wall_seconds": 4518.417445352301,
+  "total_plies": 131815,
+  "games_per_second": 0.22662802018288478,
+  "plies_per_second": 29.17282468789742,
+  "pair_batches": [
+    {
+      "unit": "desert-snowball-model34400-800sims__270M__first-desert-snowball-model34400-800sims",
+      "player_a": "desert-snowball-model34400-800sims",
+      "player_b": "270M",
+      "opening_offset": 0,
+      "results_from_a": {
+        "wins": 135,
+        "losses": 55,
+        "draws": 66
+      },
+      "scheduler_version": "resident-v1-mctx-v1",
+      "stage_timings_synchronized": false,
+      "first_mover": "desert-snowball-model34400-800sims",
+      "wall_seconds": 1118.5444112168625,
+      "move_phase_seconds": {
+        "desert-snowball-model34400-800sims": 1013.3045587865636,
+        "270M": 68.48428492899984
+      },
+      "profile_stage_seconds": {
+        "initialize_slots_and_resident_env": 4.998068313114345,
+        "resident_player_search": 1081.7888437155634,
+        "resident_step": 10.820116789080203,
+        "decode_validate_and_push_python_boards": 0.659741179086268,
+        "stockfish_adjudication": 37.67769597377628,
+        "termination_and_ply_cap_checks": 1.9250982059165835,
+        "dynamic_compaction": 8.3367591034621,
+        "build_output_pgn_objects": 0.1001710370182991
+      },
+      "profile_unattributed_seconds": 4.332388123497367,
+      "adjudication_pipeline": {
+        "prefetches": 291,
+        "used": 289,
+        "discarded": 2,
+        "overlap_seconds": 32.09447122365236
+      },
+      "profile_batch_size_calls": {
+        "32": 136,
+        "64": 52,
+        "128": 48,
+        "256": 116
+      },
+      "compactions": [
+        {
+          "phase": 116,
+          "active_games": 127,
+          "from_batch_size": 256,
+          "to_batch_size": 128,
+          "padding_rows": 1
+        },
+        {
+          "phase": 164,
+          "active_games": 63,
+          "from_batch_size": 128,
+          "to_batch_size": 64,
+          "padding_rows": 1
+        },
+        {
+          "phase": 216,
+          "active_games": 32,
+          "from_batch_size": 64,
+          "to_batch_size": 32,
+          "padding_rows": 0
+        }
+      ],
+      "move_phases": 352,
+      "games": 256,
+      "plies": 33822,
+      "failures": 0
+    },
+    {
+      "unit": "desert-snowball-model34400-800sims__270M__first-270M",
+      "player_a": "desert-snowball-model34400-800sims",
+      "player_b": "270M",
+      "opening_offset": 0,
+      "results_from_a": {
+        "wins": 121,
+        "losses": 70,
+        "draws": 65
+      },
+      "scheduler_version": "resident-v1-mctx-v1",
+      "stage_timings_synchronized": false,
+      "first_mover": "270M",
+      "wall_seconds": 1011.7836235966533,
+      "move_phase_seconds": {
+        "270M": 64.45807709358633,
+        "desert-snowball-model34400-800sims": 933.7127353940159
+      },
+      "profile_stage_seconds": {
+        "initialize_slots_and_resident_env": 0.21930053178220987,
+        "resident_player_search": 998.1708124876022,
+        "resident_step": 0.742718942463398,
+        "decode_validate_and_push_python_boards": 0.6754969945177436,
+        "stockfish_adjudication": 36.094155160710216,
+        "termination_and_ply_cap_checks": 1.9407154340296984,
+        "dynamic_compaction": 0.1420516176149249,
+        "build_output_pgn_objects": 0.1070286063477397
+      },
+      "profile_unattributed_seconds": 4.289206768386066,
+      "adjudication_pipeline": {
+        "prefetches": 298,
+        "used": 295,
+        "discarded": 3,
+        "overlap_seconds": 30.597862946800888
+      },
+      "profile_batch_size_calls": {
+        "32": 156,
+        "64": 42,
+        "128": 42,
+        "256": 118
+      },
+      "compactions": [
+        {
+          "phase": 118,
+          "active_games": 126,
+          "from_batch_size": 256,
+          "to_batch_size": 128,
+          "padding_rows": 2
+        },
+        {
+          "phase": 160,
+          "active_games": 64,
+          "from_batch_size": 128,
+          "to_batch_size": 64,
+          "padding_rows": 0
+        },
+        {
+          "phase": 202,
+          "active_games": 31,
+          "from_batch_size": 64,
+          "to_batch_size": 32,
+          "padding_rows": 1
+        }
+      ],
+      "move_phases": 358,
+      "games": 256,
+      "plies": 32830,
+      "failures": 0
+    },
+    {
+      "unit": "desert-snowball-model68800-800sims__270M__first-desert-snowball-model68800-800sims",
+      "player_a": "desert-snowball-model68800-800sims",
+      "player_b": "270M",
+      "opening_offset": 0,
+      "results_from_a": {
+        "draws": 45,
+        "wins": 176,
+        "losses": 35
+      },
+      "scheduler_version": "resident-v1-mctx-v1",
+      "stage_timings_synchronized": false,
+      "first_mover": "desert-snowball-model68800-800sims",
+      "wall_seconds": 1336.4458771245554,
+      "move_phase_seconds": {
+        "desert-snowball-model68800-800sims": 1258.7716956213117,
+        "270M": 64.9728824319318
+      },
+      "profile_stage_seconds": {
+        "initialize_slots_and_resident_env": 0.22099787089973688,
+        "resident_player_search": 1323.7445780532435,
+        "resident_step": 0.8524783300235868,
+        "decode_validate_and_push_python_boards": 0.6435265047475696,
+        "stockfish_adjudication": 37.63141886983067,
+        "termination_and_ply_cap_checks": 1.852366717532277,
+        "dynamic_compaction": 0.13481357973068953,
+        "build_output_pgn_objects": 0.09773085732012987
+      },
+      "profile_unattributed_seconds": 4.518484306521714,
+      "adjudication_pipeline": {
+        "prefetches": 371,
+        "used": 369,
+        "discarded": 2,
+        "overlap_seconds": 33.25051796529442
+      },
+      "profile_batch_size_calls": {
+        "32": 233,
+        "64": 28,
+        "128": 34,
+        "256": 116
+      },
+      "compactions": [
+        {
+          "phase": 116,
+          "active_games": 126,
+          "from_batch_size": 256,
+          "to_batch_size": 128,
+          "padding_rows": 2
+        },
+        {
+          "phase": 150,
+          "active_games": 62,
+          "from_batch_size": 128,
+          "to_batch_size": 64,
+          "padding_rows": 2
+        },
+        {
+          "phase": 178,
+          "active_games": 32,
+          "from_batch_size": 64,
+          "to_batch_size": 32,
+          "padding_rows": 0
+        }
+      ],
+      "move_phases": 411,
+      "games": 256,
+      "plies": 32115,
+      "failures": 0
+    },
+    {
+      "unit": "desert-snowball-model68800-800sims__270M__first-270M",
+      "player_a": "desert-snowball-model68800-800sims",
+      "player_b": "270M",
+      "opening_offset": 0,
+      "results_from_a": {
+        "draws": 58,
+        "wins": 149,
+        "losses": 49
+      },
+      "scheduler_version": "resident-v1-mctx-v1",
+      "stage_timings_synchronized": false,
+      "first_mover": "270M",
+      "wall_seconds": 1051.6435334142298,
+      "move_phase_seconds": {
+        "270M": 62.38740117754787,
+        "desert-snowball-model68800-800sims": 974.9089737962931
+      },
+      "profile_stage_seconds": {
+        "initialize_slots_and_resident_env": 0.21155710145831108,
+        "resident_player_search": 1037.296374973841,
+        "resident_step": 0.730381372384727,
+        "decode_validate_and_push_python_boards": 0.6520125884562731,
+        "stockfish_adjudication": 36.97082735784352,
+        "termination_and_ply_cap_checks": 1.9171681180596352,
+        "dynamic_compaction": 0.12906427402049303,
+        "build_output_pgn_objects": 0.11365663539618254
+      },
+      "profile_unattributed_seconds": 4.318384046666324,
+      "adjudication_pipeline": {
+        "prefetches": 276,
+        "used": 273,
+        "discarded": 3,
+        "overlap_seconds": 30.695893053896725
+      },
+      "profile_batch_size_calls": {
+        "32": 115,
+        "64": 54,
+        "128": 46,
+        "256": 114
+      },
+      "compactions": [
+        {
+          "phase": 114,
+          "active_games": 128,
+          "from_batch_size": 256,
+          "to_batch_size": 128,
+          "padding_rows": 0
+        },
+        {
+          "phase": 160,
+          "active_games": 63,
+          "from_batch_size": 128,
+          "to_batch_size": 64,
+          "padding_rows": 1
+        },
+        {
+          "phase": 214,
+          "active_games": 32,
+          "from_batch_size": 64,
+          "to_batch_size": 32,
+          "padding_rows": 0
+        }
+      ],
+      "move_phases": 329,
+      "games": 256,
+      "plies": 33048,
+      "failures": 0
+    }
+  ],
+  "player_stats": {
+    "desert-snowball-model34400-800sims": {
+      "backend": "mctx-opt",
+      "batch_calls": 357,
+      "positions": 43552,
+      "batch_wall_seconds": 1946.8497308725491,
+      "warmup_seconds": 23.84991837479174,
+      "positions_per_second": 22.37049902176099,
+      "compiled_batch_sizes": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "simulations": 800,
+      "qtransform": {
+        "root": {
+          "rescale_values": false,
+          "value_scale": 1.0,
+          "maxvisit_init": 25.0,
+          "use_mixed_value": true,
+          "visit_exponent": 0.5,
+          "visit_aggregator": "sum"
+        },
+        "interior": {
+          "rescale_values": false,
+          "value_scale": 1.0,
+          "maxvisit_init": 25.0,
+          "use_mixed_value": true,
+          "visit_exponent": 0.5,
+          "visit_aggregator": "sum"
+        }
+      }
+    },
+    "desert-snowball-model68800-800sims": {
+      "backend": "mctx-opt",
+      "batch_calls": 372,
+      "positions": 42944,
+      "batch_wall_seconds": 2233.4890966499224,
+      "warmup_seconds": 23.101855752058327,
+      "positions_per_second": 19.227315711732373,
+      "compiled_batch_sizes": [
+        32,
+        64,
+        128,
+        256
+      ],
+      "simulations": 800,
+      "qtransform": {
+        "root": {
+          "rescale_values": false,
+          "value_scale": 1.0,
+          "maxvisit_init": 25.0,
+          "use_mixed_value": true,
+          "visit_exponent": 0.5,
+          "visit_aggregator": "sum"
+        },
+        "interior": {
+          "rescale_values": false,
+          "value_scale": 1.0,
+          "maxvisit_init": 25.0,
+          "use_mixed_value": true,
+          "visit_exponent": 0.5,
+          "visit_aggregator": "sum"
+        }
+      }
+    },
+    "270M": {
+      "batch_calls": 731,
+      "positions": 87040,
+      "model_rows": 2065643,
+      "batch_wall_seconds": 259.0279356595129,
+      "warmup_seconds": 11.470877503044903,
+      "positions_per_second": 336.02553245226943,
+      "inference_batch_size": 128,
+      "inference_sharding": "data_parallel",
+      "inference_devices": [
+        "TPU_0(process=0,(0,0,0,0))",
+        "TPU_1(process=0,(1,0,0,0))",
+        "TPU_2(process=0,(0,1,0,0))",
+        "TPU_3(process=0,(1,1,0,0))"
+      ],
+      "model": "270M",
+      "repetition_check_version": "v2",
+      "repetition_checks": {
+        "candidate_checks": 2065643,
+        "authoritative_checks": 6751,
+        "prefilter_skips": 2058892,
+        "draw_overrides": 6751
+      }
+    }
+  },
+  "adjudicator_stats": {
+    "enabled": true,
+    "backend": "async_pool",
+    "calls": 131815,
+    "batch_wall_seconds": 148.37409736216068,
+    "mean_batch_wall_seconds_per_position": 0.0011256237709074133,
+    "pool_size": 48,
+    "mode": "standard",
+    "time_limit": 0.01,
+    "protocol_timeout": 60.0,
+    "engine_restarts": 0,
+    "elo": null,
+    "engine_path": "artifacts/stockfish/16/stockfish",
+    "engine_sha256": "8f60a016dc767e0d648a8665b8ede3e6e4d28c086ad90517ad26f55b9960bd84",
+    "engine_id": {
+      "name": "Stockfish 16",
+      "author": "the Stockfish developers (see AUTHORS file)"
+    }
+  },
+  "asset_sha256": {
+    "openings": "17127332f58c2a47505833af349d7fa0e3c2afdf5e5a94993c2f0ef4a55ae625",
+    "checkpoint:desert-snowball-model34400-800sims": "c8e7780fb0864eb0248fd18fa0e2dad142e49122321f6f9a709c132b48aa7797",
+    "checkpoint:desert-snowball-model68800-800sims": "086296db4973d851652fb9020bae4ef084bf9ff022b61547ddecca31fccfefe0",
+    "checkpoint:270M": "96adba9d943fdf5189e3d8cfb15a84ae1a3904b9453d1e8f64e4b1a32decff27"
+  },
+  "dependency_versions": {
+    "nanoalphazero": "0.3.0",
+    "jax": "0.8.1",
+    "jaxlib": "0.8.1",
+    "libtpu": "0.0.30",
+    "numpy": "2.3.5",
+    "mctx": "0.0.5",
+    "pgx1": "0.1.0",
+    "python-chess": "1.999",
+    "orbax-checkpoint": "0.11.30"
+  },
+  "devices": [
+    "TPU_0(process=0,(0,0,0,0))",
+    "TPU_1(process=0,(1,0,0,0))",
+    "TPU_2(process=0,(0,1,0,0))",
+    "TPU_3(process=0,(1,1,0,0))"
+  ],
+  "nanoalphazero_git_sha": "2b181205cb030d2e7056ef2b7202c5c7f6ad3975",
+  "timestamp": "2026-08-18T14:54:47.445904+00:00",
+  "bayeselo": {
+    "binary": "artifacts/bayeselo/BayesElo/bayeselo",
+    "pgn": "evals/tournament-desert-snowball-checkpoints-vs-searchless270m-800sims-512games-per-pair/runs/20260818-133743-79abe1e8f5/games.pgn",
+    "ratings": {
+      "desert-snowball-model68800-800sims": {
+        "rank": 1,
+        "elo": 88,
+        "plus": 19,
+        "minus": 19,
+        "games": 512,
+        "score_pct": 74,
+        "opponent_elo": -89,
+        "draws_pct": 20
+      },
+      "desert-snowball-model34400-800sims": {
+        "rank": 2,
+        "elo": 1,
+        "plus": 18,
+        "minus": 18,
+        "games": 512,
+        "score_pct": 63,
+        "opponent_elo": -89,
+        "draws_pct": 26
+      },
+      "270M": {
+        "rank": 3,
+        "elo": -89,
+        "plus": 13,
+        "minus": 13,
+        "games": 1024,
+        "score_pct": 32,
+        "opponent_elo": 44,
+        "draws_pct": 23
+      }
+    },
+    "elo_is_pool_relative": true,
+    "raw_output": "version 0057, Copyright (C) 1997-2010 Remi Coulom.\ncompiled Aug 18 2026 12:18:35.\nThis program comes with ABSOLUTELY NO WARRANTY.\nThis is free software, and you are welcome to redistribute it\nunder the terms and conditions of the GNU General Public License.\nSee http://www.gnu.org/copyleft/gpl.html for details.\nResultSet>ResultSet>ResultSet-EloRating>00:00:00,00\nResultSet-EloRating>0 left    \n00:00:00,00              \nResultSet-EloRating>Rank Name                                 Elo    +    - games score oppo. draws \n   1 desert-snowball-model68800-800sims    88   19   19   512   74%   -89   20% \n   2 desert-snowball-model34400-800sims     1   18   18   512   63%   -89   26% \n   3 270M                                 -89   13   13  1024   32%    44   23% \nResultSet-EloRating>27.9639\nResultSet-EloRating>97.5264\nResultSet-EloRating>                                    de de 27\ndesert-snowball-model68800-800sims     99100\ndesert-snowball-model34400-800sims   0    99\n270M                                 0  0   \nResultSet-EloRating>ResultSet>"
+  }
+}

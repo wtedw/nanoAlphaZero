@@ -1,0 +1,26 @@
+version = 1
+opponent = "270M"
+bootstrap_seed = 20260819
+bootstrap_samples = 50000
+confidence_level = 0.95
+
+[[runs]]
+label = "400 simulations"
+path = "../tournament-desert-snowball-checkpoints-vs-searchless270m-400sims-512games-per-pair/runs/20260818-121855-0a890a3592"
+config_hash = "0a890a3592f106673e1c7d99831fc746331f3cd5b16beacaf517950bac70d670"
+games_sha256 = "daa5eabc9884d745441ece129eae654cf6a81a283d1b59b46ad92fea8923c1a0"
+summary_sha256 = "ab666ceffad11f2407c566eb0437d0fa9217416c164a32f1a4df44d70d10175d"
+
+[[runs]]
+label = "800 simulations"
+path = "../tournament-desert-snowball-checkpoints-vs-searchless270m-800sims-512games-per-pair/runs/20260818-133743-79abe1e8f5"
+config_hash = "79abe1e8f5cacef3308efbbaa5a84b97f55a5b209b854b09002554886347f39a"
+games_sha256 = "0ba517ff56dd89ae8a174828e5c4025588b0cebdea121e62bf98735bf940f944"
+summary_sha256 = "02e1d03bc7f20baa6101672a569c40249fb2693384e7138fe71b390a23c5fb7a"
+
+[[runs]]
+label = "1600 and 3200 simulations"
+path = "../tournament-desert-snowball-checkpoints-vs-searchless270m-1600-3200sims-512games-per-pair/runs/20260818-184509-0e172eabae"
+config_hash = "0e172eabae840c8b1edab80d047462f8e367500eab637d101c7142ac6feda996"
+games_sha256 = "a0a55b2f3680a32261060a19a9a27fab99eecfd89f434ee4e3abf7529e56aa78"
+summary_sha256 = "334bfab242e731088a367f53aeed62d45bd63b3d3c2faa50458a049d85cefa6d"

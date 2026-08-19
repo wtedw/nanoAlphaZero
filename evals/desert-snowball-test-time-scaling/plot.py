@@ -1,0 +1,332 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "matplotlib==3.10.5",
+#   "numpy==2.3.2",
+# ]
+# ///
+
+"""Rebuild the Desert Snowball test-time scaling table and figure."""
+
+from __future__ import annotations
+
+import csv
+import hashlib
+import json
+import re
+import tomllib
+from collections import Counter, defaultdict
+from dataclasses import dataclass
+from pathlib import Path
+
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+
+
+HERE = Path(__file__).resolve().parent
+AGENT_RE = re.compile(r"desert-snowball-model(?P<checkpoint>\d+)-(?P<sims>\d+)sims")
+HEADER_RE = re.compile(r'^\[([^ ]+) "(.*)"\]$')
+
+
+@dataclass(frozen=True)
+class Result:
+    checkpoint: int
+    simulations: int
+    games: int
+    wins: int
+    draws: int
+    losses: int
+    score: float
+    score_elo: float
+    elo_ci_low: float
+    elo_ci_high: float
+    bayeselo_relative: int
+    source_run: str
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def pgn_headers(path: Path) -> list[dict[str, str]]:
+    games: list[dict[str, str]] = []
+    headers: dict[str, str] = {}
+    with path.open(encoding="utf-8") as pgn:
+        for raw_line in pgn:
+            line = raw_line.rstrip("\n")
+            match = HEADER_RE.match(line)
+            if match:
+                headers[match.group(1)] = match.group(2)
+            elif not line and headers:
+                games.append(headers)
+                headers = {}
+    if headers:
+        games.append(headers)
+    return games
+
+
+def score_for(headers: dict[str, str], agent: str) -> float:
+    result = headers["Result"]
+    if result == "1/2-1/2":
+        return 0.5
+    if result == "1-0":
+        return 1.0 if headers["White"] == agent else 0.0
+    if result == "0-1":
+        return 1.0 if headers["Black"] == agent else 0.0
+    raise ValueError(f"unsupported PGN result: {result!r}")
+
+
+def elo_from_score(score: np.ndarray | float) -> np.ndarray | float:
+    clipped = np.clip(score, 1e-12, 1.0 - 1e-12)
+    return 400.0 * np.log10(clipped / (1.0 - clipped))
+
+
+def paired_bootstrap_ci(
+    cluster_scores: np.ndarray,
+    *,
+    samples: int,
+    confidence: float,
+    seed: int,
+) -> tuple[float, float]:
+    rng = np.random.default_rng(seed)
+    values: list[np.ndarray] = []
+    batch_size = 2_000
+    for start in range(0, samples, batch_size):
+        count = min(batch_size, samples - start)
+        indices = rng.integers(
+            0,
+            len(cluster_scores),
+            size=(count, len(cluster_scores)),
+            dtype=np.int16,
+        )
+        values.append(elo_from_score(cluster_scores[indices].mean(axis=1)))
+    bootstrap_elos = np.concatenate(values)
+    alpha = (1.0 - confidence) / 2.0
+    low, high = np.quantile(bootstrap_elos, [alpha, 1.0 - alpha])
+    return float(low), float(high)
+
+
+def analyze_run(run: dict[str, object], settings: dict[str, object]) -> list[Result]:
+    run_dir = (HERE / str(run["path"])).resolve()
+    games_path = run_dir / "games.pgn"
+    summary_path = run_dir / "summary.json"
+
+    for path, expected in (
+        (games_path, run["games_sha256"]),
+        (summary_path, run["summary_sha256"]),
+    ):
+        actual = sha256(path)
+        if actual != expected:
+            raise ValueError(f"SHA-256 mismatch for {path}: {actual} != {expected}")
+
+    summary = json.loads(summary_path.read_text())
+    if summary["config_hash"] != run["config_hash"]:
+        raise ValueError(f"config hash mismatch in {summary_path}")
+    if summary["games_in_pgn"] != summary["expected_games"]:
+        raise ValueError(f"incomplete tournament in {summary_path}")
+    if any(batch["failures"] for batch in summary["pair_batches"]):
+        raise ValueError(f"game failures recorded in {summary_path}")
+
+    games = pgn_headers(games_path)
+    if len(games) != summary["games_in_pgn"]:
+        raise ValueError(f"PGN count mismatch in {games_path}")
+
+    agents = sorted(
+        {
+            player
+            for game in games
+            for player in (game["White"], game["Black"])
+            if AGENT_RE.fullmatch(player)
+        }
+    )
+    output: list[Result] = []
+    for agent in agents:
+        match = AGENT_RE.fullmatch(agent)
+        assert match is not None
+        checkpoint = int(match.group("checkpoint"))
+        simulations = int(match.group("sims"))
+        agent_games = [game for game in games if agent in (game["White"], game["Black"])]
+
+        scores_by_opening: defaultdict[str, list[float]] = defaultdict(list)
+        colors_by_opening: defaultdict[str, set[str]] = defaultdict(set)
+        outcomes: Counter[str] = Counter()
+        for game in agent_games:
+            score = score_for(game, agent)
+            scores_by_opening[game["OpeningIndex"]].append(score)
+            colors_by_opening[game["OpeningIndex"]].add(
+                "white" if game["White"] == agent else "black"
+            )
+            outcomes["win" if score == 1.0 else "loss" if score == 0.0 else "draw"] += 1
+
+        if len(agent_games) != 512 or len(scores_by_opening) != 256:
+            raise ValueError(f"expected 512 games over 256 openings for {agent}")
+        if any(len(scores) != 2 for scores in scores_by_opening.values()):
+            raise ValueError(f"openings are not paired for {agent}")
+        if any(colors != {"white", "black"} for colors in colors_by_opening.values()):
+            raise ValueError(f"openings are not color-reversed for {agent}")
+
+        summary_counts = Counter()
+        for batch in summary["pair_batches"]:
+            if batch["player_a"] == agent:
+                for key, value in batch["results_from_a"].items():
+                    singular = {"wins": "win", "draws": "draw", "losses": "loss"}[key]
+                    summary_counts[singular] += value
+        if outcomes != summary_counts:
+            raise ValueError(f"PGN and summary results disagree for {agent}")
+
+        cluster_scores = np.asarray(
+            [sum(scores) / 2.0 for _, scores in sorted(scores_by_opening.items())],
+            dtype=np.float64,
+        )
+        score = float(cluster_scores.mean())
+        score_elo = float(elo_from_score(score))
+        ci_low, ci_high = paired_bootstrap_ci(
+            cluster_scores,
+            samples=int(settings["bootstrap_samples"]),
+            confidence=float(settings["confidence_level"]),
+            seed=int(settings["bootstrap_seed"]) + checkpoint * 10 + simulations,
+        )
+
+        ratings = summary["bayeselo"]["ratings"]
+        relative_bayeselo = int(ratings[agent]["elo"] - ratings[str(settings["opponent"])]["elo"])
+        output.append(
+            Result(
+                checkpoint=checkpoint,
+                simulations=simulations,
+                games=len(agent_games),
+                wins=outcomes["win"],
+                draws=outcomes["draw"],
+                losses=outcomes["loss"],
+                score=score,
+                score_elo=score_elo,
+                elo_ci_low=ci_low,
+                elo_ci_high=ci_high,
+                bayeselo_relative=relative_bayeselo,
+                source_run=str(run["path"]),
+            )
+        )
+    return output
+
+
+def write_csv(results: list[Result]) -> None:
+    fields = [
+        "checkpoint",
+        "simulations",
+        "games",
+        "wins",
+        "draws",
+        "losses",
+        "score_pct",
+        "score_elo",
+        "elo_ci_low",
+        "elo_ci_high",
+        "bayeselo_relative",
+        "source_run",
+    ]
+    with (HERE / "results.csv").open("w", newline="", encoding="utf-8") as output:
+        writer = csv.DictWriter(output, fieldnames=fields, lineterminator="\n")
+        writer.writeheader()
+        for result in results:
+            writer.writerow(
+                {
+                    "checkpoint": f"model{result.checkpoint}",
+                    "simulations": result.simulations,
+                    "games": result.games,
+                    "wins": result.wins,
+                    "draws": result.draws,
+                    "losses": result.losses,
+                    "score_pct": f"{100.0 * result.score:.2f}",
+                    "score_elo": f"{result.score_elo:.2f}",
+                    "elo_ci_low": f"{result.elo_ci_low:.2f}",
+                    "elo_ci_high": f"{result.elo_ci_high:.2f}",
+                    "bayeselo_relative": result.bayeselo_relative,
+                    "source_run": result.source_run,
+                }
+            )
+
+
+def write_figure(results: list[Result]) -> None:
+    mpl.rcParams.update(
+        {
+            "font.family": "DejaVu Sans",
+            "font.size": 10,
+            "axes.titleweight": "bold",
+            "axes.spines.top": False,
+            "axes.spines.right": False,
+            "svg.hashsalt": "nanoalphazero-desert-snowball-scaling-v1",
+        }
+    )
+    colors = {34400: "#2563eb", 68800: "#e46f2a"}
+    labels = {34400: "model34400 (under 24h)", 68800: "model68800 (48h)"}
+
+    fig, ax = plt.subplots(figsize=(7.2, 4.4), constrained_layout=True)
+    for checkpoint in (34400, 68800):
+        rows = sorted(
+            (result for result in results if result.checkpoint == checkpoint),
+            key=lambda result: result.simulations,
+        )
+        x = np.asarray([result.simulations for result in rows])
+        y = np.asarray([result.score_elo for result in rows])
+        yerr = np.asarray(
+            [
+                [result.score_elo - result.elo_ci_low for result in rows],
+                [result.elo_ci_high - result.score_elo for result in rows],
+            ]
+        )
+        ax.errorbar(
+            x,
+            y,
+            yerr=yerr,
+            marker="o",
+            markersize=6,
+            linewidth=2.2,
+            capsize=3.5,
+            color=colors[checkpoint],
+            label=labels[checkpoint],
+        )
+
+    ax.axhline(0, color="#64748b", linewidth=1, linestyle="--", zorder=0)
+    ax.set_xscale("log", base=2)
+    ax.set_xticks([400, 800, 1600, 3200], labels=["400", "800", "1,600", "3,200"])
+    ax.set_xlabel("MCTS simulations per move")
+    ax.set_ylabel("Score-derived Elo difference vs 270M")
+    ax.set_title("Desert Snowball test-time scaling")
+    ax.grid(axis="y", color="#cbd5e1", linewidth=0.7, alpha=0.65)
+    ax.legend(frameon=False, loc="upper left")
+    output_path = HERE / "test-time-scaling.svg"
+    fig.savefig(output_path, metadata={"Date": None})
+    plt.close(fig)
+    # Matplotlib emits spaces before line breaks in path data. Strip them so
+    # generated-file whitespace checks stay useful.
+    output_path.write_text(
+        "\n".join(line.rstrip() for line in output_path.read_text().splitlines()) + "\n"
+    )
+
+
+def main() -> None:
+    settings = tomllib.loads((HERE / "manifest.toml").read_text())
+    results = sorted(
+        (
+            result
+            for run in settings["runs"]
+            for result in analyze_run(run, settings)
+        ),
+        key=lambda result: (result.checkpoint, result.simulations),
+    )
+    expected = {(checkpoint, sims) for checkpoint in (34400, 68800) for sims in (400, 800, 1600, 3200)}
+    actual = {(result.checkpoint, result.simulations) for result in results}
+    if actual != expected:
+        raise ValueError(f"incomplete scaling sweep: {actual}")
+    write_csv(results)
+    write_figure(results)
+    print(f"wrote {HERE / 'results.csv'}")
+    print(f"wrote {HERE / 'test-time-scaling.svg'}")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,9 @@
+checkpoint,simulations,games,wins,draws,losses,score_pct,score_elo,elo_ci_low,elo_ci_high,bayeselo_relative,source_run
+model34400,400,512,205,144,163,54.10,28.56,4.75,52.65,27,../tournament-desert-snowball-checkpoints-vs-searchless270m-400sims-512games-per-pair/runs/20260818-121855-0a890a3592
+model34400,800,512,256,131,125,62.79,90.91,64.52,117.62,90,../tournament-desert-snowball-checkpoints-vs-searchless270m-800sims-512games-per-pair/runs/20260818-133743-79abe1e8f5
+model34400,1600,512,325,115,72,74.71,188.14,161.32,217.19,186,../tournament-desert-snowball-checkpoints-vs-searchless270m-1600-3200sims-512games-per-pair/runs/20260818-184509-0e172eabae
+model34400,3200,512,359,108,45,80.66,248.13,219.16,279.18,238,../tournament-desert-snowball-checkpoints-vs-searchless270m-1600-3200sims-512games-per-pair/runs/20260818-184509-0e172eabae
+model68800,400,512,261,131,120,63.77,98.22,72.98,124.50,99,../tournament-desert-snowball-checkpoints-vs-searchless270m-400sims-512games-per-pair/runs/20260818-121855-0a890a3592
+model68800,800,512,325,103,84,73.54,177.53,151.41,204.70,177,../tournament-desert-snowball-checkpoints-vs-searchless270m-800sims-512games-per-pair/runs/20260818-133743-79abe1e8f5
+model68800,1600,512,391,77,44,83.89,286.60,253.62,323.02,283,../tournament-desert-snowball-checkpoints-vs-searchless270m-1600-3200sims-512games-per-pair/runs/20260818-184509-0e172eabae
+model68800,3200,512,398,70,44,84.57,295.54,261.49,333.43,294,../tournament-desert-snowball-checkpoints-vs-searchless270m-1600-3200sims-512games-per-pair/runs/20260818-184509-0e172eabae

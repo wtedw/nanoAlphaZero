@@ -1,0 +1,12 @@
+{
+  "config_hash": "79abe1e8f5cacef3308efbbaa5a84b97f55a5b209b854b09002554886347f39a",
+  "created_at": "2026-08-18T13:37:43.371330+00:00",
+  "completed_units": [
+    "desert-snowball-model34400-800sims__270M__first-desert-snowball-model34400-800sims",
+    "desert-snowball-model34400-800sims__270M__first-270M",
+    "desert-snowball-model68800-800sims__270M__first-desert-snowball-model68800-800sims",
+    "desert-snowball-model68800-800sims__270M__first-270M"
+  ],
+  "scheduler_version": "resident-v1-mctx-v1",
+  "updated_at": "2026-08-18T14:54:47.255584+00:00"
+}
