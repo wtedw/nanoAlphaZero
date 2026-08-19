@@ -28,6 +28,42 @@ from matplotlib.transforms import blended_transform_factory
 HERE = Path(__file__).resolve().parent
 AGENT_RE = re.compile(r"desert-snowball-model(?P<checkpoint>\d+)-(?P<sims>\d+)sims")
 HEADER_RE = re.compile(r'^\[([^ ]+) "(.*)"\]$')
+THEMES = {
+    "light": {
+        "suffix": "",
+        "fig_bg": "white",
+        "axes_bg": "#f4f7f4",
+        "grid": "#ffffff",
+        "spine": "#cccccc",
+        "title": "#1a1a2e",
+        "axis_label": "#333333",
+        "tick": "#555555",
+        "caption": "#777777",
+        "baseline": "#d2601a",
+        "marker_edge": "white",
+        "legend_bg": "white",
+        "legend_edge": "#dddddd",
+        "legend_title": "#666666",
+        "series": {34400: "#2f78c4", 68800: "#1f6b34"},
+    },
+    "dark": {
+        "suffix": "-dark",
+        "fig_bg": "#15181c",
+        "axes_bg": "#20252c",
+        "grid": "#2b3037",
+        "spine": "#3a4048",
+        "title": "#f0f2f4",
+        "axis_label": "#c8ced4",
+        "tick": "#9aa2aa",
+        "caption": "#9aa2aa",
+        "baseline": "#f0913f",
+        "marker_edge": "#20252c",
+        "legend_bg": "#23282f",
+        "legend_edge": "#3a4048",
+        "legend_title": "#9aa2aa",
+        "series": {34400: "#5aa9f0", 68800: "#5cc85c"},
+    },
+}
 PLOT = {
     "title": "24h to beat a GM-level transformer",
     "x_label": "MCTS simulations per move",
@@ -36,8 +72,8 @@ PLOT = {
     "baseline_label": "270M transformer · GM-level vs humans",
     "caption_prefix": "Trained on TPU v4-32 · 512 games/point",
     "series": {
-        34400: {"label": "~24h", "color": "#2f78c4"},
-        68800: {"label": "~48h", "color": "#1f6b34"},
+        34400: {"label": "~24h"},
+        68800: {"label": "~48h"},
     },
 }
 
@@ -263,18 +299,19 @@ def write_csv(results: list[Result]) -> None:
             )
 
 
-def write_figure(results: list[Result]) -> None:
+def write_figure(results: list[Result], theme: dict[str, object]) -> Path:
+    mpl.rcdefaults()
     plt.style.use("seaborn-v0_8-whitegrid")
     mpl.rcParams.update(
         {
             "font.family": "DejaVu Sans",
             "axes.spines.top": False,
             "axes.spines.right": False,
-            "svg.hashsalt": "nanoalphazero-desert-snowball-scaling-v1",
+            "svg.hashsalt": f"nanoalphazero-scaling-{theme['suffix'] or 'light'}-v1",
         }
     )
     fig, ax = plt.subplots(figsize=(9.5, 6), dpi=110, constrained_layout=False)
-    fig.patch.set_facecolor("white")
+    fig.patch.set_facecolor(theme["fig_bg"])
     fig.subplots_adjust(left=0.105, right=0.97, top=0.88, bottom=0.19)
 
     baseline = float(PLOT["baseline"])
@@ -282,9 +319,9 @@ def write_figure(results: list[Result]) -> None:
     ylim_top = ymax * 1.15
     ylim_bottom = -30.0
     ax.set_ylim(ylim_bottom, ylim_top)
-    ax.set_facecolor("#f4f7f4")
+    ax.set_facecolor(theme["axes_bg"])
     ax.set_axisbelow(True)
-    ax.grid(True, color="#ffffff", linewidth=1.0)
+    ax.grid(True, color=theme["grid"], linewidth=1.0)
 
     series = PLOT["series"]
     for checkpoint in (34400, 68800):
@@ -295,25 +332,26 @@ def write_figure(results: list[Result]) -> None:
         x = np.asarray([result.simulations for result in rows])
         y = np.asarray([result.score_elo for result in rows])
         style = series[checkpoint]
+        color = theme["series"][checkpoint]
         ax.plot(
             x,
             y,
             marker="o",
             markersize=8,
-            markerfacecolor=style["color"],
-            markeredgecolor="white",
+            markerfacecolor=color,
+            markeredgecolor=theme["marker_edge"],
             markeredgewidth=1.2,
             linewidth=2.2,
             solid_joinstyle="round",
             solid_capstyle="round",
-            color=style["color"],
+            color=color,
             label=style["label"],
             zorder=3,
         )
 
     baseline_line = ax.axhline(
         baseline,
-        color="#d2601a",
+        color=theme["baseline"],
         linestyle="--",
         linewidth=1.8,
         zorder=2,
@@ -329,7 +367,7 @@ def write_figure(results: list[Result]) -> None:
         va="bottom",
         fontsize=11,
         fontstyle="italic",
-        color="#d2601a",
+        color=theme["baseline"],
         zorder=4,
     )
 
@@ -337,33 +375,37 @@ def write_figure(results: list[Result]) -> None:
     ax.set_xticks([400, 800, 1600, 3200], labels=["400", "800", "1,600", "3,200"])
     ax.xaxis.set_minor_locator(mpl.ticker.NullLocator())
     ax.set_xlim(350, 3_900)
-    ax.set_xlabel(PLOT["x_label"], fontsize=13, color="#333333", labelpad=10)
-    ax.set_ylabel(PLOT["y_label"], fontsize=13, color="#333333", labelpad=10)
+    ax.set_xlabel(PLOT["x_label"], fontsize=13, color=theme["axis_label"], labelpad=10)
+    ax.set_ylabel(PLOT["y_label"], fontsize=13, color=theme["axis_label"], labelpad=10)
     ax.set_title(
         PLOT["title"],
         fontsize=15,
         fontweight="bold",
-        color="#1a1a2e",
+        color=theme["title"],
         pad=15,
     )
-    ax.tick_params(axis="both", which="both", labelsize=11, colors="#555555", length=0)
+    ax.tick_params(
+        axis="both", which="both", labelsize=11, colors=theme["tick"], length=0
+    )
     for spine_name in ("left", "bottom"):
-        ax.spines[spine_name].set_color("#cccccc")
+        ax.spines[spine_name].set_color(theme["spine"])
         ax.spines[spine_name].set_linewidth(0.8)
     legend = ax.legend(
         title="Training time",
         loc="upper left",
         frameon=True,
-        facecolor="white",
-        edgecolor="#dddddd",
+        facecolor=theme["legend_bg"],
+        edgecolor=theme["legend_edge"],
         framealpha=0.95,
         borderpad=0.8,
         labelspacing=0.6,
         handlelength=3,
         fontsize=12,
     )
+    for text in legend.get_texts():
+        text.set_color(theme["axis_label"])
     legend.get_title().set_fontsize(11)
-    legend.get_title().set_color("#666666")
+    legend.get_title().set_color(theme["legend_title"])
     standard_errors = [
         (result.elo_ci_high - result.elo_ci_low) / 3.92 for result in results
     ]
@@ -378,17 +420,18 @@ def write_figure(results: list[Result]) -> None:
         ha="left",
         fontsize=9.5,
         fontstyle="italic",
-        color="#777777",
+        color=theme["caption"],
     )
 
-    output_path = HERE / "test-time-scaling.svg"
-    fig.savefig(output_path, metadata={"Date": None})
+    output_path = HERE / f"test-time-scaling{theme['suffix']}.svg"
+    fig.savefig(output_path, facecolor=theme["fig_bg"], metadata={"Date": None})
     plt.close(fig)
     # Matplotlib emits spaces before line breaks in path data. Strip them so
     # generated-file whitespace checks stay useful.
     output_path.write_text(
         "\n".join(line.rstrip() for line in output_path.read_text().splitlines()) + "\n"
     )
+    return output_path
 
 
 def main() -> None:
@@ -406,9 +449,9 @@ def main() -> None:
     if actual != expected:
         raise ValueError(f"incomplete scaling sweep: {actual}")
     write_csv(results)
-    write_figure(results)
     print(f"wrote {HERE / 'results.csv'}")
-    print(f"wrote {HERE / 'test-time-scaling.svg'}")
+    for theme in THEMES.values():
+        print(f"wrote {write_figure(results, theme)}")
 
 
 if __name__ == "__main__":

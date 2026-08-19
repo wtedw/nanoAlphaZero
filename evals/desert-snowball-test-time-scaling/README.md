@@ -1,6 +1,9 @@
 # Desert Snowball test-time scaling
 
-![Desert Snowball test-time scaling](test-time-scaling.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="test-time-scaling-dark.svg">
+  <img alt="Desert Snowball test-time scaling" src="test-time-scaling.svg">
+</picture>
 
 The two released 10-block, 256-channel checkpoints were evaluated against the
 same Searchless Chess 270M reference. model34400 was trained in under 24 hours
@@ -38,7 +41,8 @@ uv run evals/desert-snowball-test-time-scaling/plot.py
 
 The script verifies the source PGN and summary hashes in `manifest.toml`,
 checks the game counts, failures, colors, opening pairs, and summary W-D-L,
-then regenerates `results.csv` and `test-time-scaling.svg`. The source runs are:
+then regenerates `results.csv`, `test-time-scaling.svg`, and
+`test-time-scaling-dark.svg`. The source runs are:
 
 - [400 simulations](../tournament-desert-snowball-checkpoints-vs-searchless270m-400sims-512games-per-pair/runs/20260818-121855-0a890a3592)
 - [800 simulations](../tournament-desert-snowball-checkpoints-vs-searchless270m-800sims-512games-per-pair/runs/20260818-133743-79abe1e8f5)

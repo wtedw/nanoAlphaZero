@@ -1,12 +1,14 @@
 # nanoAlphaZero
 
-nanoAlphaZero is a game-agnostic, high-performance implementation of AlphaZero. Despite its size, it can reach perfect play in games like Hex and grandmaster-level strength in chess.
+nanoAlphaZero is a game-agnostic, high-performance implementation of AlphaZero. It reaches perfect play in games like Hex, and grandmaster-level strength in chess.
 
-demo: [play against the nets](https://nanoalphazero.wtedw.com/) 
+demo: [play against the models](https://nanoalphazero.wtedw.com/) 
 
 <div align="center">
-<img width="900" height="565" alt="elo_multi_hours_light-6-30-26" src="https://github.com/user-attachments/assets/f5e09015-dc98-453b-b953-748c10517038#gh-light-mode-only" />
-<img width="900" height="565" alt="elo_multi_hours-6-30-26" src="https://github.com/user-attachments/assets/8f9bcf59-2b40-49b1-9b68-fad2fba1559b#gh-dark-mode-only" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="evals/desert-snowball-test-time-scaling/test-time-scaling-dark.svg">
+  <img width="900" alt="24h to beat a GM-level transformer" src="evals/desert-snowball-test-time-scaling/test-time-scaling.svg">
+</picture>
 </div>
 
 ## How is this different from other implementations?
@@ -21,14 +23,16 @@ demo: [play against the nets](https://nanoalphazero.wtedw.com/)
 - **It's dead simple to run.** Clone the repo, then `uv run train --env chess`.
 - **It's fast.** Our custom, TPU-native JAX environments
   ([pgx1](https://github.com/wtedw/pgx1)) run orders of magnitude faster than
-  the reference implementation. For MCTS search, we parallelize the sequential
-  halving algorithm from Gumbel MuZero via [mctx](https://github.com/deepmind/mctx):
+  the reference implementation. For MCTS, we parallelize the sequential
+  halving algorithm from Gumbel MuZero via [mctx](https://github.com/deepmind/mctx).
 
-  | env      | pgx     | pgx1     | speedup | env/s (batch 4096) |
-  | -------- | ------: | -------: | ------: | ------------------: |
-  | go_9x9   | 80.5 ms | 0.535 ms | 150x    | 7.7M                |
-  | go_19x19 | 656 ms  | 1.595 ms | 411x    | 2.6M                |
-  | chess    | 904 ms  | 0.832 ms | 1087x   | 4.9M                |
+Environment step benchmarks:
+
+| env      | pgx     | pgx1     | speedup | env/s (batch 4096) |
+| -------- | ------: | -------: | ------: | ------------------: |
+| go_9x9   | 80.5 ms | 0.535 ms | 150x    | 7.7M                |
+| go_19x19 | 656 ms  | 1.595 ms | 411x    | 2.6M                |
+| chess    | 904 ms  | 0.832 ms | 1087x   | 4.9M                |
 
 > note: all code is optimized for TPUs; correctness on GPUs isn't guaranteed.
 
@@ -214,7 +218,7 @@ Run the notebook in Colab on a TPU.
 
 ### Chess
 
-We adapted the tournament format from Searchless Chess, but added support for running batched games (DP-sharded).
+Run head-to-head matches or round-robin tournaments between nanoAlphaZero checkpoints, DeepMind's [Searchless Chess](https://github.com/google-deepmind/searchless_chess) (search-free transformer models), and Stockfish.
 
 ```bash
 uv sync --group dev
@@ -241,30 +245,28 @@ See the [tournament documentation](docs/chess-tournaments.md) for more details.
 ### Chess
 
 Using a TPU v4-32 pod, we can train grandmaster-level chess models in under
-24h with ~12 MCTS simulations.
+24h with ~12 MCTS simulations. Since there are few reference opponents on
+TPUs, we base our claim on beating Searchless Chess's 270M model, which itself
+reached a 2895 Lichess Blitz Elo against human players.
 
-But is it really grandmaster level?
-
-Since there are hardly any reference players to run against on TPUs, we base
-the "grandmaster-level" claim on beating Searchless Chess's 270M model, which
-itself reached a 2895 Lichess Blitz Elo against human players. That rating
-provides context for the opponent; the figure reports only head-to-head Elo
-differences.
-
-Their models are ideal to play against because:
+These models make ideal opponents:
 1. they're JAX/Haiku based
 2. we can run batched tournaments against them on TPUs
 3. they don't require search, so one model inference should reproduce the same
-   strength
+   playing ability
 
 Here's how our
 [10x256nbt models](https://github.com/wtedw/nanoAlphaZero/releases/tag/desert-snowball-1028-checkpoints-v1)
 do against Searchless Chess 270M.
 
-![Chess Elo vs. test-time compute](evals/desert-snowball-test-time-scaling/test-time-scaling.svg)
+| Checkpoint | Training | Search | W-D-L vs 270M | Score | Relative Elo |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `model34400` | 24h | 400 sims | 205-144-163 | 54.1% | +27 |
+| `model34400` | 24h | 800 sims | 256-131-125 | 62.8% | +90 |
+| `model68800` | 48h | 400 sims | 261-131-120 | 63.8% | +99 |
+| `model68800` | 48h | 800 sims | 325-103-84 | 73.5% | +177 |
 
-Full W-D-L results, 95% confidence intervals, raw PGNs, and reproduction
-details are in the [evaluation report](evals/desert-snowball-test-time-scaling/README.md).
+For more details: see the [evaluation report](evals/desert-snowball-test-time-scaling/README.md).
 
 ### Hex
 
