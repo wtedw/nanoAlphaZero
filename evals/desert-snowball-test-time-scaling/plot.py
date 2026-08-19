@@ -34,7 +34,7 @@ PLOT = {
     "y_label": "Elo difference vs. 270M",
     "baseline": 0.0,
     "baseline_label": "270M transformer · GM-level vs humans",
-    "caption_prefix": "TPU v4-32 · 512 games/point",
+    "caption_prefix": "Trained on TPU v4-32 · 512 games/point",
     "series": {
         34400: {"label": "~24h", "color": "#2f78c4"},
         68800: {"label": "~48h", "color": "#1f6b34"},
