@@ -53,6 +53,26 @@ cd nanoAlphaZero
 uv run train --env ttt
 ```
 
+## Code layout
+
+```text
+src/nanoalphazero/
+├── config.py       Built-in game and training defaults
+├── core.py         Self-play and training computation
+├── mcts.py         Gumbel MuZero tree search
+├── model.py        Neural-network architectures
+├── buffers.py      Self-play and replay buffers
+├── training.py     Training loop, diagnostics, and logging
+├── checkpoint.py   Checkpoint serialization
+├── play.py         Interactive play
+└── cli.py          Command-line entry points
+
+# Primarily developed and maintained with coding agents
+src/nanoalphazero/eval/   Tournament and evaluation infrastructure
+evals/                    Reproducible evaluation configs and results
+tests/                    Evaluation and package verification
+```
+
 ## Train
 
 Train a model, then drop into an interactive game against it. The trained params
