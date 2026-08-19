@@ -34,7 +34,10 @@ PLOT = {
     "y_label": "Elo difference vs. 270M",
     "baseline": 0.0,
     "baseline_label": "270M transformer · 2895 Lichess Blitz*",
-    "caption": "*Reported Lichess rating; points show relative Elo over 512 games each.",
+    "caption": (
+        "Models trained on a TPU v4-32 pod. *Reported Lichess rating; "
+        "points show relative Elo over 512 games each."
+    ),
     "series": {
         34400: {"label": "~24h", "color": "#2f78c4"},
         68800: {"label": "~48h", "color": "#1f6b34"},
