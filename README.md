@@ -1,18 +1,37 @@
 # nanoAlphaZero
 
-nanoAlphaZero is quite possibly the strongest single-file implementation of AlphaZero out there. Despite its small footprint, it achieves perfect-play results for any solvable game, and with enough train-time and test-time compute, it reaches super-grandmaster Elo in chess. 
+nanoAlphaZero is a game-agnostic, high-performance implementation of AlphaZero. Despite its size, it can reach perfect play in games like Hex and grandmaster-level strength in chess.
+
+demo: [play against the nets](https://nanoalphazero.wtedw.com/) 
 
 <div align="center">
 <img width="900" height="565" alt="elo_multi_hours_light-6-30-26" src="https://github.com/user-attachments/assets/f5e09015-dc98-453b-b953-748c10517038#gh-light-mode-only" />
 <img width="900" height="565" alt="elo_multi_hours-6-30-26" src="https://github.com/user-attachments/assets/8f9bcf59-2b40-49b1-9b68-fad2fba1559b#gh-dark-mode-only" />
 </div>
 
-It's also game-agnostic: point it at any two-player board game, adjust the model size, and it learns to play.
+## How is this different?
 
-> note: this is a WIP.
-> - all code is optimized for TPUs, including our game environments ([wtedw/pgx1](https://github.com/wtedw/pgx1))
-> - chess reaches strong play after about 200k updates; smaller games converge much sooner
-> - custom games require their own PGX-style env implementation
+- **It scales to chess.** Not a toy AlphaZero implementation. It can train a
+  grandmaster level chess model in under 24h on a TPU.
+- **Genuinely game-agnostic**. We validate the core logic across Hex, Connect4,
+  Go, and chess, and demonstrate how to train AlphaZero on custom games of your
+  own using a Colab notebook.
+- **Training is one JAX function.** Self-play, MCTS, and training
+  are fused into a single jitted call (`run_fn`).
+- **It's dead simple to run.** Install `uv`, clone the repo,
+  `uv run train --env chess`.
+- **It's fast.** We use custom, TPU-native JAX environments ([pgx1](https://github.com/wtedw/pgx1)) that
+  are orders of magnitude faster to run compared to the reference implementation.
+  For MCTS search, we parallelize the sequential halving algorithm from Gumbel
+  MuZero via [mctx](https://github.com/deepmind/mctx):
+
+  | env      | pgx     | pgx1     | speedup | env/s (batch 4096) |
+  | -------- | ------: | -------: | ------: | ------------------: |
+  | go_9x9   | 80.5 ms | 0.535 ms | 150x    | 7.7M                |
+  | go_19x19 | 656 ms  | 1.595 ms | 411x    | 2.6M                |
+  | chess    | 904 ms  | 0.832 ms | 1087x   | 4.9M                |
+
+> note: all code is optimized for TPUs; correctness on GPUs isn't guaranteed.
 
 ## Setup
 
@@ -53,10 +72,7 @@ Supported games:
 | Hex         | `hex4`–`hex9`     | solid up to 8x8 (`hex9` is less tested)                    |
 | Chess       | `chess`           | solid, reaches strong play given enough compute            |
 | Connect4    | `connect4`        | reaches perfect play outcomes, can struggle to maintain it |
-| Go          | `go3`–`go9`       | recently added, not yet tested                             |
-
-New chess runs use a spatial KataGo-style policy head over pgx1's 64×73 move
-encoding. Checkpoint metadata records the resolved model preset and architecture.
+| Go          | `go3`–`go9`       | trains well up to 9x9                                      |
 
 Options:
 
@@ -67,7 +83,8 @@ Options:
 | `--no-play`    | train only, skip the interactive game afterward   |
 | `--enable-wandb` | log metrics and upload versioned model artifacts |
 
-### Watch it train (all in the terminal)
+<details>
+<summary>Watch it train (all in the terminal)</summary>
 
 Metrics are logged straight to the terminal. It periodically prints an ASCII
 loss curve and other env-specific diagnostics:
@@ -184,62 +201,91 @@ Cycle 2000/2000 | 1.75s
   Your move (X):
 ```
 
-## Play
+</details>
 
-Play against an already-trained model without retraining — loads the checkpoint
-and plays in the terminal:
+## Train a custom game in Colab
+
+We can train AlphaZero in Colab on a completely new game by hoisting the core logic from this package
+Run the notebook in Colab on a TPU.
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/wtedw/nanoAlphaZero/blob/main/alphazero_colab.ipynb)
+
+> note: This notebook is a WIP, sparse on details, but works.
+
+## Eval
+
+### Chess
+
+Run a tournament between nanoAlphaZero checkpoints, Searchless Chess, and
+Stockfish:
 
 ```bash
-uv run train --env connect4 --play-only
-uv run train --env hex5 --play-only --load artifacts/alphazero_hex5.safetensors
+uv sync --group dev
+
+# fetch openings, reference models, and BayesElo
+uv run assets fetch \
+  eco-openings searchless-270m stockfish-16 bayeselo \
+  desert-snowball-34400 desert-snowball-68800
+
+# reproduce the 400-simulation tournament between a 24h trained model, 48 trained model and searchless270m
+uv run eval \
+  tournament-desert-snowball-checkpoints-vs-searchless270m-400sims-512games-per-pair
+
+# score an existing games.pgn with BayesElo, e.g. reproducing the Searchless
+# Chess paper's all-models-vs-Stockfish matchup
+uv run bayeselo --pgn evals/tournament-searchless-all-vs-stockfish16-oracle-50ms-128games-per-pair/runs/20260818-072706-5dc47c444b/games.pgn
 ```
 
-Options:
-
-| flag             | effect                                                       |
-| ---------------- | ------------------------------------------------------------ |
-| `--play-only`    | skip training; load a checkpoint and play                    |
-| `--play-both`    | skip training; load a checkpoint and play as both sides      |
-| `--load PATH`    | checkpoint to load (defaults to the save path)               |
-| `--play-as 1\|2` | you move first (`1`, default) or the model moves first (`2`) |
-
-
-In-game commands: enter a move (connect4: column `1-7`; ttt/hex: cell number or
-`row col`), or type `undo`, `restart`, `quit`.
-
-> Interactive play supports ttt / connect4 / hex. Chess is not supported yet [todo].
 
 ## Results
 
 ### Chess
 
-Chess models can be trained with just ~12 MCTS simulations per move. For
-reference, the original AlphaZero used ~800.
+Using a TPU v4-32 pod, we can train grandmaster-level chess models in under
+24h with ~12 MCTS simulations.
 
-The graphs below show score vs Stockfish at 2800 Elo* as training scales.
-Each point is measured over 492 games, played as both player 1 and player 2.
+But is it really grandmaster level?
 
-<img width="1185" height="765" alt="sf_score" src="https://github.com/user-attachments/assets/e86402a2-4054-47e1-a37d-ebc31110ccfd" />
+Since there are hardly any reference players to run against on TPUs, we base
+the "grandmaster-level" claim on beating Searchless Chess's 270M model, which
+itself reached a 2895 Lichess Blitz Elo against human players.
 
+Their models are ideal to play against because:
+1. they're JAX/Haiku based
+2. we can run batched tournaments against them on TPUs
+3. they don't require search, so one model inference should reproduce the same
+   strength
 
-All models were trained on a TPUv4-32:
+Here's how our
+[10x256nbt models](https://github.com/wtedw/nanoAlphaZero/releases/tag/desert-snowball-1028-checkpoints-v1)
+do against Searchless Chess 270M.
 
-| model          | train time | updates |
-| -------------- | ---------- | ------- |
-| `model_12800`  | 25h        | 256k    |
-| `model_6400`   | 12h        | 128k    |
-| `model_3200`   | 6h         | 64k     |
+```text
+Relative Elo vs Searchless Chess 270M (270M = 0)
 
-Stockfish settings:
+Searchless 270M        +0 |
+model34400 · 400 sims  +27 | #####
+model34400 · 800 sims  +90 | ##################
+model68800 · 400 sims  +99 | ####################
+model68800 · 800 sims +177 | ###################################
 
-```json
-{"UCI_LimitStrength": "true", "UCI_Elo": 2800, "Threads": 1, "Hash": 16}
+Each # represents approximately 5 Elo.
 ```
 
-> *A fair comparison to Stockfish is difficult.
-> For one, Stockfish is CPU based, and requires calibration to operate at the prescribed Elo.
-> Two, our MCTS is jitted to a fixed simulation count per move, so the search budget is always constant.
-> Treat the numbers as relative and the Stockfish opponent as a point of reference.
+| Checkpoint | Training | Search | W-D-L vs 270M | Score | Relative Elo |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `model34400` | 24h | 400 sims | 205-144-163 | 54.1% | +27 |
+| `model34400` | 24h | 800 sims | 256-131-125 | 62.8% | +90 |
+| `model68800` | 48h | 400 sims | 261-131-120 | 63.8% | +99 |
+| `model68800` | 48h | 800 sims | 325-103-84 | 73.5% | +177 |
+
+Trained on a TPU v4-32 pod. Elo is BayesElo relative to the 270M opponent, not
+an absolute human rating.
+
+See the
+[`400-simulation results`](evals/tournament-desert-snowball-checkpoints-vs-searchless270m-400sims-512games-per-pair/README.md)
+and [tournament documentation](docs/chess-tournaments.md) for raw results,
+configuration, resume, adjudication, scoring, and scheduler details.
 
 ### Hex
 
@@ -411,24 +457,6 @@ Cycle 1000/5000 | 8.40s
 - Evaluate the full MCTX tournament backend across larger TPU batch sizes
 - Verify larger hex boards still hit perfect play
 - Test Go models against reference opponent
-
-## Chess tournament evaluation
-
-The installable v4 layout includes fixed-sample `resident_v1` chess
-tournaments using the optimized external MCTX fork. Safetensors KataModel
-checkpoints can play Searchless Chess 9M/136M/270M and one Stockfish entrant
-in standard or all-legal-moves mode.
-
-```bash
-uv sync --group dev
-uv run assets fetch
-uv run assets fetch searchless-136m searchless-270m stockfish-16 bayeselo
-uv run artifacts fetch --config evals/tournament-chess-v4-example/config.toml
-uv run eval tournament-chess-v4-example
-```
-
-See [docs/chess-tournaments.md](docs/chess-tournaments.md) for configuration,
-resume, adjudication, asset, scoring, and scheduler details.
 
 ## Acknowledgements
 This project would not have been possible without the amazing work of the following:
