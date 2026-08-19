@@ -247,7 +247,9 @@ But is it really grandmaster level?
 
 Since there are hardly any reference players to run against on TPUs, we base
 the "grandmaster-level" claim on beating Searchless Chess's 270M model, which
-itself reached a 2895 Lichess Blitz Elo against human players.
+itself reached a 2895 Lichess Blitz Elo against human players. That rating
+provides context for the opponent; the figure reports only head-to-head Elo
+differences.
 
 Their models are ideal to play against because:
 1. they're JAX/Haiku based

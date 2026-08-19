@@ -29,15 +29,12 @@ HERE = Path(__file__).resolve().parent
 AGENT_RE = re.compile(r"desert-snowball-model(?P<checkpoint>\d+)-(?P<sims>\d+)sims")
 HEADER_RE = re.compile(r'^\[([^ ]+) "(.*)"\]$')
 PLOT = {
-    "title": "Chess Elo vs. test-time compute",
+    "title": "24h to beat a GM-level transformer",
     "x_label": "MCTS simulations per move",
     "y_label": "Elo difference vs. 270M",
     "baseline": 0.0,
-    "baseline_label": "270M transformer · 2895 Lichess Blitz*",
-    "caption": (
-        "Models trained on a TPU v4-32 pod; 512 games per point. "
-        "*Reported Lichess rating."
-    ),
+    "baseline_label": "270M transformer · GM-level vs humans",
+    "caption_prefix": "TPU v4-32 · 512 games/point",
     "series": {
         34400: {"label": "~24h", "color": "#2f78c4"},
         68800: {"label": "~48h", "color": "#1f6b34"},
@@ -367,10 +364,17 @@ def write_figure(results: list[Result]) -> None:
     )
     legend.get_title().set_fontsize(11)
     legend.get_title().set_color("#666666")
+    standard_errors = [
+        (result.elo_ci_high - result.elo_ci_low) / 3.92 for result in results
+    ]
+    caption = (
+        f"{PLOT['caption_prefix']} · SE {min(standard_errors):.0f}–"
+        f"{max(standard_errors):.0f} Elo"
+    )
     fig.text(
         0.105,
         0.03,
-        PLOT["caption"],
+        caption,
         ha="left",
         fontsize=9.5,
         fontstyle="italic",
