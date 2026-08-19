@@ -2,7 +2,7 @@
 
 nanoAlphaZero is a game-agnostic, high-performance implementation of AlphaZero. It reaches perfect play in games like Hex, and grandmaster-level strength in chess.
 
-demo: [play against the models](https://nanoalphazero.wtedw.com/) 
+demo: [play against the models](https://nanoalphazero.wtedw.com/)
 
 <div align="center">
 <picture>
@@ -14,9 +14,9 @@ demo: [play against the models](https://nanoalphazero.wtedw.com/)
 ## How is this different from other implementations?
 
 - **It scales to chess.** Not a toy AlphaZero implementation. It can train a
-  grandmaster level chess model in under 24h on a TPU.
+  grandmaster-level chess model in under 24h on a TPU.
 - **Genuinely game-agnostic**. We validate the core logic across Hex, Connect4,
-  Go, and chess, and demonstrate how to train AlphaZero on custom games of your
+  Go, and Chess, and demonstrate how to train AlphaZero on custom games of your
   own using a Colab notebook.
 - **Training is one JAX function.** Self-play, MCTS, and training
   are fused into a single jitted call (`run_fn`).
@@ -57,7 +57,7 @@ uv run train --env ttt
 
 Train a model, then drop into an interactive game against it. The trained params
 and resolved model configuration auto-save to
-`artifacts/alphazero_<env>.safetensors`. 
+`artifacts/alphazero_<env>.safetensors`.
 
 ```bash
 uv run train --env ttt
@@ -207,12 +207,10 @@ Cycle 2000/2000 | 1.75s
 
 ## Train a custom game in Colab
 
-We can train AlphaZero in Colab on a completely new game by hoisting the core logic from this package
+We can train AlphaZero in Colab on a completely new game by hoisting the core logic from this package.
 Run the notebook in Colab on a TPU.
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/wtedw/nanoAlphaZero/blob/main/alphazero_colab.ipynb)
-
-> note: This notebook is a WIP, sparse on details, but works.
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/wtedw/nanoAlphaZero/blob/custom-env/alphazero_colab_custom.ipynb)
 
 ## Eval
 
@@ -266,7 +264,7 @@ do against Searchless Chess 270M.
 | `model68800` | 48h | 400 sims | 261-131-120 | 63.8% | +99 |
 | `model68800` | 48h | 800 sims | 325-103-84 | 73.5% | +177 |
 
-For more details: see the [evaluation report](evals/desert-snowball-test-time-scaling/README.md).
+For more details, see the [evaluation report](evals/desert-snowball-test-time-scaling/README.md).
 
 ### Hex
 

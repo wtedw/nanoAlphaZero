@@ -7,7 +7,7 @@
 def get_ttt_config():
     board_size = 3
     game_max_steps = board_size * board_size
-    batch_size = 4096
+    batch_size = 1024
     REPLAY_BUFFER_TOTAL_SIZE = 1_024_000
 
     selfplay_buffer_len = game_max_steps + 10
@@ -133,8 +133,8 @@ def get_hex_config(board_size=4):
 
     game_max_steps = board_size * board_size
 
-    # ---- shrunk for easy single-file runs (hex prod = 8192) ----
-    batch_size = 8192
+    # Small solved boards need less parallelism; larger boards retain TPU-sized batches.
+    batch_size = 1024 if board_size in (4, 5) else 8192
     REPLAY_BUFFER_TOTAL_SIZE = 2_048_000
     # ------------------------------------------------------------
 
@@ -306,9 +306,9 @@ def get_chess_config():
         "game_obs_shape": None,
         "game_num_actions": None,  # patched from live env in make_alphazero
         # --- Model ---
-        "conv_width": 128,
+        "conv_width": 256,
         "conv_depth": 10,
-        "katago_preset": "b10c128nbt",
+        "katago_preset": "b10c256nbt",
         "katago_activation": "mish",
         "katago_use_rvgl": True,
         "use_wdl": True,
