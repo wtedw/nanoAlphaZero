@@ -8,7 +8,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from nanoalphazero.buffers import unpack_bitmask_vmap
-from nanoalphazero.core import make_env
+from nanoalphazero.core import _resolve_env_config, make_env
 from nanoalphazero.mcts import make_mcts
 from nanoalphazero.model import make_model
 
@@ -18,12 +18,11 @@ def make_play(config, *, custom_env=None):
 
     Sharding is disabled so a batch of one plays cleanly on a single device.
     """
-    config = config.copy()
-    config["enable_sharding"] = False
-
     wenv = make_env(config, custom_env=custom_env)
-    config["game_obs_shape"] = wenv.obs_shape
-    config["game_num_actions"] = wenv.num_actions
+    config = _resolve_env_config(
+        config, wenv, is_custom_env=custom_env is not None
+    )
+    config["enable_sharding"] = False
 
     rng = jax.random.PRNGKey(0)
     model, model_state = make_model(config, rng, sharding=None)

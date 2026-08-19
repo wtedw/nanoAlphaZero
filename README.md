@@ -230,8 +230,16 @@ Cycle 2000/2000 | 1.75s
 Implement a two-player PGX-style environment and pass it directly to the build,
 training, or play API—no registry or monkey-patching is required:
 
+Choose a built-in config with a similar action-space size as the training preset.
+For example, Hex 4×4 has 16 actions and Hex 5×5 has 25, so a custom 5×5,
+k=4 Tic-Tac-Toe environment should start from `get_hex_config(board_size=5)`.
+The live custom environment supplies its identity, maximum game length, draw
+behavior, observation shape, and action count; nanoAlphaZero reconciles those
+facts with the selected preset.
+
 ```python
 custom_env = MyGame(...)
+config = get_hex_config(board_size=5)
 az = make_alphazero(config, rng, custom_env=custom_env)
 play_against_model(
     config,
