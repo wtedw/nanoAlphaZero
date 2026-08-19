@@ -15,7 +15,8 @@
 #
 # This notebook is a quick demonstration of nanoAlphaZero's game-agnostic logic.
 #
-# Suppose you want to train AlphaZero on a completely new game like Tic-Tac-Toe but 4x4 (3 in a row wins).
+# Suppose you want to train AlphaZero on a new game such as the 4,4,4 member of
+# the M,N,K family: a 4×4 board where four in a row wins.
 #
 # Here's what you do
 #
@@ -37,7 +38,7 @@ from pathlib import Path
 
 import jax
 
-PACKAGE_REF = "93aed2b4d11c946385c5e0e9afd19407f249a75f"
+PACKAGE_REF = "a32e0141bc0f5977fba3672bf24831dc315562e9"
 print("JAX:", jax.__version__)
 print("Devices:", jax.devices())
 if not jax.devices() or jax.devices()[0].platform != "tpu":
@@ -92,7 +93,7 @@ import numpy as np
 import nanoalphazero.core as az_core
 import nanoalphazero.play as az_play
 from nanoalphazero.checkpoint import load_checkpoint, save_checkpoint
-from nanoalphazero.config import get_ttt_config
+from nanoalphazero.config import get_hex_config
 from nanoalphazero.core import make_alphazero
 
 
@@ -120,7 +121,7 @@ from nanoalphazero.core import make_alphazero
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Generalized N x N Tic-Tac-Toe used as the custom-environment example."""
+"""Generalized M,N,K game used as the custom-environment example."""
 
 import dataclasses
 from typing import NamedTuple, Optional
@@ -139,40 +140,45 @@ class GameState(NamedTuple):
     winner: Array
 
 
-def _make_winning_lines(n: int, k: int) -> Array:
+def _make_winning_lines(m: int, n: int, k: int) -> Array:
     """Return shape [num_lines, k] containing flattened board indices."""
     lines = []
-    for r in range(n):
+    for r in range(m):
         for c in range(n - k + 1):
             lines.append([r * n + c + i for i in range(k)])
-    for r in range(n - k + 1):
+    for r in range(m - k + 1):
         for c in range(n):
             lines.append([(r + i) * n + c for i in range(k)])
-    for r in range(n - k + 1):
+    for r in range(m - k + 1):
         for c in range(n - k + 1):
             lines.append([(r + i) * n + c + i for i in range(k)])
-    for r in range(n - k + 1):
+    for r in range(m - k + 1):
         for c in range(k - 1, n):
             lines.append([(r + i) * n + c - i for i in range(k)])
     return jnp.asarray(lines, dtype=jnp.int32)
 
 
 class Game:
-    def __init__(self, n: int, k: int = 3):
+    def __init__(self, m: int, n: int, k: int):
+        if m < 1:
+            raise ValueError(f"m must be >= 1, got {m}")
         if n < 1:
             raise ValueError(f"n must be >= 1, got {n}")
         if k < 1:
             raise ValueError(f"k must be >= 1, got {k}")
-        if k > n:
-            raise ValueError(f"k ({k}) cannot be larger than n ({n})")
+        if k > max(m, n):
+            raise ValueError(
+                f"k ({k}) cannot be larger than both m ({m}) and n ({n})"
+            )
+        self.m = m
         self.n = n
         self.k = k
-        self._winning_lines = _make_winning_lines(n, k)
+        self._winning_lines = _make_winning_lines(m, n, k)
 
     def init(self) -> GameState:
         return GameState(
             color=jnp.int32(0),
-            board=-jnp.ones(self.n * self.n, dtype=jnp.int32),
+            board=-jnp.ones(self.m * self.n, dtype=jnp.int32),
             winner=jnp.int32(-1),
         )
 
@@ -189,13 +195,13 @@ class Game:
     def observe(self, state: GameState, color: Optional[Array] = None) -> Array:
         if color is None:
             color = state.color
-        grid = state.board.reshape((self.n, self.n))
+        grid = state.board.reshape((self.m, self.n))
         return jnp.stack(
             [
                 grid == color,
                 grid == (1 - color),
-                jnp.full((self.n, self.n), color, dtype=jnp.bool_),
-                jnp.ones((self.n, self.n), dtype=jnp.bool_),
+                jnp.full((self.m, self.n), color, dtype=jnp.bool_),
+                jnp.ones((self.m, self.n), dtype=jnp.bool_),
             ],
             axis=-1,
         )
@@ -243,16 +249,17 @@ class State:
 
     @property
     def env_id(self) -> str:
-        return "custom_tic_tac_toe"
+        return "custom_mnk"
 
 
-class TicTacToeGeneral:
-    """N x N Tic-Tac-Toe with k consecutive pieces required to win."""
+class MNKGame:
+    """M rows by N columns with K consecutive pieces required to win."""
 
-    def __init__(self, n: int = 3, k: int = 3):
+    def __init__(self, m: int, n: int, k: int):
+        self.m = m
         self.n = n
         self.k = k
-        self._game = Game(n=n, k=k)
+        self._game = Game(m=m, n=n, k=k)
 
     def init(self, key: Optional[Array] = None) -> State:
         del key
@@ -352,7 +359,15 @@ class TicTacToeGeneral:
 
     @property
     def id(self) -> str:
-        return "custom_tic_tac_toe"
+        return f"mnk_{self.m}x{self.n}_k{self.k}"
+
+    @property
+    def max_steps(self) -> int:
+        return self.m * self.n
+
+    @property
+    def allows_draws(self) -> bool:
+        return True
 
     @property
     def version(self) -> str:
@@ -364,59 +379,29 @@ class TicTacToeGeneral:
 
     @property
     def num_actions(self) -> int:
-        return self.n * self.n
+        return self.m * self.n
 
 
 # %% [markdown]
 # ## Configure the custom game
 #
 # nanoAlphaZero accepts any compatible PGX-style environment through `custom_env=`.
+# Choose a built-in config with an action space similar to your custom game. The
+# config is a training preset; nanoAlphaZero replaces game-specific facts from the
+# live environment. Hex 4×4 has 16 actions and Hex 5×5 has 25, so this 4×4 game
+# uses Hex 4×4. A 5×5, k=4 Tic-Tac-Toe game should use the Hex 5×5 config.
 #
 
 # %%
-BOARD_SIZE = 4
-WIN_LENGTH = 3
-CUSTOM_ENV_ID = f"custom_ttt_{BOARD_SIZE}x{BOARD_SIZE}_k{WIN_LENGTH}"
-CUSTOM_ENV = TicTacToeGeneral(n=BOARD_SIZE, k=WIN_LENGTH)
+M = 4  # rows
+N = 4  # columns
+K = 4  # consecutive marks needed to win
+CUSTOM_ENV = MNKGame(m=M, n=N, k=K)
+CUSTOM_ENV_ID = CUSTOM_ENV.id
 
-
-def custom_config():
-    n, k = BOARD_SIZE, WIN_LENGTH
-    if n < 4 or not 1 <= k <= n:
-        raise ValueError("Require BOARD_SIZE >= 4 and 1 <= WIN_LENGTH <= BOARD_SIZE")
-    game_max_steps = n * n
-    root_actions = min(16, game_max_steps)
-    survivors = max(1, root_actions // 2)
-    # Use the basic ttt config
-    config = get_ttt_config()
-    batch_size = config["selfplay_batch_size"]
-    selfplay_buffer_len = game_max_steps + 10
-    replay_buffer_len = config["replay_buffer_total_size"] // batch_size
-    warmup_steps = selfplay_buffer_len + replay_buffer_len
-    config.update(
-        env_id=CUSTOM_ENV_ID,
-        game_name=CUSTOM_ENV_ID,
-        boardsize=n,
-        game_max_steps=game_max_steps,
-        game_obs_shape=None,
-        game_num_actions=None,
-        num_iters=2500,
-        num_exploratory_moves=max(1, game_max_steps // 2),
-        mcts_num_simulations=root_actions + survivors,  # this field is unused at the moment
-        mcts_max_m=root_actions,
-        mcts_num_root_considered=8,
-        mcts_num_survivors=4,
-        mcts_num_k_actions=game_max_steps,
-        lr_warmup_steps=warmup_steps,
-        replay_buffer_warmup_steps=warmup_steps,
-        selfplay_buffer_min_len=game_max_steps,
-        selfplay_buffer_max_len=game_max_steps,
-        enable_wandb=False,
-    )
-    return config
-
-
-CONFIG = custom_config()
+# Pick a training preset, then override only intentional experiment choices.
+CONFIG = get_hex_config(board_size=4)  # Hex 4×4 also has 16 actions.
+CONFIG["num_iters"] = 2500
 
 
 # %% [markdown]
@@ -432,8 +417,8 @@ actions = jnp.argmax(state.legal_action_mask, axis=1).astype(jnp.int32)
 step_keys = jax.random.split(jax.random.PRNGKey(1), 2)
 next_state = wenv.autostep(state, actions, step_keys)
 
-assert observation.shape == (2, BOARD_SIZE, BOARD_SIZE, 4)
-assert state.legal_action_mask.shape == (2, BOARD_SIZE * BOARD_SIZE)
+assert observation.shape == (2, M, N, 4)
+assert state.legal_action_mask.shape == (2, M * N)
 assert next_state.rewards.shape == (2, 2)
 print("Custom package environment OK:", wenv)
 
@@ -441,9 +426,9 @@ print("Custom package environment OK:", wenv)
 # %% [markdown]
 # ## Empty-board diagnostics
 #
-# This reports the model's P1-to-move value, W/D/L probabilities, and N×N policy
-# logits. A confident forced P1 win should approach value `+1` and win probability
-# `1`. The training loop calls this periodically without rebuilding the model.
+# This reports the model's side-to-move value, W/D/L probabilities, and M×N
+# policy logits. The training loop calls it periodically without rebuilding the
+# model.
 #
 
 # %%
@@ -457,8 +442,8 @@ def print_initial_evaluation(az, runner_state):
         deterministic=True,
         return_wdl_logits=True,
     )
-    board_size = az.config["boardsize"]
-    logits = np.asarray(logits[0]).reshape((board_size, board_size))
+    board_shape = az.env.obs_shape[:2]
+    logits = np.asarray(logits[0]).reshape(board_shape)
     wdl = np.asarray(jax.nn.softmax(wdl_logits[0]))
     print(
         f"P1 initial value={float(value[0]):+.3f} | "
@@ -540,11 +525,9 @@ print("Saved:", SAVE_PATH)
 # %% [markdown]
 # How do we know our model did well?
 #
-# For 3x3 k=3 games (Tic-Tac-Toe), the game-theoretic result for P1 is a draw, but for 4x4 k=3, P1 has a guaranteed win. There are two signs our model understands this
-# 1. our model views P1 board with value=+1.000
-# 2. its logits are concentrated in the center (optimal strategy).
-#
-# We can now pat ourselves on the back and call it a day
+# Watch the loss curves and periodic empty-board value/policy diagnostics above.
+# For a rigorous strength measurement, evaluate checkpoints against a perfect
+# M,N,K solver or a fixed baseline using both starting seats.
 
 # %% [markdown]
 # ## Optional: play against the model
