@@ -395,13 +395,13 @@ class MNKGame:
 # %%
 M = 4  # rows
 N = 4  # columns
-K = 4  # consecutive marks needed to win
+K = 3  # consecutive marks needed to win
 CUSTOM_ENV = MNKGame(m=M, n=N, k=K)
 CUSTOM_ENV_ID = CUSTOM_ENV.id
 
 # Pick a training preset, then override only intentional experiment choices.
 CONFIG = get_hex_config(board_size=4)  # Hex 4×4 also has 16 actions.
-CONFIG["num_iters"] = 2500
+CONFIG["num_iters"] = 1000  # We can probably train faster than Hex 4x4.
 
 
 # %% [markdown]
