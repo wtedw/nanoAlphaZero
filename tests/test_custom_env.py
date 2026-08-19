@@ -25,6 +25,9 @@ class TinyState:
 
 
 class TinyEnv:
+    id = "tiny"
+    max_steps = 12
+    allows_draws = True
     num_actions = 4
     num_players = 2
 
@@ -111,18 +114,22 @@ def test_custom_env_validation_reports_missing_state_contract():
 def test_make_play_accepts_custom_env_and_derives_dimensions():
     config = get_ttt_config()
     config.update(
-        env_id="tiny",
         katago_preset="b1c8nbt",
         conv_depth=1,
         conv_width=8,
-        mcts_max_m=4,
-        mcts_num_root_considered=4,
-        mcts_num_survivors=2,
-        mcts_num_k_actions=4,
     )
 
     wrapped, _, _, _, resolved = make_play(config, custom_env=TinyEnv())
 
     assert wrapped.obs_shape == (2, 2, 2)
+    assert resolved["env_id"] == "tiny"
+    assert resolved["game_name"] == "tiny"
     assert resolved["game_obs_shape"] == (2, 2, 2)
     assert resolved["game_num_actions"] == 4
+    assert resolved["game_max_steps"] == 12
+    assert resolved["env_allows_draws"] is True
+    assert resolved["env_forbids_draws"] is False
+    assert resolved["selfplay_buffer_max_len"] == 12
+    assert resolved["mcts_max_m"] == 4
+    assert resolved["mcts_num_root_considered"] == 4
+    assert resolved["mcts_num_survivors"] == 2

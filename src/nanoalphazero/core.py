@@ -131,6 +131,9 @@ class WrappedEnv:
     single_estate: Any
     observe: Optional[Callable] = None
     replay_batch: Optional[Callable] = None
+    env_id: Optional[str] = None
+    max_steps: Optional[int] = None
+    allows_draws: Optional[bool] = None
 
     def __repr__(self) -> str:
         return f"WrappedEnv(obs_shape={self.obs_shape}, num_actions={self.num_actions})"
@@ -138,7 +141,15 @@ class WrappedEnv:
 
 def _validate_custom_env(env) -> None:
     """Fail early when an injected environment cannot satisfy the generic path."""
-    required = ("init", "step", "observe", "num_actions")
+    required = (
+        "id",
+        "max_steps",
+        "allows_draws",
+        "init",
+        "step",
+        "observe",
+        "num_actions",
+    )
     missing = [name for name in required if not hasattr(env, name)]
     if missing:
         raise TypeError(
@@ -155,6 +166,18 @@ def _validate_custom_env(env) -> None:
         raise ValueError(
             "Custom environment num_actions must be a positive integer; "
             f"got {env.num_actions!r}"
+        )
+    if not isinstance(env.id, str) or not env.id.strip():
+        raise ValueError("Custom environment id must be a non-empty string")
+    if not isinstance(env.max_steps, int) or env.max_steps < 1:
+        raise ValueError(
+            "Custom environment max_steps must be a positive integer; "
+            f"got {env.max_steps!r}"
+        )
+    if not isinstance(env.allows_draws, bool):
+        raise TypeError(
+            "Custom environment allows_draws must be a bool; "
+            f"got {env.allows_draws!r}"
         )
 
     state = env.init(jax.random.PRNGKey(0))
@@ -239,6 +262,9 @@ def _wrap_env(env, *, validate=True):
         single_estate=single_estate,
         observe=vmap_observe_fn,
         replay_batch=getattr(env, "replay_batch", None),
+        env_id=getattr(env, "id", None),
+        max_steps=getattr(env, "max_steps", None),
+        allows_draws=getattr(env, "allows_draws", None),
     )
 
 
@@ -252,6 +278,38 @@ def make_env(config, *, custom_env=None):
     env_kwargs = {"use_bitmask": True} if env_id == "chess" else {}
     env = pgx1.make(env_id, **env_kwargs)
     return _wrap_env(env, validate=False)
+
+
+def _resolve_env_config(config, wenv, *, is_custom_env):
+    """Overlay live game facts onto a selected training preset."""
+    config = config.copy()
+    config["game_obs_shape"] = wenv.obs_shape
+    config["game_num_actions"] = wenv.num_actions
+
+    if not is_custom_env:
+        return config
+
+    config["env_id"] = wenv.env_id
+    config["game_name"] = wenv.env_id
+    config["game_max_steps"] = wenv.max_steps
+    config["env_allows_draws"] = wenv.allows_draws
+    config["env_forbids_draws"] = not wenv.allows_draws
+    config["selfplay_buffer_max_len"] = max(
+        config["selfplay_buffer_max_len"], wenv.max_steps
+    )
+
+    num_actions = wenv.num_actions
+    root_considered = min(config["mcts_num_root_considered"], num_actions)
+    config["mcts_num_root_considered"] = root_considered
+    config["mcts_num_survivors"] = min(
+        config["mcts_num_survivors"], max(1, root_considered // 2)
+    )
+    config["mcts_max_m"] = min(config["mcts_max_m"], num_actions)
+    if config.get("exp_bnk_action_weights", False):
+        config["mcts_num_k_actions"] = min(
+            config["mcts_num_k_actions"], num_actions
+        )
+    return config
 
 
 
@@ -803,10 +861,9 @@ def make_alphazero(config, rng, data_sharding=None, *, custom_env=None):
         data_sharding = DATA_PARALLEL_SHARDING
 
     wenv = make_env(config, custom_env=custom_env)
-    # Derive actual obs/action dimensions from the live environment
-    config = config.copy()
-    config["game_obs_shape"] = wenv.obs_shape
-    config["game_num_actions"] = wenv.num_actions
+    config = _resolve_env_config(
+        config, wenv, is_custom_env=custom_env is not None
+    )
 
     _print_config(config)
 
