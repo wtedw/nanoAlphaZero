@@ -207,10 +207,23 @@ Cycle 2000/2000 | 1.75s
 
 ## Train a custom game in Colab
 
-We can train AlphaZero in Colab on a completely new game by hoisting the core logic from this package
-Run the notebook in Colab on a TPU.
+Implement a two-player PGX-style environment and pass it directly to the build,
+training, or play API—no registry or monkey-patching is required:
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/wtedw/nanoAlphaZero/blob/main/alphazero_colab.ipynb)
+```python
+custom_env = MyGame(...)
+az = make_alphazero(config, rng, custom_env=custom_env)
+play_against_model(
+    config,
+    az.runner_state.model_ts.params,
+    custom_env=custom_env,
+)
+```
+
+See [`alphazero_colab_custom.py`](alphazero_colab_custom.py) for a complete 4×4
+Tic-Tac-Toe example. Run the notebook in Colab on a TPU.
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/wtedw/nanoAlphaZero/blob/main/alphazero_colab_custom.ipynb)
 
 > note: This notebook is a WIP, sparse on details, but works.
 
