@@ -35,8 +35,8 @@ PLOT = {
     "baseline": 0.0,
     "baseline_label": "270M transformer · 2895 Lichess Blitz*",
     "caption": (
-        "Models trained on a TPU v4-32 pod. *Reported Lichess rating; "
-        "points show relative Elo over 512 games each."
+        "Models trained on a TPU v4-32 pod; 512 games/point; bars show 95% "
+        "paired-opening CIs. *Reported Lichess rating."
     ),
     "series": {
         34400: {"label": "~24h", "color": "#2f78c4"},
@@ -283,11 +283,9 @@ def write_figure(results: list[Result]) -> None:
     baseline = float(PLOT["baseline"])
     ymax = max(result.score_elo for result in results)
     ylim_top = ymax * 1.15
-    ylim_bottom = -ylim_top * 0.42
+    ylim_bottom = -30.0
     ax.set_ylim(ylim_bottom, ylim_top)
-    ax.set_facecolor("#f2f7f2")
-    ax.axhspan(ylim_bottom, baseline, color="white", zorder=0)
-    ax.axhspan(baseline, ylim_top, color="#eef5ee", zorder=0)
+    ax.set_facecolor("#f4f7f4")
     ax.set_axisbelow(True)
     ax.grid(True, color="#ffffff", linewidth=1.0)
 
@@ -299,20 +297,29 @@ def write_figure(results: list[Result]) -> None:
         )
         x = np.asarray([result.simulations for result in rows])
         y = np.asarray([result.score_elo for result in rows])
+        yerr = np.vstack(
+            [
+                y - np.asarray([result.elo_ci_low for result in rows]),
+                np.asarray([result.elo_ci_high for result in rows]) - y,
+            ]
+        )
         style = series[checkpoint]
-        ax.plot(
+        ax.errorbar(
             x,
             y,
+            yerr=yerr,
             marker="o",
-            markersize=8,
+            markersize=7,
             markerfacecolor=style["color"],
             markeredgecolor="white",
-            markeredgewidth=1.2,
+            markeredgewidth=1.3,
             linewidth=2.2,
-            solid_joinstyle="round",
-            solid_capstyle="round",
             color=style["color"],
+            ecolor=style["color"],
+            elinewidth=1.4,
+            capsize=0,
             label=style["label"],
+            alpha=1.0,
             zorder=3,
         )
 
@@ -340,7 +347,8 @@ def write_figure(results: list[Result]) -> None:
 
     ax.set_xscale("log", base=2)
     ax.set_xticks([400, 800, 1600, 3200], labels=["400", "800", "1,600", "3,200"])
-    ax.set_xlim(320, 10_000)
+    ax.xaxis.set_minor_locator(mpl.ticker.NullLocator())
+    ax.set_xlim(350, 3_900)
     ax.set_xlabel(PLOT["x_label"], fontsize=13, color="#333333", labelpad=10)
     ax.set_ylabel(PLOT["y_label"], fontsize=13, color="#333333", labelpad=10)
     ax.set_title(
@@ -363,12 +371,13 @@ def write_figure(results: list[Result]) -> None:
         framealpha=0.95,
         borderpad=0.8,
         labelspacing=0.6,
+        handlelength=3,
         fontsize=12,
     )
     legend.get_title().set_fontsize(11)
     legend.get_title().set_color("#666666")
     fig.text(
-        0.1,
+        0.105,
         0.03,
         PLOT["caption"],
         ha="left",
