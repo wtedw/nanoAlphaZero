@@ -9,7 +9,7 @@ demo: [play against the nets](https://nanoalphazero.wtedw.com/)
 <img width="900" height="565" alt="elo_multi_hours-6-30-26" src="https://github.com/user-attachments/assets/8f9bcf59-2b40-49b1-9b68-fad2fba1559b#gh-dark-mode-only" />
 </div>
 
-## How is this different?
+## How is this different from other implementations?
 
 - **It scales to chess.** Not a toy AlphaZero implementation. It can train a
   grandmaster level chess model in under 24h on a TPU.
@@ -18,12 +18,11 @@ demo: [play against the nets](https://nanoalphazero.wtedw.com/)
   own using a Colab notebook.
 - **Training is one JAX function.** Self-play, MCTS, and training
   are fused into a single jitted call (`run_fn`).
-- **It's dead simple to run.** Install `uv`, clone the repo,
-  `uv run train --env chess`.
-- **It's fast.** We use custom, TPU-native JAX environments ([pgx1](https://github.com/wtedw/pgx1)) that
-  are orders of magnitude faster to run compared to the reference implementation.
-  For MCTS search, we parallelize the sequential halving algorithm from Gumbel
-  MuZero via [mctx](https://github.com/deepmind/mctx):
+- **It's dead simple to run.** Clone the repo, then `uv run train --env chess`.
+- **It's fast.** Our custom, TPU-native JAX environments
+  ([pgx1](https://github.com/wtedw/pgx1)) run orders of magnitude faster than
+  the reference implementation. For MCTS search, we parallelize the sequential
+  halving algorithm from Gumbel MuZero via [mctx](https://github.com/deepmind/mctx):
 
   | env      | pgx     | pgx1     | speedup | env/s (batch 4096) |
   | -------- | ------: | -------: | ------: | ------------------: |
@@ -54,8 +53,7 @@ uv run train --env ttt
 
 Train a model, then drop into an interactive game against it. The trained params
 and resolved model configuration auto-save to
-`artifacts/alphazero_<env>.safetensors`. Safetensors is the only supported
-checkpoint format.
+`artifacts/alphazero_<env>.safetensors`. 
 
 ```bash
 uv run train --env ttt
@@ -216,8 +214,7 @@ Run the notebook in Colab on a TPU.
 
 ### Chess
 
-Run a tournament between nanoAlphaZero checkpoints, Searchless Chess, and
-Stockfish:
+We adapted the tournament format from Searchless Chess, but added support for running batched games (DP-sharded).
 
 ```bash
 uv sync --group dev
@@ -227,7 +224,7 @@ uv run assets fetch \
   eco-openings searchless-270m stockfish-16 bayeselo \
   desert-snowball-34400 desert-snowball-68800
 
-# reproduce the 400-simulation tournament between a 24h trained model, 48 trained model and searchless270m
+# reproduce the 400-simulation tournament between a 24h trained model, 48h trained model and searchless270m
 uv run eval \
   tournament-desert-snowball-checkpoints-vs-searchless270m-400sims-512games-per-pair
 
@@ -235,6 +232,8 @@ uv run eval \
 # Chess paper's all-models-vs-Stockfish matchup
 uv run bayeselo --pgn evals/tournament-searchless-all-vs-stockfish16-oracle-50ms-128games-per-pair/runs/20260818-072706-5dc47c444b/games.pgn
 ```
+
+See the [tournament documentation](docs/chess-tournaments.md) for more details.
 
 
 ## Results
@@ -260,18 +259,6 @@ Here's how our
 [10x256nbt models](https://github.com/wtedw/nanoAlphaZero/releases/tag/desert-snowball-1028-checkpoints-v1)
 do against Searchless Chess 270M.
 
-```text
-Relative Elo vs Searchless Chess 270M (270M = 0)
-
-Searchless 270M        +0 |
-model34400 · 400 sims  +27 | #####
-model34400 · 800 sims  +90 | ##################
-model68800 · 400 sims  +99 | ####################
-model68800 · 800 sims +177 | ###################################
-
-Each # represents approximately 5 Elo.
-```
-
 | Checkpoint | Training | Search | W-D-L vs 270M | Score | Relative Elo |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | `model34400` | 24h | 400 sims | 205-144-163 | 54.1% | +27 |
@@ -282,10 +269,7 @@ Each # represents approximately 5 Elo.
 Trained on a TPU v4-32 pod. Elo is BayesElo relative to the 270M opponent, not
 an absolute human rating.
 
-See the
-[`400-simulation results`](evals/tournament-desert-snowball-checkpoints-vs-searchless270m-400sims-512games-per-pair/README.md)
-and [tournament documentation](docs/chess-tournaments.md) for raw results,
-configuration, resume, adjudication, scoring, and scheduler details.
+See [`400-simulation results`](evals/tournament-desert-snowball-checkpoints-vs-searchless270m-400sims-512games-per-pair/README.md) for more
 
 ### Hex
 
