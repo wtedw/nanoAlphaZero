@@ -35,8 +35,8 @@ PLOT = {
     "baseline": 0.0,
     "baseline_label": "270M transformer · 2895 Lichess Blitz*",
     "caption": (
-        "Models trained on a TPU v4-32 pod; 512 games/point; bars show 95% "
-        "paired-opening CIs. *Reported Lichess rating."
+        "Models trained on a TPU v4-32 pod; 512 games per point. "
+        "*Reported Lichess rating."
     ),
     "series": {
         34400: {"label": "~24h", "color": "#2f78c4"},
@@ -297,29 +297,20 @@ def write_figure(results: list[Result]) -> None:
         )
         x = np.asarray([result.simulations for result in rows])
         y = np.asarray([result.score_elo for result in rows])
-        yerr = np.vstack(
-            [
-                y - np.asarray([result.elo_ci_low for result in rows]),
-                np.asarray([result.elo_ci_high for result in rows]) - y,
-            ]
-        )
         style = series[checkpoint]
-        ax.errorbar(
+        ax.plot(
             x,
             y,
-            yerr=yerr,
             marker="o",
-            markersize=7,
+            markersize=8,
             markerfacecolor=style["color"],
             markeredgecolor="white",
-            markeredgewidth=1.3,
+            markeredgewidth=1.2,
             linewidth=2.2,
+            solid_joinstyle="round",
+            solid_capstyle="round",
             color=style["color"],
-            ecolor=style["color"],
-            elinewidth=1.4,
-            capsize=0,
             label=style["label"],
-            alpha=1.0,
             zorder=3,
         )
 

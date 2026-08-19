@@ -259,17 +259,10 @@ Here's how our
 [10x256nbt models](https://github.com/wtedw/nanoAlphaZero/releases/tag/desert-snowball-1028-checkpoints-v1)
 do against Searchless Chess 270M.
 
-| Checkpoint | Training | Search | W-D-L vs 270M | Score | Relative Elo |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| `model34400` | 24h | 400 sims | 205-144-163 | 54.1% | +27 |
-| `model34400` | 24h | 800 sims | 256-131-125 | 62.8% | +90 |
-| `model68800` | 48h | 400 sims | 261-131-120 | 63.8% | +99 |
-| `model68800` | 48h | 800 sims | 325-103-84 | 73.5% | +177 |
+![Chess Elo vs. test-time compute](evals/desert-snowball-test-time-scaling/test-time-scaling.svg)
 
-Trained on a TPU v4-32 pod. Elo is BayesElo relative to the 270M opponent, not
-an absolute human rating.
-
-See [`400-simulation results`](evals/tournament-desert-snowball-checkpoints-vs-searchless270m-400sims-512games-per-pair/README.md) for more
+Full W-D-L results, 95% confidence intervals, raw PGNs, and reproduction
+details are in the [evaluation report](evals/desert-snowball-test-time-scaling/README.md).
 
 ### Hex
 
