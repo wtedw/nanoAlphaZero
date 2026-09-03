@@ -333,7 +333,7 @@ def get_chess_config():
         "exp_root_temperature": 1.5,
         # --- Training ---
         "num_iters": 459_000 * 20,
-        "learning_rate": 1e-3,
+        "learning_rate": 1e-4,
         "weight_decay": 1e-4,
         "weight_decay_kernels_only": True,
         "use_bf16": False,
