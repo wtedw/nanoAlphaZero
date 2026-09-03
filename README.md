@@ -20,7 +20,7 @@ demo: [play against the models](https://nanoalphazero.wtedw.com/)
   own using a Colab notebook.
 - **Training is one JAX function.** Self-play, MCTS, and training
   are fused into a single jitted call (`run_fn`).
-- **It's dead simple to run.** Clone the repo, then `uv run train --env chess`.
+- **It's dead simple to run.** Clone the repo, then `uv run train --env hex4`.
 - **It's fast.** Our custom, TPU-native JAX environments
   ([pgx1](https://github.com/wtedw/pgx1)) run orders of magnitude faster than
   the reference implementation. For MCTS, we parallelize the sequential
@@ -83,8 +83,10 @@ and resolved model configuration auto-save to
 uv run train --env ttt
 uv run train --env connect4
 uv run train --env hex5
-uv run train --env chess
+uv run train --env chess --no-play
 ```
+
+Terminal play is not yet supported for chess; use `--no-play` when training it.
 
 Supported games:
 

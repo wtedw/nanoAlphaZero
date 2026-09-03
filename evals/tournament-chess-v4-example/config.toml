@@ -37,8 +37,7 @@ project = "nanoAlphaZero-eval"
 [[agents]]
 name = "candidate"
 kind = "kata"
-artifact_path = "tdoubleu/nanoAlphaZero/jolly-wood-5-checkpoint:v18"
-artifact_filename = "model15200.safetensors"
+checkpoint = "../../artifacts/models/desert-snowball/model34400.safetensors"
 seed = 42
 
 [agents.search]

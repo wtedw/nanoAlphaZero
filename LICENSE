@@ -22,7 +22,7 @@ SOFTWARE.
 
 --------------------------------------------------------------------------------
 
-Code in `alphazero.py` is adapted (with modifications) from
+Code in `src/nanoalphazero/mcts.py` is adapted (with modifications) from
 https://github.com/google-deepmind/mctx, used under the Apache License,
 Version 2.0. The adapted code carries the following notice from the original
 source files:
@@ -43,7 +43,7 @@ source files:
 
 --------------------------------------------------------------------------------
 
-The neural-network architecture in `alphazero.py` is adapted (with
+The neural-network architecture in `src/nanoalphazero/model.py` is adapted (with
 modifications) from KataGo:
 https://github.com/lightvector/KataGo
 

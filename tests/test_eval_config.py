@@ -71,7 +71,7 @@ def test_rejects_model_override_and_pickle():
     with pytest.raises(ValueError, match="checkpoint metadata"):
         validate_config(config)
     del candidate["model"]
-    candidate["artifact_filename"] = "model.pkl"
+    candidate["checkpoint"] = "model.pkl"
     with pytest.raises(ValueError, match="safetensors"):
         validate_config(config)
 

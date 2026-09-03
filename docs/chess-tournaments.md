@@ -21,11 +21,11 @@ space before transfer and verifies a model-specific SHA-256 marker.
 uv run assets fetch
 uv run assets fetch searchless-136m
 uv run assets fetch searchless-270m
-uv run assets fetch bayeselo
+uv run assets fetch stockfish-16 bayeselo desert-snowball-34400
 ```
 
-Stockfish is external. Install Stockfish 16 and either put it at
-`/usr/local/bin/stockfish` or set each relevant `path` in the TOML file.
+The managed Stockfish 16 binary is installed at
+`artifacts/stockfish/16/stockfish`, matching the example configuration.
 BayesElo is preflighted before engines or JAX are initialized. To deliberately
 run without it, pass `--skip-bayeselo`; the resulting `games.pgn` can be scored
 later:
@@ -34,11 +34,13 @@ later:
 uv run bayeselo --pgn /path/to/games.pgn
 ```
 
-Pinned W&B artifacts are downloaded independently of the tournament:
+The example candidate is the public 24-hour Desert Snowball checkpoint fetched
+above. Custom configs using pinned W&B artifacts can download them independently
+of the tournament:
 
 ```bash
 uv run artifacts fetch \
-  --config evals/tournament-chess-v4-example/config.toml
+  --config evals/<name>/config.toml
 ```
 
 ## Running and resuming
