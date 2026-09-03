@@ -254,7 +254,7 @@ def _upload_wandb_checkpoint(
     )
 
 
-def run_alphazero(config, ckpt_path=None):
+def run_alphazero(config, ckpt_path=None, hex_eval_engine_pool=None):
     log_path = _start_run_logfile(config)
     print(f"Logging this run to {log_path}")
 
@@ -342,6 +342,14 @@ def run_alphazero(config, ckpt_path=None):
         wenv, config, plies=config.get("eval_opening_plies", 1)
     )
     eval_fn = az.run_mcts_fn
+    hex_eval_period = int(resolved_config.get("hex_eval_period", 0))
+    if hex_eval_period and hex_eval_engine_pool is None:
+        raise ValueError("Hex engine evaluation is enabled without a MoHex process bank")
+    hex_evaluator = None
+    if hex_eval_period:
+        from nanoalphazero.eval.hex.training import HexTrainingEvaluator
+
+        hex_evaluator = HexTrainingEvaluator(hex_eval_period, hex_eval_engine_pool)
     # Ladder state. anchor_params=None ⇒ rung 0 = random opponent, pinned at Elo 0.
     anchor_params = None
     anchor_elo = 0.0
@@ -584,6 +592,15 @@ def run_alphazero(config, ckpt_path=None):
                 )
                 print(_ascii_loss_chart({"total": elo_curve}), flush=True)
                 print(flush=True)
+
+        if hex_evaluator is not None:
+            online_metrics.update(hex_evaluator.run_if_due(
+                cycle_n,
+                eval_fn,
+                wenv,
+                resolved_config,
+                runner_state.model_ts.params,
+            ))
 
         if ckpt_period and ckpt_path and cycle_n % ckpt_period == 0:
             print(f"\n--- Checkpoint at cycle {cycle_n} ---", flush=True)
@@ -855,25 +872,9 @@ def _run_ttt_diagnostics(model_ts, wenv, config):
 # opening. A Black-winning opening leaves White in a lost position -> value -1.0;
 # a Black-losing opening leaves White winning -> value +1.0.
 def _get_hex_perfect_play_values(boardsize: int):
-    # fmt: off
-    winning = {
-        4: [3, 6, 9, 12],
-        5: [4, 6, 7, 8, 9, 11, 12, 13, 15, 16, 17, 18, 20],
-        6: [5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-            24, 25, 26, 27, 28, 30],
-        7: [6, 9, 11, 12, 13, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26, 27, 29,
-            30, 31, 32, 33, 35, 36, 37, 39, 42],
-        8: [7, 14, 15, 17, 18, 19, 20, 21, 22, 25, 26, 27, 28, 29, 30, 31, 32, 33,
-            34, 35, 36, 37, 38, 41, 42, 43, 44, 45, 46, 48, 49, 56],
-        9: [8,9,10,11,16,17,19,20,21,22,23,24,25,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,55,56,57,58,59,60,61,63,64,69,70,71,72]
-    }
-    # fmt: on
-    if boardsize not in winning:
-        return None
-    n = boardsize * boardsize
-    vals = np.ones(n, dtype=np.float32)
-    vals[np.array(winning[boardsize])] = -1.0
-    return vals.reshape((boardsize, boardsize))
+    from nanoalphazero.eval.hex.perfect_play import perfect_play_values
+
+    return perfect_play_values(boardsize)
 
 
 def _run_hex_diagnostics(model_ts, wenv, config):

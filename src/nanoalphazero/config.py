@@ -203,6 +203,10 @@ def get_hex_config(board_size=4):
         "eval_period": 50,  # run every N cycles
         "eval_max_plies": None,
         "eval_opening_plies": 2,
+        "hex_eval_period": 0,
+        "hex_eval_engine": "mohex",
+        "hex_eval_engine_path": None,
+        "hex_eval_engine_config": "default",
         "ckpt_period": None,  # save a checkpoint every N cycles (None = only at end)
         # --- System ---
         "enable_sharding": True,

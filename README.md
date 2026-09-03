@@ -288,6 +288,10 @@ do against Searchless Chess 270M.
 
 For more details, see the [evaluation report](evals/desert-snowball-test-time-scaling/README.md).
 
+Saved Hex checkpoints can also be evaluated from every first move against a
+separately installed MoHex binary. See
+[Hex evaluation against MoHex](docs/hex-evaluations.md).
+
 ### Hex
 
 On a solved game like hex we can watch the value head acquire perfect play

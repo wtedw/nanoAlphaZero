@@ -68,6 +68,28 @@ def parse_train_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=None,
         help="MCTS simulations the model uses while playing",
     )
+    parser.add_argument(
+        "--hex-eval-period",
+        type=int,
+        default=0,
+        help="run model-as-P1 evaluation against MoHex every N cycles (0 disables)",
+    )
+    parser.add_argument(
+        "--hex-eval-engine",
+        choices=["mohex"],
+        default="mohex",
+        help="external Hex evaluation engine (currently only MoHex)",
+    )
+    parser.add_argument(
+        "--hex-eval-engine-path",
+        default=None,
+        help="explicit MoHex executable path, or a bare command resolved through PATH",
+    )
+    parser.add_argument(
+        "--hex-eval-engine-config",
+        default="default",
+        help="MoHex config path, or 'default' for the bundled uncapped solver config",
+    )
     return parser.parse_args(argv)
 
 
@@ -111,33 +133,66 @@ def train_main(argv: Sequence[str] | None = None) -> None:
     """Run training or an interactive play mode."""
     args = parse_train_args(sys.argv[1:] if argv is None else argv)
 
-    from nanoalphazero.checkpoint import default_ckpt_path
     from nanoalphazero.config import CONFIG_FACTORIES
-    from nanoalphazero.play import play_against_model
-    from nanoalphazero.training import run_alphazero
 
     config = CONFIG_FACTORIES[args.env]()
     config["game_name"] = args.env
     config["enable_wandb"] = args.enable_wandb
+    if args.hex_eval_period < 0:
+        raise SystemExit("--hex-eval-period must be non-negative")
+    config["hex_eval_period"] = args.hex_eval_period
+    config["hex_eval_engine"] = args.hex_eval_engine
+    config["hex_eval_engine_path"] = args.hex_eval_engine_path
+    config["hex_eval_engine_config"] = args.hex_eval_engine_config
 
-    if args.play_both:
-        run_play_both(config, args)
-        return
-    if args.play_only:
-        run_play(config, args)
-        return
+    engine_pool = None
+    if args.hex_eval_period:
+        if not args.env.startswith("hex"):
+            raise SystemExit("--hex-eval-period is supported only for Hex")
+        if not args.hex_eval_engine_path:
+            raise SystemExit(
+                "--hex-eval-engine-path is required when Hex evaluation is enabled"
+            )
+        # This module is stdlib-only. Start every external process before imports
+        # below initialize JAX/libtpu.
+        from nanoalphazero.eval.hex.engine import MoHexPool
 
-    save_path = args.save or default_ckpt_path(args.env)
-    runner_state = run_alphazero(
-        config, ckpt_path=None if args.no_save else save_path
-    )
-    if args.play:
-        play_against_model(
-            config,
-            runner_state.model_ts.params,
-            human_player=args.play_as - 1,
-            num_simulations=args.play_sims,
+        size = int(config["boardsize"])
+        engine_pool = MoHexPool(
+            args.hex_eval_engine_path,
+            args.hex_eval_engine_config,
+            size,
+            size * size,
         )
+
+    from nanoalphazero.checkpoint import default_ckpt_path
+    from nanoalphazero.play import play_against_model
+    from nanoalphazero.training import run_alphazero
+
+    try:
+        if args.play_both:
+            run_play_both(config, args)
+            return
+        if args.play_only:
+            run_play(config, args)
+            return
+
+        save_path = args.save or default_ckpt_path(args.env)
+        runner_state = run_alphazero(
+            config,
+            ckpt_path=None if args.no_save else save_path,
+            hex_eval_engine_pool=engine_pool,
+        )
+        if args.play:
+            play_against_model(
+                config,
+                runner_state.model_ts.params,
+                human_player=args.play_as - 1,
+                num_simulations=args.play_sims,
+            )
+    finally:
+        if engine_pool is not None:
+            engine_pool.close()
 
 
 def _resolve_eval_config(target: str | Path) -> tuple[Path, dict]:
@@ -177,6 +232,18 @@ def eval_main(argv: Sequence[str] | None = None) -> None:
 
     config_path, config = _resolve_eval_config(args.target)
     config_arg = str(config_path)
+
+    if "hex_eval" in config:
+        if args.skip_bayeselo:
+            raise SystemExit("--skip-bayeselo is not supported for Hex evaluations")
+        from nanoalphazero.eval.hex.standalone import evaluation_main
+
+        evaluation_main(
+            config_arg,
+            resume=args.resume,
+            output_root=args.output_root,
+        )
+        return
 
     if "tournament" in config:
         game = str(config["tournament"].get("game", "chess"))

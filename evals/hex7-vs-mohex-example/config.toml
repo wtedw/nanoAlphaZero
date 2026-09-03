@@ -1,0 +1,18 @@
+[hex_eval]
+game = "hex"
+board_size = 7
+opening_suite = "all_first_moves"
+model_seat = "p1"
+seed = 1
+output_root = "runs"
+
+[model]
+checkpoint = "../../artifacts/alphazero_hex7.safetensors"
+
+[opponent]
+kind = "mohex"
+# Build MoHex separately and either replace this with its absolute path or put
+# the binary on PATH under this name.
+path = "mohex"
+config = "default"
+
