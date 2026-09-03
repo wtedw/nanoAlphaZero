@@ -1,3 +1,4 @@
+import json
 from io import StringIO
 from types import SimpleNamespace
 
@@ -22,6 +23,7 @@ from nanoalphazero.eval.hex.standalone import (
     _prepare_run,
     _write_grid,
 )
+from nanoalphazero.eval.hex.training import HexTrainingEvaluator
 
 
 def test_hex_vertex_roundtrip():
@@ -179,3 +181,103 @@ def test_match_plays_exactly_one_game_per_opening():
     assert summary["padding_rows"] == 0
     assert summary["model_wins"] + summary["model_losses"] == 16
     assert all(record["moves"][0]["action"] == record["opening_action"] for record in records)
+
+
+def _training_match_result():
+    records = [
+        {
+            "opening_action": action,
+            "opening_vertex": action_to_vertex(action, 4),
+            "winner": action % 2,
+            "model_won": action % 2 == 0,
+            "termination": "normal",
+            "plies": 4,
+            "moves": [],
+        }
+        for action in range(16)
+    ]
+    summary = {
+        "board_size": 4,
+        "real_games": 16,
+        "physical_batch_size": 16,
+        "padding_rows": 0,
+        "model_wins": 8,
+        "model_losses": 8,
+        "unscored": 0,
+        "model_win_rate": 0.5,
+        "total_plies": 64,
+        "elapsed_seconds": 1.0,
+        "model_search_seconds": 0.25,
+        "mohex_search_seconds": 0.75,
+        "perfect_opening_wins": 2,
+        "perfect_opening_total": 4,
+        "perfect_opening_fraction": 0.5,
+        "perfect_play_achieved": 0,
+        "unexpected_opening_wins": 6,
+    }
+    return records, summary
+
+
+def test_training_eval_writes_agent_readable_observation_files(
+    tmp_path, monkeypatch, capsys
+):
+    records, summary = _training_match_result()
+    monkeypatch.setattr(
+        "nanoalphazero.eval.hex.runtime.run_match",
+        lambda *_args, **_kwargs: (records, summary),
+    )
+    output_dir = tmp_path / "hex4.hex-eval"
+    evaluator = HexTrainingEvaluator(5, object(), output_dir, board_size=4)
+
+    waiting = json.loads((output_dir / "status.json").read_text())
+    assert waiting["state"] == "waiting"
+    assert evaluator.run_if_due(4, None, None, {}, None) == {}
+    assert not (output_dir / "latest.json").exists()
+
+    metrics = evaluator.run_if_due(
+        5,
+        None,
+        None,
+        {"boardsize": 4},
+        None,
+        train_step=320,
+    )
+    latest = json.loads((output_dir / "latest.json").read_text())
+    status = json.loads((output_dir / "status.json").read_text())
+    history = [json.loads(line) for line in (output_dir / "history.jsonl").read_text().splitlines()]
+    games = (output_dir / "games-cycle-000005.jsonl").read_text().splitlines()
+
+    assert metrics["hex_eval/model_win_rate"] == 0.5
+    assert latest["state"] == status["state"] == "complete"
+    assert latest["cycle"] == 5
+    assert latest["train_step"] == 320
+    assert latest["opening_results"][0]["result"] == "W"
+    assert latest["opening_results"][1]["result"] == "L"
+    assert history == [latest]
+    assert len(games) == 16
+    assert "HEX_EVAL_RESULT cycle=5 score=0.500000" in capsys.readouterr().out
+
+
+def test_training_eval_records_failure_status(tmp_path, monkeypatch):
+    def fail(*_args, **_kwargs):
+        raise RuntimeError("engine stopped")
+
+    monkeypatch.setattr("nanoalphazero.eval.hex.runtime.run_match", fail)
+    output_dir = tmp_path / "hex4.hex-eval"
+    evaluator = HexTrainingEvaluator(1, object(), output_dir, board_size=4)
+
+    with pytest.raises(RuntimeError, match="engine stopped"):
+        evaluator.run_if_due(
+            1,
+            None,
+            None,
+            {"boardsize": 4},
+            None,
+            train_step=64,
+        )
+
+    status = json.loads((output_dir / "status.json").read_text())
+    assert status["state"] == "failed"
+    assert status["error_type"] == "RuntimeError"
+    assert status["error"] == "engine stopped"
+    assert not (output_dir / "latest.json").exists()

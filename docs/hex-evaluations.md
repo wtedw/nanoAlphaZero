@@ -52,6 +52,47 @@ Use `--hex-eval-engine-config /path/to/mohex.cfg` to replace the bundled default
 MoHex processes are started before JAX initializes and persist for the training
 run. Metrics are logged under `hex_eval/`.
 
+### Observing training evaluations
+
+When periodic Hex evaluation is enabled, training prints a local observation
+directory next to its text log. For a log named
+`logs/hex4_20260903-140000.txt`, the evaluation data is written to:
+
+```text
+logs/hex4_20260903-140000.hex-eval/
+```
+
+The directory is the canonical, agent-readable record of evaluation progress;
+W&B receives the same aggregate metrics but is not required to inspect a local
+run. Its files are:
+
+- `status.json`: atomically updated to `waiting`, `running`, `complete`, or
+  `failed`. A failed evaluation includes its exception type and message.
+- `latest.json`: the most recent completed result, including cycle, training
+  step, aggregate scores, timings, and the W/L result for every first move.
+- `history.jsonl`: append-only history with one complete result per evaluation
+  cycle.
+- `games-cycle-NNNNNN.jsonl`: full ordered move records for one evaluation.
+
+Evaluation completion is also announced with one stable, grep-friendly line:
+
+```text
+HEX_EVAL_RESULT cycle=100 score=0.375000 wins=6 losses=10 unscored=0
+```
+
+For example, an agent or monitoring script can read the current score without
+accessing W&B:
+
+```bash
+jq '{cycle, train_step, score: .model_win_rate, model_wins, model_losses}' \
+  logs/hex4_20260903-140000.hex-eval/latest.json
+```
+
+`latest.json` and `status.json` use atomic replacement, so readers never see a
+partially written JSON document. Absence of `latest.json` means that the first
+scheduled evaluation has not completed; consult `status.json` to distinguish
+waiting, running, and failure states.
+
 The match runtime depends on a small Hex-engine interface. A KataHex adapter can
 be added later without changing game scheduling or result accounting; only the
 MoHex adapter is currently implemented.

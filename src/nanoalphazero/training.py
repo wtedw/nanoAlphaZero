@@ -2,6 +2,7 @@
 
 import atexit
 import os
+from pathlib import Path
 import sys
 import time
 
@@ -349,7 +350,12 @@ def run_alphazero(config, ckpt_path=None, hex_eval_engine_pool=None):
     if hex_eval_period:
         from nanoalphazero.eval.hex.training import HexTrainingEvaluator
 
-        hex_evaluator = HexTrainingEvaluator(hex_eval_period, hex_eval_engine_pool)
+        hex_evaluator = HexTrainingEvaluator(
+            hex_eval_period,
+            hex_eval_engine_pool,
+            Path(log_path).with_suffix(".hex-eval"),
+            board_size=int(resolved_config["boardsize"]),
+        )
     # Ladder state. anchor_params=None ⇒ rung 0 = random opponent, pinned at Elo 0.
     anchor_params = None
     anchor_elo = 0.0
@@ -600,6 +606,7 @@ def run_alphazero(config, ckpt_path=None, hex_eval_engine_pool=None):
                 wenv,
                 resolved_config,
                 runner_state.model_ts.params,
+                train_step=int(runner_state.model_ts.step),
             ))
 
         if ckpt_period and ckpt_path and cycle_n % ckpt_period == 0:
