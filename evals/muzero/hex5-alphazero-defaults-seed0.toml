@@ -1,0 +1,6 @@
+# Launch only after the Hex 4 evidence gate passes.
+env = "hex5"
+defaults = "alphazero"
+seed = 0
+train_batch_size = 4096
+wandb = true

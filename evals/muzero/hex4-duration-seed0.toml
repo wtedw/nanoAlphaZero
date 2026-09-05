@@ -1,0 +1,17 @@
+env = "hex4"
+defaults = "pilot_v1"
+platform = "tpu"
+devices = 4
+width = 128
+depth = 2
+unroll = 5
+selfplay_batch_size = 256
+train_batch_size = 256
+replay_batches = 16
+updates_per_cycle = 16
+cycles = 3000
+learning_rate = 0.001
+seed = 0
+wandb = true
+eval_period = 300
+checkpoint_period = 300

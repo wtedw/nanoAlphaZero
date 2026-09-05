@@ -1,0 +1,11 @@
+# First Hex5 learning validation; inherited AlphaZero optimizer/model/batches.
+env = "hex5"
+defaults = "alphazero"
+data_pipeline = "staged"
+network = "spatial"
+seed = 0
+train_batch_size = 4096
+wandb = true
+hex_eval_period = 50
+# Keep a diagnostic checkpoint while limiting local full-replay snapshot cost.
+checkpoint_period = 850

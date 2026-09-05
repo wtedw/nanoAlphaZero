@@ -1,0 +1,17 @@
+env = "hex4"
+defaults = "alphazero"
+data_pipeline = "staged"
+network = "spatial"
+width = 16
+depth = 1
+selfplay_batch_size = 32
+train_batch_size = 32
+consume_size = 32
+replay_positions = 1024
+replay_warmup_cycles = 2
+cycles = 2
+updates_per_cycle = 2
+eval_period = 0
+diagnostic_period = 1
+checkpoint_period = 1
+hex_eval_period = 1

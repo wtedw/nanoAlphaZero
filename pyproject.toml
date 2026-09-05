@@ -14,6 +14,7 @@ dependencies = [
     "libtpu==0.0.30; sys_platform == 'linux'",
     "mctx",
     "numpy==2.3.5",
+    "plotly>=6,<7",
     "optax==0.2.7",
     "orbax-checkpoint==0.11.30",
     "pgx1",
@@ -29,6 +30,8 @@ eval = "nanoalphazero.cli:eval_main"
 assets = "nanoalphazero.cli:assets_main"
 artifacts = "nanoalphazero.cli:artifacts_main"
 bayeselo = "nanoalphazero.cli:bayeselo_main"
+muzero-train = "nanoalphazero.research.muzero.cli:main"
+muzero-eval = "nanoalphazero.research.muzero.evaluation:main"
 
 [build-system]
 requires = ["uv_build>=0.9.26,<0.10.0"]

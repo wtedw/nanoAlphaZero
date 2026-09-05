@@ -1,0 +1,7 @@
+env = "hex4"
+defaults = "alphazero"
+network = "spatial"
+seed = 1
+wandb = true
+hex_eval_period = 50
+decision_eval_positions = 256

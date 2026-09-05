@@ -1,0 +1,4 @@
+env = "hex4"
+defaults = "alphazero"
+seed = 1
+wandb = true

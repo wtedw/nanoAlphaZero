@@ -1,0 +1,11 @@
+env = "ttt"
+defaults = "pilot_v1"
+platform = "cpu"
+devices = 4
+width = 16
+depth = 1
+selfplay_batch_size = 8
+train_batch_size = 8
+replay_batches = 2
+cycles = 2
+updates_per_cycle = 2

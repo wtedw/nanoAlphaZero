@@ -1,0 +1,11 @@
+env = "hex4"
+defaults = "pilot_v1"
+platform = "tpu"
+devices = 4
+width = 32
+depth = 1
+selfplay_batch_size = 32
+train_batch_size = 32
+replay_batches = 2
+cycles = 2
+updates_per_cycle = 2

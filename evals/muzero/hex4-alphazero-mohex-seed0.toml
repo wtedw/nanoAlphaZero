@@ -1,0 +1,5 @@
+env = "hex4"
+defaults = "alphazero"
+seed = 0
+wandb = true
+hex_eval_period = 50

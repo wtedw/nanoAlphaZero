@@ -1,0 +1,11 @@
+env = "hex4"
+defaults = "pilot_v1"
+network = "spatial"
+cycles = 2
+hex_eval_period = 1
+width = 16
+depth = 1
+selfplay_batch_size = 32
+train_batch_size = 32
+replay_batches = 2
+updates_per_cycle = 2

@@ -1,0 +1,14 @@
+env = "hex5"
+defaults = "alphazero"
+data_pipeline = "staged"
+network = "spatial"
+train_batch_size = 4096
+replay_positions = 32768
+replay_warmup_cycles = 2
+cycles = 2
+updates_per_cycle = 2
+eval_period = 0
+diagnostic_period = 1
+checkpoint_period = 2
+hex_eval_period = 1
+wandb = true

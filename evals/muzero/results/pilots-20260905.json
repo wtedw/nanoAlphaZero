@@ -1,0 +1,6115 @@
+[
+  {
+    "run": "artifacts/muzero/hex4-vector-seed0-20260905-a",
+    "config": {
+      "env": "hex4",
+      "env_id": "hexnoswap_4x4",
+      "width": 128,
+      "depth": 2,
+      "unroll": 5,
+      "discount": 1.0,
+      "max_steps": 16,
+      "roots": 16,
+      "survivors": 8,
+      "exploration_moves": 8,
+      "selfplay_batch_size": 256,
+      "train_batch_size": 256,
+      "replay_batches": 16,
+      "updates_per_cycle": 16,
+      "cycles": 300,
+      "seed": 0,
+      "learning_rate": 0.001,
+      "weight_decay": 0.0001,
+      "devices": 4,
+      "platform": "tpu",
+      "wandb": true,
+      "checkpoint_period": 50,
+      "eval_period": 50,
+      "obs_shape": [
+        4,
+        4,
+        4
+      ],
+      "num_actions": 16,
+      "architecture": "vector-residual-v1",
+      "target": "signed-return-boundary-bootstrap",
+      "latent_normalization": "minmax",
+      "dynamics_gradient_scale": 0.5
+    },
+    "wandb_url": "https://wandb.ai/tdoubleu/nanoAlphaZero-muzero/runs/vajsi24m",
+    "parameters": 243858,
+    "transitions": 932169,
+    "updates": 4800,
+    "elapsed_seconds": 89.44621962122619,
+    "median_training_cycle_seconds": 0.06794139090925455,
+    "final_metrics": {
+      "grad_norm": 1.8648051023483276,
+      "loss": 1.3636462688446045,
+      "policy_loss": 0.7063251733779907,
+      "reward_loss": 0.04229326546192169,
+      "value_loss": 0.6150278449058533,
+      "cycle": 300,
+      "updates": 4800,
+      "seconds": 0.06836050190031528,
+      "elapsed_seconds": 89.44621962122619,
+      "completed_fraction": 1.0,
+      "real_transitions": 2970,
+      "heldout/unroll1/policy_loss": 5.894234657287598,
+      "heldout/unroll1/reward_loss": 0.03804902732372284,
+      "heldout/unroll1/value_loss": 0.8743103742599487,
+      "heldout/unroll3/policy_loss": 5.403219699859619,
+      "heldout/unroll3/reward_loss": 0.04314657673239708,
+      "heldout/unroll3/value_loss": 0.801177442073822,
+      "heldout/unroll5/policy_loss": 5.051735877990723,
+      "heldout/unroll5/reward_loss": 0.042762234807014465,
+      "heldout/unroll5/value_loss": 0.73433917760849,
+      "heldout/unroll10/policy_loss": 4.474084377288818,
+      "heldout/unroll10/reward_loss": 0.05014624074101448,
+      "heldout/unroll10/value_loss": 0.5542458891868591,
+      "eval/policy-vs-random/seat0_score": 0.9833333333333333,
+      "eval/random-vs-policy/seat0_score": 0.08333333333333333,
+      "eval/search-vs-random/seat0_score": 0.9625,
+      "eval/random-vs-search/seat0_score": 0.10416666666666667,
+      "eval/search-vs-policy/seat0_score": 0.6125,
+      "eval/policy-vs-search/seat0_score": 0.5583333333333333
+    },
+    "evaluations": {
+      "eval-000000": {
+        "policy-vs-random": {
+          "wins": 139,
+          "draws": 0,
+          "losses": 101,
+          "unfinished": 0,
+          "seconds": 1.5699794823303819
+        },
+        "random-vs-policy": {
+          "wins": 100,
+          "draws": 0,
+          "losses": 140,
+          "unfinished": 0,
+          "seconds": 1.3398032737895846
+        },
+        "search-vs-random": {
+          "wins": 156,
+          "draws": 0,
+          "losses": 84,
+          "unfinished": 0,
+          "seconds": 4.033871429972351
+        },
+        "random-vs-search": {
+          "wins": 92,
+          "draws": 0,
+          "losses": 148,
+          "unfinished": 0,
+          "seconds": 3.714782601222396
+        },
+        "search-vs-policy": {
+          "wins": 154,
+          "draws": 0,
+          "losses": 86,
+          "unfinished": 0,
+          "seconds": 3.708415921777487
+        },
+        "policy-vs-search": {
+          "wins": 124,
+          "draws": 0,
+          "losses": 116,
+          "unfinished": 0,
+          "seconds": 3.717414322309196
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.58125,
+          "search_vs_random": 0.6333333333333333,
+          "search_vs_policy": 0.5625
+        }
+      },
+      "eval-000050": {
+        "policy-vs-random": {
+          "wins": 209,
+          "draws": 0,
+          "losses": 31,
+          "unfinished": 0,
+          "seconds": 0.005067169666290283
+        },
+        "random-vs-policy": {
+          "wins": 75,
+          "draws": 0,
+          "losses": 165,
+          "unfinished": 0,
+          "seconds": 0.009630069136619568
+        },
+        "search-vs-random": {
+          "wins": 211,
+          "draws": 0,
+          "losses": 29,
+          "unfinished": 0,
+          "seconds": 0.008479848504066467
+        },
+        "random-vs-search": {
+          "wins": 79,
+          "draws": 0,
+          "losses": 161,
+          "unfinished": 0,
+          "seconds": 0.00874846801161766
+        },
+        "search-vs-policy": {
+          "wins": 142,
+          "draws": 0,
+          "losses": 98,
+          "unfinished": 0,
+          "seconds": 0.008357678540050983
+        },
+        "policy-vs-search": {
+          "wins": 139,
+          "draws": 0,
+          "losses": 101,
+          "unfinished": 0,
+          "seconds": 0.008261248469352722
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.7791666666666667,
+          "search_vs_random": 0.775,
+          "search_vs_policy": 0.50625
+        }
+      },
+      "eval-000100": {
+        "policy-vs-random": {
+          "wins": 222,
+          "draws": 0,
+          "losses": 18,
+          "unfinished": 0,
+          "seconds": 0.005339109338819981
+        },
+        "random-vs-policy": {
+          "wins": 82,
+          "draws": 0,
+          "losses": 158,
+          "unfinished": 0,
+          "seconds": 0.004498968832194805
+        },
+        "search-vs-random": {
+          "wins": 214,
+          "draws": 0,
+          "losses": 26,
+          "unfinished": 0,
+          "seconds": 0.015166068449616432
+        },
+        "random-vs-search": {
+          "wins": 70,
+          "draws": 0,
+          "losses": 170,
+          "unfinished": 0,
+          "seconds": 0.008563758805394173
+        },
+        "search-vs-policy": {
+          "wins": 126,
+          "draws": 0,
+          "losses": 114,
+          "unfinished": 0,
+          "seconds": 0.008640429005026817
+        },
+        "policy-vs-search": {
+          "wins": 167,
+          "draws": 0,
+          "losses": 73,
+          "unfinished": 0,
+          "seconds": 0.008396289311349392
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.7916666666666666,
+          "search_vs_random": 0.8,
+          "search_vs_policy": 0.41458333333333336
+        }
+      },
+      "eval-000150": {
+        "policy-vs-random": {
+          "wins": 228,
+          "draws": 0,
+          "losses": 12,
+          "unfinished": 0,
+          "seconds": 0.00502574909478426
+        },
+        "random-vs-policy": {
+          "wins": 82,
+          "draws": 0,
+          "losses": 158,
+          "unfinished": 0,
+          "seconds": 0.0044490499421954155
+        },
+        "search-vs-random": {
+          "wins": 226,
+          "draws": 0,
+          "losses": 14,
+          "unfinished": 0,
+          "seconds": 0.012683887965977192
+        },
+        "random-vs-search": {
+          "wins": 70,
+          "draws": 0,
+          "losses": 170,
+          "unfinished": 0,
+          "seconds": 0.008629439398646355
+        },
+        "search-vs-policy": {
+          "wins": 169,
+          "draws": 0,
+          "losses": 71,
+          "unfinished": 0,
+          "seconds": 0.008542888797819614
+        },
+        "policy-vs-search": {
+          "wins": 156,
+          "draws": 0,
+          "losses": 84,
+          "unfinished": 0,
+          "seconds": 0.00809152889996767
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.8041666666666667,
+          "search_vs_random": 0.825,
+          "search_vs_policy": 0.5270833333333333
+        }
+      },
+      "eval-000200": {
+        "policy-vs-random": {
+          "wins": 228,
+          "draws": 0,
+          "losses": 12,
+          "unfinished": 0,
+          "seconds": 0.005197788588702679
+        },
+        "random-vs-policy": {
+          "wins": 49,
+          "draws": 0,
+          "losses": 191,
+          "unfinished": 0,
+          "seconds": 0.016293377615511417
+        },
+        "search-vs-random": {
+          "wins": 226,
+          "draws": 0,
+          "losses": 14,
+          "unfinished": 0,
+          "seconds": 0.00865394901484251
+        },
+        "random-vs-search": {
+          "wins": 64,
+          "draws": 0,
+          "losses": 176,
+          "unfinished": 0,
+          "seconds": 0.008440638892352581
+        },
+        "search-vs-policy": {
+          "wins": 161,
+          "draws": 0,
+          "losses": 79,
+          "unfinished": 0,
+          "seconds": 0.008269717916846275
+        },
+        "policy-vs-search": {
+          "wins": 169,
+          "draws": 0,
+          "losses": 71,
+          "unfinished": 0,
+          "seconds": 0.007975739426910877
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.8729166666666667,
+          "search_vs_random": 0.8375,
+          "search_vs_policy": 0.48333333333333334
+        }
+      },
+      "eval-000250": {
+        "policy-vs-random": {
+          "wins": 236,
+          "draws": 0,
+          "losses": 4,
+          "unfinished": 0,
+          "seconds": 0.004972880706191063
+        },
+        "random-vs-policy": {
+          "wins": 49,
+          "draws": 0,
+          "losses": 191,
+          "unfinished": 0,
+          "seconds": 0.0126497782766819
+        },
+        "search-vs-random": {
+          "wins": 237,
+          "draws": 0,
+          "losses": 3,
+          "unfinished": 0,
+          "seconds": 0.008428568951785564
+        },
+        "random-vs-search": {
+          "wins": 45,
+          "draws": 0,
+          "losses": 195,
+          "unfinished": 0,
+          "seconds": 0.008427279070019722
+        },
+        "search-vs-policy": {
+          "wins": 157,
+          "draws": 0,
+          "losses": 83,
+          "unfinished": 0,
+          "seconds": 0.008184218779206276
+        },
+        "policy-vs-search": {
+          "wins": 142,
+          "draws": 0,
+          "losses": 98,
+          "unfinished": 0,
+          "seconds": 0.008031298406422138
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.8895833333333333,
+          "search_vs_random": 0.9,
+          "search_vs_policy": 0.53125
+        }
+      },
+      "eval-000300": {
+        "policy-vs-random": {
+          "wins": 236,
+          "draws": 0,
+          "losses": 4,
+          "unfinished": 0,
+          "seconds": 0.005476140417158604
+        },
+        "random-vs-policy": {
+          "wins": 20,
+          "draws": 0,
+          "losses": 220,
+          "unfinished": 0,
+          "seconds": 0.004515169188380241
+        },
+        "search-vs-random": {
+          "wins": 231,
+          "draws": 0,
+          "losses": 9,
+          "unfinished": 0,
+          "seconds": 0.012729818001389503
+        },
+        "random-vs-search": {
+          "wins": 25,
+          "draws": 0,
+          "losses": 215,
+          "unfinished": 0,
+          "seconds": 0.008378908969461918
+        },
+        "search-vs-policy": {
+          "wins": 147,
+          "draws": 0,
+          "losses": 93,
+          "unfinished": 0,
+          "seconds": 0.008227499201893806
+        },
+        "policy-vs-search": {
+          "wins": 134,
+          "draws": 0,
+          "losses": 106,
+          "unfinished": 0,
+          "seconds": 0.008106129243969917
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.95,
+          "search_vs_random": 0.9291666666666667,
+          "search_vs_policy": 0.5270833333333333
+        }
+      }
+    },
+    "mohex": {},
+    "final_checkpoint": "artifacts/muzero/hex4-vector-seed0-20260905-a/cycle-000300.safetensors",
+    "checkpoint_sha256": "08a5b4a6b8c67f3707dad31c75360e17677459fc5877e3dec7f7bf5851aa2d8d"
+  },
+  {
+    "run": "artifacts/muzero/hex4-vector-seed1-20260905-a",
+    "config": {
+      "env": "hex4",
+      "env_id": "hexnoswap_4x4",
+      "width": 128,
+      "depth": 2,
+      "unroll": 5,
+      "discount": 1.0,
+      "max_steps": 16,
+      "roots": 16,
+      "survivors": 8,
+      "exploration_moves": 8,
+      "selfplay_batch_size": 256,
+      "train_batch_size": 256,
+      "replay_batches": 16,
+      "updates_per_cycle": 16,
+      "cycles": 300,
+      "seed": 1,
+      "learning_rate": 0.001,
+      "weight_decay": 0.0001,
+      "devices": 4,
+      "platform": "tpu",
+      "wandb": true,
+      "checkpoint_period": 50,
+      "eval_period": 50,
+      "obs_shape": [
+        4,
+        4,
+        4
+      ],
+      "num_actions": 16,
+      "architecture": "vector-residual-v1",
+      "target": "signed-return-boundary-bootstrap",
+      "latent_normalization": "minmax",
+      "dynamics_gradient_scale": 0.5
+    },
+    "wandb_url": "https://wandb.ai/tdoubleu/nanoAlphaZero-muzero/runs/c6gpy6bo",
+    "parameters": 243858,
+    "transitions": 919328,
+    "updates": 4800,
+    "elapsed_seconds": 88.06251905299723,
+    "median_training_cycle_seconds": 0.061634911224246025,
+    "final_metrics": {
+      "grad_norm": 1.2501847743988037,
+      "loss": 1.3026169538497925,
+      "policy_loss": 0.7066729664802551,
+      "reward_loss": 0.04515153542160988,
+      "value_loss": 0.5507924556732178,
+      "cycle": 300,
+      "updates": 4800,
+      "seconds": 0.06250577140599489,
+      "elapsed_seconds": 88.06251905299723,
+      "completed_fraction": 1.0,
+      "real_transitions": 2915,
+      "heldout/unroll1/policy_loss": 6.414719104766846,
+      "heldout/unroll1/reward_loss": 0.03452284261584282,
+      "heldout/unroll1/value_loss": 0.9584787487983704,
+      "heldout/unroll3/policy_loss": 5.922106742858887,
+      "heldout/unroll3/reward_loss": 0.038282692432403564,
+      "heldout/unroll3/value_loss": 0.8679406642913818,
+      "heldout/unroll5/policy_loss": 5.565983295440674,
+      "heldout/unroll5/reward_loss": 0.04073774814605713,
+      "heldout/unroll5/value_loss": 0.7816166877746582,
+      "heldout/unroll10/policy_loss": 4.928843021392822,
+      "heldout/unroll10/reward_loss": 0.04860822483897209,
+      "heldout/unroll10/value_loss": 0.5927336812019348,
+      "eval/policy-vs-random/seat0_score": 0.9958333333333333,
+      "eval/random-vs-policy/seat0_score": 0.0625,
+      "eval/search-vs-random/seat0_score": 0.9958333333333333,
+      "eval/random-vs-search/seat0_score": 0.10416666666666667,
+      "eval/search-vs-policy/seat0_score": 0.7125,
+      "eval/policy-vs-search/seat0_score": 0.7416666666666667
+    },
+    "evaluations": {
+      "eval-000000": {
+        "policy-vs-random": {
+          "wins": 143,
+          "draws": 0,
+          "losses": 97,
+          "unfinished": 0,
+          "seconds": 1.6929164677858353
+        },
+        "random-vs-policy": {
+          "wins": 125,
+          "draws": 0,
+          "losses": 115,
+          "unfinished": 0,
+          "seconds": 1.5400194181129336
+        },
+        "search-vs-random": {
+          "wins": 158,
+          "draws": 0,
+          "losses": 82,
+          "unfinished": 0,
+          "seconds": 3.134615598246455
+        },
+        "random-vs-search": {
+          "wins": 132,
+          "draws": 0,
+          "losses": 108,
+          "unfinished": 0,
+          "seconds": 2.9719016486778855
+        },
+        "search-vs-policy": {
+          "wins": 195,
+          "draws": 0,
+          "losses": 45,
+          "unfinished": 0,
+          "seconds": 2.9398449324071407
+        },
+        "policy-vs-search": {
+          "wins": 146,
+          "draws": 0,
+          "losses": 94,
+          "unfinished": 0,
+          "seconds": 2.9241426661610603
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.5375,
+          "search_vs_random": 0.5541666666666667,
+          "search_vs_policy": 0.6020833333333333
+        }
+      },
+      "eval-000050": {
+        "policy-vs-random": {
+          "wins": 205,
+          "draws": 0,
+          "losses": 35,
+          "unfinished": 0,
+          "seconds": 0.0050946492701768875
+        },
+        "random-vs-policy": {
+          "wins": 83,
+          "draws": 0,
+          "losses": 157,
+          "unfinished": 0,
+          "seconds": 0.01152676809579134
+        },
+        "search-vs-random": {
+          "wins": 208,
+          "draws": 0,
+          "losses": 32,
+          "unfinished": 0,
+          "seconds": 0.006543918512761593
+        },
+        "random-vs-search": {
+          "wins": 79,
+          "draws": 0,
+          "losses": 161,
+          "unfinished": 0,
+          "seconds": 0.006415989249944687
+        },
+        "search-vs-policy": {
+          "wins": 183,
+          "draws": 0,
+          "losses": 57,
+          "unfinished": 0,
+          "seconds": 0.005973339080810547
+        },
+        "policy-vs-search": {
+          "wins": 132,
+          "draws": 0,
+          "losses": 108,
+          "unfinished": 0,
+          "seconds": 0.005851288326084614
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.7541666666666667,
+          "search_vs_random": 0.76875,
+          "search_vs_policy": 0.60625
+        }
+      },
+      "eval-000100": {
+        "policy-vs-random": {
+          "wins": 215,
+          "draws": 0,
+          "losses": 25,
+          "unfinished": 0,
+          "seconds": 0.016297567635774612
+        },
+        "random-vs-policy": {
+          "wins": 61,
+          "draws": 0,
+          "losses": 179,
+          "unfinished": 0,
+          "seconds": 0.004301219247281551
+        },
+        "search-vs-random": {
+          "wins": 213,
+          "draws": 0,
+          "losses": 27,
+          "unfinished": 0,
+          "seconds": 0.00659897830337286
+        },
+        "random-vs-search": {
+          "wins": 71,
+          "draws": 0,
+          "losses": 169,
+          "unfinished": 0,
+          "seconds": 0.0063790688291192055
+        },
+        "search-vs-policy": {
+          "wins": 116,
+          "draws": 0,
+          "losses": 124,
+          "unfinished": 0,
+          "seconds": 0.00602639839053154
+        },
+        "policy-vs-search": {
+          "wins": 130,
+          "draws": 0,
+          "losses": 110,
+          "unfinished": 0,
+          "seconds": 0.005825589410960674
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.8208333333333333,
+          "search_vs_random": 0.7958333333333333,
+          "search_vs_policy": 0.4708333333333333
+        }
+      },
+      "eval-000150": {
+        "policy-vs-random": {
+          "wins": 227,
+          "draws": 0,
+          "losses": 13,
+          "unfinished": 0,
+          "seconds": 0.015659268014132977
+        },
+        "random-vs-policy": {
+          "wins": 34,
+          "draws": 0,
+          "losses": 206,
+          "unfinished": 0,
+          "seconds": 0.004454509355127811
+        },
+        "search-vs-random": {
+          "wins": 228,
+          "draws": 0,
+          "losses": 12,
+          "unfinished": 0,
+          "seconds": 0.0065872808918356895
+        },
+        "random-vs-search": {
+          "wins": 42,
+          "draws": 0,
+          "losses": 198,
+          "unfinished": 0,
+          "seconds": 0.006448800675570965
+        },
+        "search-vs-policy": {
+          "wins": 188,
+          "draws": 0,
+          "losses": 52,
+          "unfinished": 0,
+          "seconds": 0.005984090268611908
+        },
+        "policy-vs-search": {
+          "wins": 152,
+          "draws": 0,
+          "losses": 88,
+          "unfinished": 0,
+          "seconds": 0.005904109217226505
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.9020833333333333,
+          "search_vs_random": 0.8875,
+          "search_vs_policy": 0.575
+        }
+      },
+      "eval-000200": {
+        "policy-vs-random": {
+          "wins": 234,
+          "draws": 0,
+          "losses": 6,
+          "unfinished": 0,
+          "seconds": 0.015291527844965458
+        },
+        "random-vs-policy": {
+          "wins": 31,
+          "draws": 0,
+          "losses": 209,
+          "unfinished": 0,
+          "seconds": 0.004554918967187405
+        },
+        "search-vs-random": {
+          "wins": 233,
+          "draws": 0,
+          "losses": 7,
+          "unfinished": 0,
+          "seconds": 0.0067804791033267975
+        },
+        "random-vs-search": {
+          "wins": 39,
+          "draws": 0,
+          "losses": 201,
+          "unfinished": 0,
+          "seconds": 0.006475699134171009
+        },
+        "search-vs-policy": {
+          "wins": 186,
+          "draws": 0,
+          "losses": 54,
+          "unfinished": 0,
+          "seconds": 0.006123679690063
+        },
+        "policy-vs-search": {
+          "wins": 194,
+          "draws": 0,
+          "losses": 46,
+          "unfinished": 0,
+          "seconds": 0.006085328757762909
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.9229166666666667,
+          "search_vs_random": 0.9041666666666667,
+          "search_vs_policy": 0.48333333333333334
+        }
+      },
+      "eval-000250": {
+        "policy-vs-random": {
+          "wins": 237,
+          "draws": 0,
+          "losses": 3,
+          "unfinished": 0,
+          "seconds": 0.015962998382747173
+        },
+        "random-vs-policy": {
+          "wins": 24,
+          "draws": 0,
+          "losses": 216,
+          "unfinished": 0,
+          "seconds": 0.004365209490060806
+        },
+        "search-vs-random": {
+          "wins": 234,
+          "draws": 0,
+          "losses": 6,
+          "unfinished": 0,
+          "seconds": 0.006565209478139877
+        },
+        "random-vs-search": {
+          "wins": 24,
+          "draws": 0,
+          "losses": 216,
+          "unfinished": 0,
+          "seconds": 0.006466559134423733
+        },
+        "search-vs-policy": {
+          "wins": 177,
+          "draws": 0,
+          "losses": 63,
+          "unfinished": 0,
+          "seconds": 0.005797669291496277
+        },
+        "policy-vs-search": {
+          "wins": 186,
+          "draws": 0,
+          "losses": 54,
+          "unfinished": 0,
+          "seconds": 0.005822058767080307
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.94375,
+          "search_vs_random": 0.9375,
+          "search_vs_policy": 0.48125
+        }
+      },
+      "eval-000300": {
+        "policy-vs-random": {
+          "wins": 239,
+          "draws": 0,
+          "losses": 1,
+          "unfinished": 0,
+          "seconds": 0.0052118804305791855
+        },
+        "random-vs-policy": {
+          "wins": 15,
+          "draws": 0,
+          "losses": 225,
+          "unfinished": 0,
+          "seconds": 0.01998932659626007
+        },
+        "search-vs-random": {
+          "wins": 239,
+          "draws": 0,
+          "losses": 1,
+          "unfinished": 0,
+          "seconds": 0.0066079990938305855
+        },
+        "random-vs-search": {
+          "wins": 25,
+          "draws": 0,
+          "losses": 215,
+          "unfinished": 0,
+          "seconds": 0.0065083689987659454
+        },
+        "search-vs-policy": {
+          "wins": 171,
+          "draws": 0,
+          "losses": 69,
+          "unfinished": 0,
+          "seconds": 0.005978608503937721
+        },
+        "policy-vs-search": {
+          "wins": 178,
+          "draws": 0,
+          "losses": 62,
+          "unfinished": 0,
+          "seconds": 0.005815538577735424
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.9666666666666667,
+          "search_vs_random": 0.9458333333333333,
+          "search_vs_policy": 0.48541666666666666
+        }
+      }
+    },
+    "mohex": {},
+    "final_checkpoint": "artifacts/muzero/hex4-vector-seed1-20260905-a/cycle-000300.safetensors",
+    "checkpoint_sha256": "02c9447132fe7040d094df8442279c71ac1b79a9eef96b58b48511160bf3d721"
+  },
+  {
+    "run": "artifacts/muzero/hex4-vector-seed2-20260905-a",
+    "config": {
+      "env": "hex4",
+      "env_id": "hexnoswap_4x4",
+      "width": 128,
+      "depth": 2,
+      "unroll": 5,
+      "discount": 1.0,
+      "max_steps": 16,
+      "roots": 16,
+      "survivors": 8,
+      "exploration_moves": 8,
+      "selfplay_batch_size": 256,
+      "train_batch_size": 256,
+      "replay_batches": 16,
+      "updates_per_cycle": 16,
+      "cycles": 300,
+      "seed": 2,
+      "learning_rate": 0.001,
+      "weight_decay": 0.0001,
+      "devices": 4,
+      "platform": "tpu",
+      "wandb": true,
+      "checkpoint_period": 50,
+      "eval_period": 50,
+      "obs_shape": [
+        4,
+        4,
+        4
+      ],
+      "num_actions": 16,
+      "architecture": "vector-residual-v1",
+      "target": "signed-return-boundary-bootstrap",
+      "latent_normalization": "minmax",
+      "dynamics_gradient_scale": 0.5
+    },
+    "wandb_url": "https://wandb.ai/tdoubleu/nanoAlphaZero-muzero/runs/g3kvt8zx",
+    "parameters": 243858,
+    "transitions": 930947,
+    "updates": 4800,
+    "elapsed_seconds": 90.43937833048403,
+    "median_training_cycle_seconds": 0.06394464056938887,
+    "final_metrics": {
+      "grad_norm": 1.5318387746810913,
+      "loss": 1.4194024801254272,
+      "policy_loss": 0.7922802567481995,
+      "reward_loss": 0.03948391601443291,
+      "value_loss": 0.5876383185386658,
+      "cycle": 300,
+      "updates": 4800,
+      "seconds": 0.06377686094492674,
+      "elapsed_seconds": 90.43937833048403,
+      "completed_fraction": 1.0,
+      "real_transitions": 2913,
+      "heldout/unroll1/policy_loss": 6.834946632385254,
+      "heldout/unroll1/reward_loss": 0.03927655518054962,
+      "heldout/unroll1/value_loss": 0.9378696084022522,
+      "heldout/unroll3/policy_loss": 6.373101234436035,
+      "heldout/unroll3/reward_loss": 0.037703484296798706,
+      "heldout/unroll3/value_loss": 0.8477646112442017,
+      "heldout/unroll5/policy_loss": 6.031838893890381,
+      "heldout/unroll5/reward_loss": 0.04220814257860184,
+      "heldout/unroll5/value_loss": 0.7658621668815613,
+      "heldout/unroll10/policy_loss": 5.42677116394043,
+      "heldout/unroll10/reward_loss": 0.04760916158556938,
+      "heldout/unroll10/value_loss": 0.5798740386962891,
+      "eval/policy-vs-random/seat0_score": 0.9708333333333333,
+      "eval/random-vs-policy/seat0_score": 0.03333333333333333,
+      "eval/search-vs-random/seat0_score": 0.9833333333333333,
+      "eval/random-vs-search/seat0_score": 0.09166666666666666,
+      "eval/search-vs-policy/seat0_score": 0.7041666666666667,
+      "eval/policy-vs-search/seat0_score": 0.6541666666666667
+    },
+    "evaluations": {
+      "eval-000000": {
+        "policy-vs-random": {
+          "wins": 149,
+          "draws": 0,
+          "losses": 91,
+          "unfinished": 0,
+          "seconds": 1.6958525776863098
+        },
+        "random-vs-policy": {
+          "wins": 122,
+          "draws": 0,
+          "losses": 118,
+          "unfinished": 0,
+          "seconds": 1.5838594119995832
+        },
+        "search-vs-random": {
+          "wins": 140,
+          "draws": 0,
+          "losses": 100,
+          "unfinished": 0,
+          "seconds": 3.106179212220013
+        },
+        "random-vs-search": {
+          "wins": 133,
+          "draws": 0,
+          "losses": 107,
+          "unfinished": 0,
+          "seconds": 2.9486768916249275
+        },
+        "search-vs-policy": {
+          "wins": 158,
+          "draws": 0,
+          "losses": 82,
+          "unfinished": 0,
+          "seconds": 3.000177755020559
+        },
+        "policy-vs-search": {
+          "wins": 154,
+          "draws": 0,
+          "losses": 86,
+          "unfinished": 0,
+          "seconds": 3.090115084312856
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.55625,
+          "search_vs_random": 0.5145833333333333,
+          "search_vs_policy": 0.5083333333333333
+        }
+      },
+      "eval-000050": {
+        "policy-vs-random": {
+          "wins": 211,
+          "draws": 0,
+          "losses": 29,
+          "unfinished": 0,
+          "seconds": 0.01801384799182415
+        },
+        "random-vs-policy": {
+          "wins": 75,
+          "draws": 0,
+          "losses": 165,
+          "unfinished": 0,
+          "seconds": 0.004479818977415562
+        },
+        "search-vs-random": {
+          "wins": 207,
+          "draws": 0,
+          "losses": 33,
+          "unfinished": 0,
+          "seconds": 0.006897099316120148
+        },
+        "random-vs-search": {
+          "wins": 79,
+          "draws": 0,
+          "losses": 161,
+          "unfinished": 0,
+          "seconds": 0.0065627992153167725
+        },
+        "search-vs-policy": {
+          "wins": 164,
+          "draws": 0,
+          "losses": 76,
+          "unfinished": 0,
+          "seconds": 0.005925499834120274
+        },
+        "policy-vs-search": {
+          "wins": 153,
+          "draws": 0,
+          "losses": 87,
+          "unfinished": 0,
+          "seconds": 0.0059348903596401215
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.7833333333333333,
+          "search_vs_random": 0.7666666666666667,
+          "search_vs_policy": 0.5229166666666667
+        }
+      },
+      "eval-000100": {
+        "policy-vs-random": {
+          "wins": 205,
+          "draws": 0,
+          "losses": 35,
+          "unfinished": 0,
+          "seconds": 0.00511309877038002
+        },
+        "random-vs-policy": {
+          "wins": 83,
+          "draws": 0,
+          "losses": 157,
+          "unfinished": 0,
+          "seconds": 0.013767638243734837
+        },
+        "search-vs-random": {
+          "wins": 197,
+          "draws": 0,
+          "losses": 43,
+          "unfinished": 0,
+          "seconds": 0.006632668897509575
+        },
+        "random-vs-search": {
+          "wins": 65,
+          "draws": 0,
+          "losses": 175,
+          "unfinished": 0,
+          "seconds": 0.006394709460437298
+        },
+        "search-vs-policy": {
+          "wins": 104,
+          "draws": 0,
+          "losses": 136,
+          "unfinished": 0,
+          "seconds": 0.005947759374976158
+        },
+        "policy-vs-search": {
+          "wins": 128,
+          "draws": 0,
+          "losses": 112,
+          "unfinished": 0,
+          "seconds": 0.005968648009002209
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.7541666666666667,
+          "search_vs_random": 0.775,
+          "search_vs_policy": 0.45
+        }
+      },
+      "eval-000150": {
+        "policy-vs-random": {
+          "wins": 213,
+          "draws": 0,
+          "losses": 27,
+          "unfinished": 0,
+          "seconds": 0.018664946779608727
+        },
+        "random-vs-policy": {
+          "wins": 68,
+          "draws": 0,
+          "losses": 172,
+          "unfinished": 0,
+          "seconds": 0.004411148838698864
+        },
+        "search-vs-random": {
+          "wins": 221,
+          "draws": 0,
+          "losses": 19,
+          "unfinished": 0,
+          "seconds": 0.0064456891268491745
+        },
+        "random-vs-search": {
+          "wins": 60,
+          "draws": 0,
+          "losses": 180,
+          "unfinished": 0,
+          "seconds": 0.006543869152665138
+        },
+        "search-vs-policy": {
+          "wins": 157,
+          "draws": 0,
+          "losses": 83,
+          "unfinished": 0,
+          "seconds": 0.00587500911206007
+        },
+        "policy-vs-search": {
+          "wins": 127,
+          "draws": 0,
+          "losses": 113,
+          "unfinished": 0,
+          "seconds": 0.005881909281015396
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.8020833333333334,
+          "search_vs_random": 0.8354166666666667,
+          "search_vs_policy": 0.5625
+        }
+      },
+      "eval-000200": {
+        "policy-vs-random": {
+          "wins": 221,
+          "draws": 0,
+          "losses": 19,
+          "unfinished": 0,
+          "seconds": 0.018197528086602688
+        },
+        "random-vs-policy": {
+          "wins": 52,
+          "draws": 0,
+          "losses": 188,
+          "unfinished": 0,
+          "seconds": 0.004550269804894924
+        },
+        "search-vs-random": {
+          "wins": 228,
+          "draws": 0,
+          "losses": 12,
+          "unfinished": 0,
+          "seconds": 0.006543468683958054
+        },
+        "random-vs-search": {
+          "wins": 47,
+          "draws": 0,
+          "losses": 193,
+          "unfinished": 0,
+          "seconds": 0.006416088901460171
+        },
+        "search-vs-policy": {
+          "wins": 121,
+          "draws": 0,
+          "losses": 119,
+          "unfinished": 0,
+          "seconds": 0.00598760973662138
+        },
+        "policy-vs-search": {
+          "wins": 123,
+          "draws": 0,
+          "losses": 117,
+          "unfinished": 0,
+          "seconds": 0.005941228941082954
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.8520833333333333,
+          "search_vs_random": 0.8770833333333333,
+          "search_vs_policy": 0.49583333333333335
+        }
+      },
+      "eval-000250": {
+        "policy-vs-random": {
+          "wins": 230,
+          "draws": 0,
+          "losses": 10,
+          "unfinished": 0,
+          "seconds": 0.01741560734808445
+        },
+        "random-vs-policy": {
+          "wins": 32,
+          "draws": 0,
+          "losses": 208,
+          "unfinished": 0,
+          "seconds": 0.004462249577045441
+        },
+        "search-vs-random": {
+          "wins": 233,
+          "draws": 0,
+          "losses": 7,
+          "unfinished": 0,
+          "seconds": 0.006674979813396931
+        },
+        "random-vs-search": {
+          "wins": 24,
+          "draws": 0,
+          "losses": 216,
+          "unfinished": 0,
+          "seconds": 0.006560688838362694
+        },
+        "search-vs-policy": {
+          "wins": 157,
+          "draws": 0,
+          "losses": 83,
+          "unfinished": 0,
+          "seconds": 0.006012710742652416
+        },
+        "policy-vs-search": {
+          "wins": 153,
+          "draws": 0,
+          "losses": 87,
+          "unfinished": 0,
+          "seconds": 0.005929210223257542
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.9125,
+          "search_vs_random": 0.9354166666666667,
+          "search_vs_policy": 0.5083333333333333
+        }
+      },
+      "eval-000300": {
+        "policy-vs-random": {
+          "wins": 233,
+          "draws": 0,
+          "losses": 7,
+          "unfinished": 0,
+          "seconds": 0.005299689248204231
+        },
+        "random-vs-policy": {
+          "wins": 8,
+          "draws": 0,
+          "losses": 232,
+          "unfinished": 0,
+          "seconds": 0.013383457437157631
+        },
+        "search-vs-random": {
+          "wins": 236,
+          "draws": 0,
+          "losses": 4,
+          "unfinished": 0,
+          "seconds": 0.0066359993070364
+        },
+        "random-vs-search": {
+          "wins": 22,
+          "draws": 0,
+          "losses": 218,
+          "unfinished": 0,
+          "seconds": 0.00666044931858778
+        },
+        "search-vs-policy": {
+          "wins": 169,
+          "draws": 0,
+          "losses": 71,
+          "unfinished": 0,
+          "seconds": 0.005990150384604931
+        },
+        "policy-vs-search": {
+          "wins": 157,
+          "draws": 0,
+          "losses": 83,
+          "unfinished": 0,
+          "seconds": 0.006002449430525303
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.96875,
+          "search_vs_random": 0.9458333333333333,
+          "search_vs_policy": 0.525
+        }
+      }
+    },
+    "mohex": {},
+    "final_checkpoint": "artifacts/muzero/hex4-vector-seed2-20260905-a/cycle-000300.safetensors",
+    "checkpoint_sha256": "73c9d689bd023285717e2c4dbc6ffafff4a6a38a7cfc27ae56f4284e7d64c996"
+  },
+  {
+    "run": "artifacts/muzero/hex4-duration-seed0-20260905-a",
+    "config": {
+      "env": "hex4",
+      "env_id": "hexnoswap_4x4",
+      "width": 128,
+      "depth": 2,
+      "unroll": 5,
+      "discount": 1.0,
+      "max_steps": 16,
+      "roots": 16,
+      "survivors": 8,
+      "exploration_moves": 8,
+      "selfplay_batch_size": 256,
+      "train_batch_size": 256,
+      "replay_batches": 16,
+      "updates_per_cycle": 16,
+      "cycles": 3000,
+      "seed": 0,
+      "learning_rate": 0.001,
+      "weight_decay": 0.0001,
+      "devices": 4,
+      "platform": "tpu",
+      "wandb": true,
+      "checkpoint_period": 300,
+      "eval_period": 300,
+      "obs_shape": [
+        4,
+        4,
+        4
+      ],
+      "num_actions": 16,
+      "architecture": "vector-residual-v1",
+      "target": "signed-return-boundary-bootstrap",
+      "latent_normalization": "minmax",
+      "dynamics_gradient_scale": 0.5
+    },
+    "wandb_url": "https://wandb.ai/tdoubleu/nanoAlphaZero-muzero/runs/tv1yv1ws",
+    "parameters": 243858,
+    "transitions": 8506549,
+    "updates": 48000,
+    "elapsed_seconds": 348.5853344760835,
+    "median_training_cycle_seconds": 0.0694668497890234,
+    "final_metrics": {
+      "grad_norm": 0.6406332850456238,
+      "loss": 0.8262829184532166,
+      "policy_loss": 0.5243439674377441,
+      "reward_loss": 0.005663850344717503,
+      "value_loss": 0.2962750792503357,
+      "cycle": 3000,
+      "updates": 48000,
+      "seconds": 0.0683901309967041,
+      "elapsed_seconds": 348.5853344760835,
+      "completed_fraction": 1.0,
+      "real_transitions": 2803,
+      "heldout/unroll1/policy_loss": 6.9808244705200195,
+      "heldout/unroll1/reward_loss": 0.000280662759905681,
+      "heldout/unroll1/value_loss": 1.0997021198272705,
+      "heldout/unroll1/real_value_mse": 1.153518557548523,
+      "heldout/unroll1/nonzero_reward_count": 24,
+      "heldout/unroll1/positive_reward_prediction": 0.9744167327880859,
+      "heldout/unroll1/real_reward_mse": 0.000280662759905681,
+      "heldout/unroll1/k0_real_value_mse": 1.2408260107040405,
+      "heldout/unroll1/k1_real_value_mse": 1.05717933177948,
+      "heldout/unroll3/policy_loss": 6.67144775390625,
+      "heldout/unroll3/reward_loss": 0.0026989539619535208,
+      "heldout/unroll3/value_loss": 1.0539894104003906,
+      "heldout/unroll3/real_value_mse": 1.2096322774887085,
+      "heldout/unroll3/nonzero_reward_count": 62,
+      "heldout/unroll3/positive_reward_prediction": 0.9489302039146423,
+      "heldout/unroll3/real_reward_mse": 0.002941757207736373,
+      "heldout/unroll3/k0_real_value_mse": 1.2408260107040405,
+      "heldout/unroll3/k1_real_value_mse": 1.05717933177948,
+      "heldout/unroll3/k2_real_value_mse": 1.3109184503555298,
+      "heldout/unroll3/k3_real_value_mse": 1.2416664361953735,
+      "heldout/unroll5/policy_loss": 6.378623008728027,
+      "heldout/unroll5/reward_loss": 0.005938722286373377,
+      "heldout/unroll5/value_loss": 0.9705979824066162,
+      "heldout/unroll5/real_value_mse": 1.2161747217178345,
+      "heldout/unroll5/nonzero_reward_count": 98,
+      "heldout/unroll5/positive_reward_prediction": 0.9143694043159485,
+      "heldout/unroll5/real_reward_mse": 0.006249799858778715,
+      "heldout/unroll5/k0_real_value_mse": 1.2408260107040405,
+      "heldout/unroll5/k1_real_value_mse": 1.05717933177948,
+      "heldout/unroll5/k2_real_value_mse": 1.3109184503555298,
+      "heldout/unroll5/k3_real_value_mse": 1.2416664361953735,
+      "heldout/unroll5/k4_real_value_mse": 1.301581859588623,
+      "heldout/unroll5/k5_real_value_mse": 1.1595549583435059,
+      "heldout/unroll10/policy_loss": 5.733328819274902,
+      "heldout/unroll10/reward_loss": 0.016804803162813187,
+      "heldout/unroll10/value_loss": 0.7526687383651733,
+      "heldout/unroll10/real_value_mse": 1.2352091073989868,
+      "heldout/unroll10/nonzero_reward_count": 203,
+      "heldout/unroll10/positive_reward_prediction": 0.8040595650672913,
+      "heldout/unroll10/real_reward_mse": 0.024368377402424812,
+      "heldout/unroll10/k0_real_value_mse": 1.2408260107040405,
+      "heldout/unroll10/k1_real_value_mse": 1.05717933177948,
+      "heldout/unroll10/k2_real_value_mse": 1.3109184503555298,
+      "heldout/unroll10/k3_real_value_mse": 1.2416664361953735,
+      "heldout/unroll10/k4_real_value_mse": 1.301581859588623,
+      "heldout/unroll10/k5_real_value_mse": 1.1595549583435059,
+      "heldout/unroll10/k6_real_value_mse": 1.3187674283981323,
+      "heldout/unroll10/k7_real_value_mse": 1.291098952293396,
+      "heldout/unroll10/k8_real_value_mse": 1.1822785139083862,
+      "heldout/unroll10/k9_real_value_mse": 1.379978060722351,
+      "heldout/unroll10/k10_real_value_mse": 1.2298164367675781,
+      "eval/policy-vs-random/seat0_score": 1.0,
+      "eval/random-vs-policy/seat0_score": 0.004166666666666667,
+      "eval/search-vs-random/seat0_score": 1.0,
+      "eval/random-vs-search/seat0_score": 0.0,
+      "eval/search-vs-policy/seat0_score": 0.8541666666666666,
+      "eval/policy-vs-search/seat0_score": 0.7916666666666666
+    },
+    "evaluations": {
+      "eval-000000": {
+        "policy-vs-random": {
+          "wins": 139,
+          "draws": 0,
+          "losses": 101,
+          "unfinished": 0,
+          "seconds": 1.732828451320529
+        },
+        "random-vs-policy": {
+          "wins": 100,
+          "draws": 0,
+          "losses": 140,
+          "unfinished": 0,
+          "seconds": 1.4232848435640335
+        },
+        "search-vs-random": {
+          "wins": 156,
+          "draws": 0,
+          "losses": 84,
+          "unfinished": 0,
+          "seconds": 3.2702315896749496
+        },
+        "random-vs-search": {
+          "wins": 92,
+          "draws": 0,
+          "losses": 148,
+          "unfinished": 0,
+          "seconds": 2.888051819987595
+        },
+        "search-vs-policy": {
+          "wins": 154,
+          "draws": 0,
+          "losses": 86,
+          "unfinished": 0,
+          "seconds": 2.9642430497333407
+        },
+        "policy-vs-search": {
+          "wins": 124,
+          "draws": 0,
+          "losses": 116,
+          "unfinished": 0,
+          "seconds": 2.9678909992799163
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.58125,
+          "search_vs_random": 0.6333333333333333,
+          "search_vs_policy": 0.5625
+        }
+      },
+      "eval-000300": {
+        "policy-vs-random": {
+          "wins": 236,
+          "draws": 0,
+          "losses": 4,
+          "unfinished": 0,
+          "seconds": 0.00573285948485136
+        },
+        "random-vs-policy": {
+          "wins": 20,
+          "draws": 0,
+          "losses": 220,
+          "unfinished": 0,
+          "seconds": 0.00468709971755743
+        },
+        "search-vs-random": {
+          "wins": 231,
+          "draws": 0,
+          "losses": 9,
+          "unfinished": 0,
+          "seconds": 0.006621398963034153
+        },
+        "random-vs-search": {
+          "wins": 25,
+          "draws": 0,
+          "losses": 215,
+          "unfinished": 0,
+          "seconds": 0.0064975181594491005
+        },
+        "search-vs-policy": {
+          "wins": 147,
+          "draws": 0,
+          "losses": 93,
+          "unfinished": 0,
+          "seconds": 0.006055559031665325
+        },
+        "policy-vs-search": {
+          "wins": 134,
+          "draws": 0,
+          "losses": 106,
+          "unfinished": 0,
+          "seconds": 0.006184129044413567
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.95,
+          "search_vs_random": 0.9291666666666667,
+          "search_vs_policy": 0.5270833333333333
+        }
+      },
+      "eval-000600": {
+        "policy-vs-random": {
+          "wins": 240,
+          "draws": 0,
+          "losses": 0,
+          "unfinished": 0,
+          "seconds": 0.005000089295208454
+        },
+        "random-vs-policy": {
+          "wins": 3,
+          "draws": 0,
+          "losses": 237,
+          "unfinished": 0,
+          "seconds": 0.004512138664722443
+        },
+        "search-vs-random": {
+          "wins": 237,
+          "draws": 0,
+          "losses": 3,
+          "unfinished": 0,
+          "seconds": 0.006576539017260075
+        },
+        "random-vs-search": {
+          "wins": 4,
+          "draws": 0,
+          "losses": 236,
+          "unfinished": 0,
+          "seconds": 0.006674359552562237
+        },
+        "search-vs-policy": {
+          "wins": 182,
+          "draws": 0,
+          "losses": 58,
+          "unfinished": 0,
+          "seconds": 0.006025428883731365
+        },
+        "policy-vs-search": {
+          "wins": 184,
+          "draws": 0,
+          "losses": 56,
+          "unfinished": 0,
+          "seconds": 0.005935089662671089
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.99375,
+          "search_vs_random": 0.9854166666666667,
+          "search_vs_policy": 0.49583333333333335
+        }
+      },
+      "eval-000900": {
+        "policy-vs-random": {
+          "wins": 240,
+          "draws": 0,
+          "losses": 0,
+          "unfinished": 0,
+          "seconds": 0.0051676686853170395
+        },
+        "random-vs-policy": {
+          "wins": 3,
+          "draws": 0,
+          "losses": 237,
+          "unfinished": 0,
+          "seconds": 0.004548239521682262
+        },
+        "search-vs-random": {
+          "wins": 240,
+          "draws": 0,
+          "losses": 0,
+          "unfinished": 0,
+          "seconds": 0.006513359025120735
+        },
+        "random-vs-search": {
+          "wins": 2,
+          "draws": 0,
+          "losses": 238,
+          "unfinished": 0,
+          "seconds": 0.006499599665403366
+        },
+        "search-vs-policy": {
+          "wins": 184,
+          "draws": 0,
+          "losses": 56,
+          "unfinished": 0,
+          "seconds": 0.006018809042870998
+        },
+        "policy-vs-search": {
+          "wins": 201,
+          "draws": 0,
+          "losses": 39,
+          "unfinished": 0,
+          "seconds": 0.005946209654211998
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.99375,
+          "search_vs_random": 0.9958333333333333,
+          "search_vs_policy": 0.46458333333333335
+        }
+      },
+      "eval-001200": {
+        "policy-vs-random": {
+          "wins": 240,
+          "draws": 0,
+          "losses": 0,
+          "unfinished": 0,
+          "seconds": 0.005148089490830898
+        },
+        "random-vs-policy": {
+          "wins": 0,
+          "draws": 0,
+          "losses": 240,
+          "unfinished": 0,
+          "seconds": 0.004443508572876453
+        },
+        "search-vs-random": {
+          "wins": 240,
+          "draws": 0,
+          "losses": 0,
+          "unfinished": 0,
+          "seconds": 0.006697279401123524
+        },
+        "random-vs-search": {
+          "wins": 3,
+          "draws": 0,
+          "losses": 237,
+          "unfinished": 0,
+          "seconds": 0.006740919314324856
+        },
+        "search-vs-policy": {
+          "wins": 197,
+          "draws": 0,
+          "losses": 43,
+          "unfinished": 0,
+          "seconds": 0.005959739908576012
+        },
+        "policy-vs-search": {
+          "wins": 200,
+          "draws": 0,
+          "losses": 40,
+          "unfinished": 0,
+          "seconds": 0.006080658175051212
+        },
+        "combined_scores": {
+          "policy_vs_random": 1.0,
+          "search_vs_random": 0.99375,
+          "search_vs_policy": 0.49375
+        }
+      },
+      "eval-001500": {
+        "policy-vs-random": {
+          "wins": 240,
+          "draws": 0,
+          "losses": 0,
+          "unfinished": 0,
+          "seconds": 0.005561528727412224
+        },
+        "random-vs-policy": {
+          "wins": 1,
+          "draws": 0,
+          "losses": 239,
+          "unfinished": 0,
+          "seconds": 0.004588439129292965
+        },
+        "search-vs-random": {
+          "wins": 240,
+          "draws": 0,
+          "losses": 0,
+          "unfinished": 0,
+          "seconds": 0.0067228395491838455
+        },
+        "random-vs-search": {
+          "wins": 2,
+          "draws": 0,
+          "losses": 238,
+          "unfinished": 0,
+          "seconds": 0.006539369001984596
+        },
+        "search-vs-policy": {
+          "wins": 209,
+          "draws": 0,
+          "losses": 31,
+          "unfinished": 0,
+          "seconds": 0.006005969829857349
+        },
+        "policy-vs-search": {
+          "wins": 212,
+          "draws": 0,
+          "losses": 28,
+          "unfinished": 0,
+          "seconds": 0.005964550189673901
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.9979166666666667,
+          "search_vs_random": 0.9958333333333333,
+          "search_vs_policy": 0.49375
+        }
+      },
+      "eval-001800": {
+        "policy-vs-random": {
+          "wins": 240,
+          "draws": 0,
+          "losses": 0,
+          "unfinished": 0,
+          "seconds": 0.005125748924911022
+        },
+        "random-vs-policy": {
+          "wins": 1,
+          "draws": 0,
+          "losses": 239,
+          "unfinished": 0,
+          "seconds": 0.004569868557155132
+        },
+        "search-vs-random": {
+          "wins": 240,
+          "draws": 0,
+          "losses": 0,
+          "unfinished": 0,
+          "seconds": 0.006536498665809631
+        },
+        "random-vs-search": {
+          "wins": 0,
+          "draws": 0,
+          "losses": 240,
+          "unfinished": 0,
+          "seconds": 0.006703558377921581
+        },
+        "search-vs-policy": {
+          "wins": 202,
+          "draws": 0,
+          "losses": 38,
+          "unfinished": 0,
+          "seconds": 0.0061204200610518456
+        },
+        "policy-vs-search": {
+          "wins": 203,
+          "draws": 0,
+          "losses": 37,
+          "unfinished": 0,
+          "seconds": 0.0059721581637859344
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.9979166666666667,
+          "search_vs_random": 1.0,
+          "search_vs_policy": 0.4979166666666667
+        }
+      },
+      "eval-002100": {
+        "policy-vs-random": {
+          "wins": 239,
+          "draws": 0,
+          "losses": 1,
+          "unfinished": 0,
+          "seconds": 0.005190999247133732
+        },
+        "random-vs-policy": {
+          "wins": 0,
+          "draws": 0,
+          "losses": 240,
+          "unfinished": 0,
+          "seconds": 0.004527488723397255
+        },
+        "search-vs-random": {
+          "wins": 240,
+          "draws": 0,
+          "losses": 0,
+          "unfinished": 0,
+          "seconds": 0.006496819667518139
+        },
+        "random-vs-search": {
+          "wins": 1,
+          "draws": 0,
+          "losses": 239,
+          "unfinished": 0,
+          "seconds": 0.006588439457118511
+        },
+        "search-vs-policy": {
+          "wins": 213,
+          "draws": 0,
+          "losses": 27,
+          "unfinished": 0,
+          "seconds": 0.006073048338294029
+        },
+        "policy-vs-search": {
+          "wins": 214,
+          "draws": 0,
+          "losses": 26,
+          "unfinished": 0,
+          "seconds": 0.00593211967498064
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.9979166666666667,
+          "search_vs_random": 0.9979166666666667,
+          "search_vs_policy": 0.4979166666666667
+        }
+      },
+      "eval-002400": {
+        "policy-vs-random": {
+          "wins": 240,
+          "draws": 0,
+          "losses": 0,
+          "unfinished": 0,
+          "seconds": 0.005314580164849758
+        },
+        "random-vs-policy": {
+          "wins": 0,
+          "draws": 0,
+          "losses": 240,
+          "unfinished": 0,
+          "seconds": 0.0045639099553227425
+        },
+        "search-vs-random": {
+          "wins": 240,
+          "draws": 0,
+          "losses": 0,
+          "unfinished": 0,
+          "seconds": 0.006477969698607922
+        },
+        "random-vs-search": {
+          "wins": 0,
+          "draws": 0,
+          "losses": 240,
+          "unfinished": 0,
+          "seconds": 0.006445678882300854
+        },
+        "search-vs-policy": {
+          "wins": 199,
+          "draws": 0,
+          "losses": 41,
+          "unfinished": 0,
+          "seconds": 0.005995039828121662
+        },
+        "policy-vs-search": {
+          "wins": 202,
+          "draws": 0,
+          "losses": 38,
+          "unfinished": 0,
+          "seconds": 0.005924268625676632
+        },
+        "combined_scores": {
+          "policy_vs_random": 1.0,
+          "search_vs_random": 1.0,
+          "search_vs_policy": 0.49375
+        }
+      },
+      "eval-002700": {
+        "policy-vs-random": {
+          "wins": 240,
+          "draws": 0,
+          "losses": 0,
+          "unfinished": 0,
+          "seconds": 0.005415319465100765
+        },
+        "random-vs-policy": {
+          "wins": 0,
+          "draws": 0,
+          "losses": 240,
+          "unfinished": 0,
+          "seconds": 0.004544398747384548
+        },
+        "search-vs-random": {
+          "wins": 240,
+          "draws": 0,
+          "losses": 0,
+          "unfinished": 0,
+          "seconds": 0.006569278426468372
+        },
+        "random-vs-search": {
+          "wins": 2,
+          "draws": 0,
+          "losses": 238,
+          "unfinished": 0,
+          "seconds": 0.006543328985571861
+        },
+        "search-vs-policy": {
+          "wins": 209,
+          "draws": 0,
+          "losses": 31,
+          "unfinished": 0,
+          "seconds": 0.005962260067462921
+        },
+        "policy-vs-search": {
+          "wins": 216,
+          "draws": 0,
+          "losses": 24,
+          "unfinished": 0,
+          "seconds": 0.005994698964059353
+        },
+        "combined_scores": {
+          "policy_vs_random": 1.0,
+          "search_vs_random": 0.9958333333333333,
+          "search_vs_policy": 0.48541666666666666
+        }
+      },
+      "eval-003000": {
+        "policy-vs-random": {
+          "wins": 240,
+          "draws": 0,
+          "losses": 0,
+          "unfinished": 0,
+          "seconds": 0.005078318528831005
+        },
+        "random-vs-policy": {
+          "wins": 1,
+          "draws": 0,
+          "losses": 239,
+          "unfinished": 0,
+          "seconds": 0.004602629691362381
+        },
+        "search-vs-random": {
+          "wins": 240,
+          "draws": 0,
+          "losses": 0,
+          "unfinished": 0,
+          "seconds": 0.0067398687824606895
+        },
+        "random-vs-search": {
+          "wins": 0,
+          "draws": 0,
+          "losses": 240,
+          "unfinished": 0,
+          "seconds": 0.0066087087616324425
+        },
+        "search-vs-policy": {
+          "wins": 205,
+          "draws": 0,
+          "losses": 35,
+          "unfinished": 0,
+          "seconds": 0.005897038616240025
+        },
+        "policy-vs-search": {
+          "wins": 190,
+          "draws": 0,
+          "losses": 50,
+          "unfinished": 0,
+          "seconds": 0.005994219332933426
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.9979166666666667,
+          "search_vs_random": 1.0,
+          "search_vs_policy": 0.53125
+        }
+      }
+    },
+    "mohex": {},
+    "final_checkpoint": "artifacts/muzero/hex4-duration-seed0-20260905-a/cycle-003000.safetensors",
+    "checkpoint_sha256": "e8d6bb512f70498e240fdf36d135a0e9c0a0d7bac880d460fb5de063d662d63a"
+  },
+  {
+    "run": "artifacts/muzero/hex4-alphazero-defaults-seed0-20260905-a",
+    "config": {
+      "env": "hex4",
+      "env_id": "hexnoswap_4x4",
+      "width": 64,
+      "depth": 4,
+      "unroll": 5,
+      "discount": 1.0,
+      "max_steps": 16,
+      "roots": 16,
+      "survivors": 8,
+      "exploration_moves": 8,
+      "selfplay_batch_size": 1024,
+      "train_batch_size": 1024,
+      "replay_batches": 125,
+      "updates_per_cycle": 10,
+      "cycles": 500,
+      "seed": 0,
+      "learning_rate": 0.001,
+      "weight_decay": 0.0001,
+      "devices": 4,
+      "platform": "tpu",
+      "wandb": true,
+      "checkpoint_period": 500,
+      "eval_period": 50,
+      "defaults": "alphazero",
+      "warmup_updates": 2036,
+      "decay_kernels_only": true,
+      "exploration_mode": "random_switch",
+      "root_temperature": 1.3,
+      "value_scale": 1.0,
+      "maxvisit_init": 50,
+      "rescale_values": false,
+      "obs_shape": [
+        4,
+        4,
+        4
+      ],
+      "num_actions": 16,
+      "architecture": "vector-residual-v1",
+      "target": "signed-return-boundary-bootstrap",
+      "latent_normalization": "minmax",
+      "dynamics_gradient_scale": 0.5
+    },
+    "wandb_url": "https://wandb.ai/tdoubleu/nanoAlphaZero-muzero/runs/ylpoje5d",
+    "parameters": 114514,
+    "transitions": 6186412,
+    "updates": 5000,
+    "elapsed_seconds": 217.1351033449173,
+    "median_training_cycle_seconds": 0.055148301646113396,
+    "final_metrics": {
+      "grad_norm": 3.969912052154541,
+      "loss": 1.8239836692810059,
+      "policy_loss": 1.060186505317688,
+      "reward_loss": 0.04912436753511429,
+      "value_loss": 0.7146728038787842,
+      "cycle": 500,
+      "updates": 5000,
+      "seconds": 0.05513565335422754,
+      "elapsed_seconds": 217.1351033449173,
+      "completed_fraction": 1.0,
+      "real_transitions": 11884,
+      "heldout/unroll1/policy_loss": 5.155555248260498,
+      "heldout/unroll1/reward_loss": 0.04527430981397629,
+      "heldout/unroll1/value_loss": 0.8981078863143921,
+      "heldout/unroll1/real_value_mse": 0.9328094720840454,
+      "heldout/unroll1/nonzero_reward_count": 80,
+      "heldout/unroll1/positive_reward_prediction": 0.38637059926986694,
+      "heldout/unroll1/real_reward_mse": 0.04527430981397629,
+      "heldout/unroll1/k0_real_value_mse": 0.9339067935943604,
+      "heldout/unroll1/k1_real_value_mse": 0.9316189885139465,
+      "heldout/unroll3/policy_loss": 4.878610610961914,
+      "heldout/unroll3/reward_loss": 0.053918372839689255,
+      "heldout/unroll3/value_loss": 0.834233283996582,
+      "heldout/unroll3/real_value_mse": 0.9426393508911133,
+      "heldout/unroll3/nonzero_reward_count": 242,
+      "heldout/unroll3/positive_reward_prediction": 0.2939765751361847,
+      "heldout/unroll3/real_reward_mse": 0.057256851345300674,
+      "heldout/unroll3/k0_real_value_mse": 0.9339067935943604,
+      "heldout/unroll3/k1_real_value_mse": 0.9316189885139465,
+      "heldout/unroll3/k2_real_value_mse": 0.9578433036804199,
+      "heldout/unroll3/k3_real_value_mse": 0.9507542848587036,
+      "heldout/unroll5/policy_loss": 4.669729232788086,
+      "heldout/unroll5/reward_loss": 0.0549006424844265,
+      "heldout/unroll5/value_loss": 0.7743584513664246,
+      "heldout/unroll5/real_value_mse": 0.9502549171447754,
+      "heldout/unroll5/nonzero_reward_count": 376,
+      "heldout/unroll5/positive_reward_prediction": 0.25601011514663696,
+      "heldout/unroll5/real_reward_mse": 0.06249242648482323,
+      "heldout/unroll5/k0_real_value_mse": 0.9339067935943604,
+      "heldout/unroll5/k1_real_value_mse": 0.9316189885139465,
+      "heldout/unroll5/k2_real_value_mse": 0.9578433036804199,
+      "heldout/unroll5/k3_real_value_mse": 0.9507542848587036,
+      "heldout/unroll5/k4_real_value_mse": 0.9791505336761475,
+      "heldout/unroll5/k5_real_value_mse": 0.9607846140861511,
+      "heldout/unroll10/policy_loss": 4.355437278747559,
+      "heldout/unroll10/reward_loss": 0.06144031509757042,
+      "heldout/unroll10/value_loss": 0.6061614155769348,
+      "heldout/unroll10/real_value_mse": 0.961783766746521,
+      "heldout/unroll10/nonzero_reward_count": 765,
+      "heldout/unroll10/positive_reward_prediction": 0.1979989856481552,
+      "heldout/unroll10/real_reward_mse": 0.08744730055332184,
+      "heldout/unroll10/k0_real_value_mse": 0.9339067935943604,
+      "heldout/unroll10/k1_real_value_mse": 0.9316189885139465,
+      "heldout/unroll10/k2_real_value_mse": 0.9578433036804199,
+      "heldout/unroll10/k3_real_value_mse": 0.9507542848587036,
+      "heldout/unroll10/k4_real_value_mse": 0.9791505336761475,
+      "heldout/unroll10/k5_real_value_mse": 0.9607846140861511,
+      "heldout/unroll10/k6_real_value_mse": 0.9831573367118835,
+      "heldout/unroll10/k7_real_value_mse": 0.9895605444908142,
+      "heldout/unroll10/k8_real_value_mse": 1.0008124113082886,
+      "heldout/unroll10/k9_real_value_mse": 0.9784536361694336,
+      "heldout/unroll10/k10_real_value_mse": 1.0039955377578735,
+      "eval/policy-vs-random/seat0_score": 0.9583333333333334,
+      "eval/random-vs-policy/seat0_score": 0.20416666666666666,
+      "eval/search-vs-random/seat0_score": 0.8833333333333333,
+      "eval/random-vs-search/seat0_score": 0.21666666666666667,
+      "eval/search-vs-policy/seat0_score": 0.7333333333333333,
+      "eval/policy-vs-search/seat0_score": 0.44583333333333336
+    },
+    "evaluations": {
+      "eval-000000": {
+        "policy-vs-random": {
+          "wins": 110,
+          "draws": 0,
+          "losses": 130,
+          "unfinished": 0,
+          "seconds": 1.9684953102841973
+        },
+        "random-vs-policy": {
+          "wins": 96,
+          "draws": 0,
+          "losses": 144,
+          "unfinished": 0,
+          "seconds": 1.643901034258306
+        },
+        "search-vs-random": {
+          "wins": 140,
+          "draws": 0,
+          "losses": 100,
+          "unfinished": 0,
+          "seconds": 4.101201260462403
+        },
+        "random-vs-search": {
+          "wins": 135,
+          "draws": 0,
+          "losses": 105,
+          "unfinished": 0,
+          "seconds": 3.4783530924469233
+        },
+        "search-vs-policy": {
+          "wins": 124,
+          "draws": 0,
+          "losses": 116,
+          "unfinished": 0,
+          "seconds": 3.4925362709909678
+        },
+        "policy-vs-search": {
+          "wins": 149,
+          "draws": 0,
+          "losses": 91,
+          "unfinished": 0,
+          "seconds": 3.4018069226294756
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.5291666666666667,
+          "search_vs_random": 0.5104166666666666,
+          "search_vs_policy": 0.4479166666666667
+        }
+      },
+      "eval-000050": {
+        "policy-vs-random": {
+          "wins": 172,
+          "draws": 0,
+          "losses": 68,
+          "unfinished": 0,
+          "seconds": 0.005205400288105011
+        },
+        "random-vs-policy": {
+          "wins": 119,
+          "draws": 0,
+          "losses": 121,
+          "unfinished": 0,
+          "seconds": 0.004518539644777775
+        },
+        "search-vs-random": {
+          "wins": 142,
+          "draws": 0,
+          "losses": 98,
+          "unfinished": 0,
+          "seconds": 0.006850508973002434
+        },
+        "random-vs-search": {
+          "wins": 80,
+          "draws": 0,
+          "losses": 160,
+          "unfinished": 0,
+          "seconds": 0.006785859353840351
+        },
+        "search-vs-policy": {
+          "wins": 202,
+          "draws": 0,
+          "losses": 38,
+          "unfinished": 0,
+          "seconds": 0.006336149759590626
+        },
+        "policy-vs-search": {
+          "wins": 148,
+          "draws": 0,
+          "losses": 92,
+          "unfinished": 0,
+          "seconds": 0.00648322980850935
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.6104166666666667,
+          "search_vs_random": 0.6291666666666667,
+          "search_vs_policy": 0.6125
+        }
+      },
+      "eval-000100": {
+        "policy-vs-random": {
+          "wins": 163,
+          "draws": 0,
+          "losses": 77,
+          "unfinished": 0,
+          "seconds": 0.005249498412013054
+        },
+        "random-vs-policy": {
+          "wins": 88,
+          "draws": 0,
+          "losses": 152,
+          "unfinished": 0,
+          "seconds": 0.004505589604377747
+        },
+        "search-vs-random": {
+          "wins": 189,
+          "draws": 0,
+          "losses": 51,
+          "unfinished": 0,
+          "seconds": 0.0067848097532987595
+        },
+        "random-vs-search": {
+          "wins": 73,
+          "draws": 0,
+          "losses": 167,
+          "unfinished": 0,
+          "seconds": 0.0068159690126776695
+        },
+        "search-vs-policy": {
+          "wins": 153,
+          "draws": 0,
+          "losses": 87,
+          "unfinished": 0,
+          "seconds": 0.006413530558347702
+        },
+        "policy-vs-search": {
+          "wins": 61,
+          "draws": 0,
+          "losses": 179,
+          "unfinished": 0,
+          "seconds": 0.006234259344637394
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.65625,
+          "search_vs_random": 0.7416666666666667,
+          "search_vs_policy": 0.6916666666666667
+        }
+      },
+      "eval-000150": {
+        "policy-vs-random": {
+          "wins": 188,
+          "draws": 0,
+          "losses": 52,
+          "unfinished": 0,
+          "seconds": 0.005025438964366913
+        },
+        "random-vs-policy": {
+          "wins": 68,
+          "draws": 0,
+          "losses": 172,
+          "unfinished": 0,
+          "seconds": 0.004708659835159779
+        },
+        "search-vs-random": {
+          "wins": 200,
+          "draws": 0,
+          "losses": 40,
+          "unfinished": 0,
+          "seconds": 0.0068146781995892525
+        },
+        "random-vs-search": {
+          "wins": 73,
+          "draws": 0,
+          "losses": 167,
+          "unfinished": 0,
+          "seconds": 0.006699519231915474
+        },
+        "search-vs-policy": {
+          "wins": 103,
+          "draws": 0,
+          "losses": 137,
+          "unfinished": 0,
+          "seconds": 0.006367499008774757
+        },
+        "policy-vs-search": {
+          "wins": 45,
+          "draws": 0,
+          "losses": 195,
+          "unfinished": 0,
+          "seconds": 0.006278928369283676
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.75,
+          "search_vs_random": 0.7645833333333333,
+          "search_vs_policy": 0.6208333333333333
+        }
+      },
+      "eval-000200": {
+        "policy-vs-random": {
+          "wins": 217,
+          "draws": 0,
+          "losses": 23,
+          "unfinished": 0,
+          "seconds": 0.005362939089536667
+        },
+        "random-vs-policy": {
+          "wins": 71,
+          "draws": 0,
+          "losses": 169,
+          "unfinished": 0,
+          "seconds": 0.004655399359762669
+        },
+        "search-vs-random": {
+          "wins": 197,
+          "draws": 0,
+          "losses": 43,
+          "unfinished": 0,
+          "seconds": 0.006854059174656868
+        },
+        "random-vs-search": {
+          "wins": 86,
+          "draws": 0,
+          "losses": 154,
+          "unfinished": 0,
+          "seconds": 0.00673280842602253
+        },
+        "search-vs-policy": {
+          "wins": 156,
+          "draws": 0,
+          "losses": 84,
+          "unfinished": 0,
+          "seconds": 0.006657369434833527
+        },
+        "policy-vs-search": {
+          "wins": 125,
+          "draws": 0,
+          "losses": 115,
+          "unfinished": 0,
+          "seconds": 0.006614359095692635
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.8041666666666667,
+          "search_vs_random": 0.73125,
+          "search_vs_policy": 0.5645833333333333
+        }
+      },
+      "eval-000250": {
+        "policy-vs-random": {
+          "wins": 209,
+          "draws": 0,
+          "losses": 31,
+          "unfinished": 0,
+          "seconds": 0.005127250216901302
+        },
+        "random-vs-policy": {
+          "wins": 68,
+          "draws": 0,
+          "losses": 172,
+          "unfinished": 0,
+          "seconds": 0.004540729336440563
+        },
+        "search-vs-random": {
+          "wins": 203,
+          "draws": 0,
+          "losses": 37,
+          "unfinished": 0,
+          "seconds": 0.006724518723785877
+        },
+        "random-vs-search": {
+          "wins": 83,
+          "draws": 0,
+          "losses": 157,
+          "unfinished": 0,
+          "seconds": 0.00666916836053133
+        },
+        "search-vs-policy": {
+          "wins": 174,
+          "draws": 0,
+          "losses": 66,
+          "unfinished": 0,
+          "seconds": 0.006335209123790264
+        },
+        "policy-vs-search": {
+          "wins": 85,
+          "draws": 0,
+          "losses": 155,
+          "unfinished": 0,
+          "seconds": 0.0061472998932003975
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.79375,
+          "search_vs_random": 0.75,
+          "search_vs_policy": 0.6854166666666667
+        }
+      },
+      "eval-000300": {
+        "policy-vs-random": {
+          "wins": 220,
+          "draws": 0,
+          "losses": 20,
+          "unfinished": 0,
+          "seconds": 0.005163968540728092
+        },
+        "random-vs-policy": {
+          "wins": 73,
+          "draws": 0,
+          "losses": 167,
+          "unfinished": 0,
+          "seconds": 0.004621068947017193
+        },
+        "search-vs-random": {
+          "wins": 210,
+          "draws": 0,
+          "losses": 30,
+          "unfinished": 0,
+          "seconds": 0.007056479342281818
+        },
+        "random-vs-search": {
+          "wins": 77,
+          "draws": 0,
+          "losses": 163,
+          "unfinished": 0,
+          "seconds": 0.007412399165332317
+        },
+        "search-vs-policy": {
+          "wins": 159,
+          "draws": 0,
+          "losses": 81,
+          "unfinished": 0,
+          "seconds": 0.006791568361222744
+        },
+        "policy-vs-search": {
+          "wins": 101,
+          "draws": 0,
+          "losses": 139,
+          "unfinished": 0,
+          "seconds": 0.00643124058842659
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.80625,
+          "search_vs_random": 0.7770833333333333,
+          "search_vs_policy": 0.6208333333333333
+        }
+      },
+      "eval-000350": {
+        "policy-vs-random": {
+          "wins": 213,
+          "draws": 0,
+          "losses": 27,
+          "unfinished": 0,
+          "seconds": 0.005200088955461979
+        },
+        "random-vs-policy": {
+          "wins": 54,
+          "draws": 0,
+          "losses": 186,
+          "unfinished": 0,
+          "seconds": 0.004659058526158333
+        },
+        "search-vs-random": {
+          "wins": 210,
+          "draws": 0,
+          "losses": 30,
+          "unfinished": 0,
+          "seconds": 0.006952258758246899
+        },
+        "random-vs-search": {
+          "wins": 60,
+          "draws": 0,
+          "losses": 180,
+          "unfinished": 0,
+          "seconds": 0.006849690340459347
+        },
+        "search-vs-policy": {
+          "wins": 183,
+          "draws": 0,
+          "losses": 57,
+          "unfinished": 0,
+          "seconds": 0.006218009628355503
+        },
+        "policy-vs-search": {
+          "wins": 98,
+          "draws": 0,
+          "losses": 142,
+          "unfinished": 0,
+          "seconds": 0.006237579509615898
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.83125,
+          "search_vs_random": 0.8125,
+          "search_vs_policy": 0.6770833333333334
+        }
+      },
+      "eval-000400": {
+        "policy-vs-random": {
+          "wins": 214,
+          "draws": 0,
+          "losses": 26,
+          "unfinished": 0,
+          "seconds": 0.005130988545715809
+        },
+        "random-vs-policy": {
+          "wins": 55,
+          "draws": 0,
+          "losses": 185,
+          "unfinished": 0,
+          "seconds": 0.0045444900169968605
+        },
+        "search-vs-random": {
+          "wins": 219,
+          "draws": 0,
+          "losses": 21,
+          "unfinished": 0,
+          "seconds": 0.006908399984240532
+        },
+        "random-vs-search": {
+          "wins": 70,
+          "draws": 0,
+          "losses": 170,
+          "unfinished": 0,
+          "seconds": 0.0068063195794820786
+        },
+        "search-vs-policy": {
+          "wins": 177,
+          "draws": 0,
+          "losses": 63,
+          "unfinished": 0,
+          "seconds": 0.006249839439988136
+        },
+        "policy-vs-search": {
+          "wins": 76,
+          "draws": 0,
+          "losses": 164,
+          "unfinished": 0,
+          "seconds": 0.006230768747627735
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.83125,
+          "search_vs_random": 0.8104166666666667,
+          "search_vs_policy": 0.7104166666666667
+        }
+      },
+      "eval-000450": {
+        "policy-vs-random": {
+          "wins": 220,
+          "draws": 0,
+          "losses": 20,
+          "unfinished": 0,
+          "seconds": 0.004969809204339981
+        },
+        "random-vs-policy": {
+          "wins": 55,
+          "draws": 0,
+          "losses": 185,
+          "unfinished": 0,
+          "seconds": 0.0045006899163126945
+        },
+        "search-vs-random": {
+          "wins": 212,
+          "draws": 0,
+          "losses": 28,
+          "unfinished": 0,
+          "seconds": 0.006846289150416851
+        },
+        "random-vs-search": {
+          "wins": 56,
+          "draws": 0,
+          "losses": 184,
+          "unfinished": 0,
+          "seconds": 0.006696899421513081
+        },
+        "search-vs-policy": {
+          "wins": 155,
+          "draws": 0,
+          "losses": 85,
+          "unfinished": 0,
+          "seconds": 0.006370219402015209
+        },
+        "policy-vs-search": {
+          "wins": 51,
+          "draws": 0,
+          "losses": 189,
+          "unfinished": 0,
+          "seconds": 0.006189390085637569
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.84375,
+          "search_vs_random": 0.825,
+          "search_vs_policy": 0.7166666666666667
+        }
+      },
+      "eval-000500": {
+        "policy-vs-random": {
+          "wins": 230,
+          "draws": 0,
+          "losses": 10,
+          "unfinished": 0,
+          "seconds": 0.005212669260799885
+        },
+        "random-vs-policy": {
+          "wins": 49,
+          "draws": 0,
+          "losses": 191,
+          "unfinished": 0,
+          "seconds": 0.004583259113132954
+        },
+        "search-vs-random": {
+          "wins": 212,
+          "draws": 0,
+          "losses": 28,
+          "unfinished": 0,
+          "seconds": 0.006946098990738392
+        },
+        "random-vs-search": {
+          "wins": 52,
+          "draws": 0,
+          "losses": 188,
+          "unfinished": 0,
+          "seconds": 0.006815499626100063
+        },
+        "search-vs-policy": {
+          "wins": 176,
+          "draws": 0,
+          "losses": 64,
+          "unfinished": 0,
+          "seconds": 0.006215458735823631
+        },
+        "policy-vs-search": {
+          "wins": 107,
+          "draws": 0,
+          "losses": 133,
+          "unfinished": 0,
+          "seconds": 0.006342438980937004
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.8770833333333333,
+          "search_vs_random": 0.8333333333333334,
+          "search_vs_policy": 0.64375
+        }
+      }
+    },
+    "mohex": {},
+    "final_checkpoint": "artifacts/muzero/hex4-alphazero-defaults-seed0-20260905-a/cycle-000500.safetensors",
+    "checkpoint_sha256": "554e28739a1183a6af64d4fec42b800fa5af0800afc949bed2b4e7314008fde0"
+  },
+  {
+    "run": "artifacts/muzero/hex4-alphazero-defaults-seed1-20260905-a",
+    "config": {
+      "env": "hex4",
+      "env_id": "hexnoswap_4x4",
+      "width": 64,
+      "depth": 4,
+      "unroll": 5,
+      "discount": 1.0,
+      "max_steps": 16,
+      "roots": 16,
+      "survivors": 8,
+      "exploration_moves": 8,
+      "selfplay_batch_size": 1024,
+      "train_batch_size": 1024,
+      "replay_batches": 125,
+      "updates_per_cycle": 10,
+      "cycles": 500,
+      "seed": 1,
+      "learning_rate": 0.001,
+      "weight_decay": 0.0001,
+      "devices": 4,
+      "platform": "tpu",
+      "wandb": true,
+      "checkpoint_period": 500,
+      "eval_period": 50,
+      "defaults": "alphazero",
+      "warmup_updates": 2036,
+      "decay_kernels_only": true,
+      "exploration_mode": "random_switch",
+      "root_temperature": 1.3,
+      "value_scale": 1.0,
+      "maxvisit_init": 50,
+      "rescale_values": false,
+      "obs_shape": [
+        4,
+        4,
+        4
+      ],
+      "num_actions": 16,
+      "architecture": "vector-residual-v1",
+      "target": "signed-return-boundary-bootstrap",
+      "latent_normalization": "minmax",
+      "dynamics_gradient_scale": 0.5
+    },
+    "wandb_url": "https://wandb.ai/tdoubleu/nanoAlphaZero-muzero/runs/kjy8jf3g",
+    "parameters": 114514,
+    "transitions": 6248847,
+    "updates": 5000,
+    "elapsed_seconds": 212.69466997869313,
+    "median_training_cycle_seconds": 0.053156821988523006,
+    "final_metrics": {
+      "grad_norm": 2.688640594482422,
+      "loss": 1.8120217323303223,
+      "policy_loss": 1.077728509902954,
+      "reward_loss": 0.05315230041742325,
+      "value_loss": 0.6811408996582031,
+      "cycle": 500,
+      "updates": 5000,
+      "seconds": 0.052542553283274174,
+      "elapsed_seconds": 212.69466997869313,
+      "completed_fraction": 1.0,
+      "real_transitions": 12231,
+      "heldout/unroll1/policy_loss": 6.3305583000183105,
+      "heldout/unroll1/reward_loss": 0.054349709302186966,
+      "heldout/unroll1/value_loss": 0.9496584534645081,
+      "heldout/unroll1/real_value_mse": 0.9844841361045837,
+      "heldout/unroll1/nonzero_reward_count": 79,
+      "heldout/unroll1/positive_reward_prediction": 0.23029427230358124,
+      "heldout/unroll1/real_reward_mse": 0.054349709302186966,
+      "heldout/unroll1/k0_real_value_mse": 0.9962038993835449,
+      "heldout/unroll1/k1_real_value_mse": 0.9717844724655151,
+      "heldout/unroll3/policy_loss": 6.041372299194336,
+      "heldout/unroll3/reward_loss": 0.05836305022239685,
+      "heldout/unroll3/value_loss": 0.8716140985488892,
+      "heldout/unroll3/real_value_mse": 0.9776543378829956,
+      "heldout/unroll3/nonzero_reward_count": 225,
+      "heldout/unroll3/positive_reward_prediction": 0.15566127002239227,
+      "heldout/unroll3/real_reward_mse": 0.06294216960668564,
+      "heldout/unroll3/k0_real_value_mse": 0.9962038993835449,
+      "heldout/unroll3/k1_real_value_mse": 0.9717844724655151,
+      "heldout/unroll3/k2_real_value_mse": 0.9805572032928467,
+      "heldout/unroll3/k3_real_value_mse": 0.95771723985672,
+      "heldout/unroll5/policy_loss": 5.863065242767334,
+      "heldout/unroll5/reward_loss": 0.06197569519281387,
+      "heldout/unroll5/value_loss": 0.7995025515556335,
+      "heldout/unroll5/real_value_mse": 0.9718161225318909,
+      "heldout/unroll5/nonzero_reward_count": 376,
+      "heldout/unroll5/positive_reward_prediction": 0.12467175722122192,
+      "heldout/unroll5/real_reward_mse": 0.07193376123905182,
+      "heldout/unroll5/k0_real_value_mse": 0.9962038993835449,
+      "heldout/unroll5/k1_real_value_mse": 0.9717844724655151,
+      "heldout/unroll5/k2_real_value_mse": 0.9805572032928467,
+      "heldout/unroll5/k3_real_value_mse": 0.95771723985672,
+      "heldout/unroll5/k4_real_value_mse": 0.9665549397468567,
+      "heldout/unroll5/k5_real_value_mse": 0.9450286626815796,
+      "heldout/unroll10/policy_loss": 5.572141170501709,
+      "heldout/unroll10/reward_loss": 0.06564518809318542,
+      "heldout/unroll10/value_loss": 0.6240035891532898,
+      "heldout/unroll10/real_value_mse": 0.9604544043540955,
+      "heldout/unroll10/nonzero_reward_count": 757,
+      "heldout/unroll10/positive_reward_prediction": 0.09577690064907074,
+      "heldout/unroll10/real_reward_mse": 0.09483152627944946,
+      "heldout/unroll10/k0_real_value_mse": 0.9962038993835449,
+      "heldout/unroll10/k1_real_value_mse": 0.9717844724655151,
+      "heldout/unroll10/k2_real_value_mse": 0.9805572032928467,
+      "heldout/unroll10/k3_real_value_mse": 0.95771723985672,
+      "heldout/unroll10/k4_real_value_mse": 0.9665549397468567,
+      "heldout/unroll10/k5_real_value_mse": 0.9450286626815796,
+      "heldout/unroll10/k6_real_value_mse": 0.9474258422851562,
+      "heldout/unroll10/k7_real_value_mse": 0.9349586963653564,
+      "heldout/unroll10/k8_real_value_mse": 0.9459945559501648,
+      "heldout/unroll10/k9_real_value_mse": 0.913954496383667,
+      "heldout/unroll10/k10_real_value_mse": 0.9109208583831787,
+      "eval/policy-vs-random/seat0_score": 0.8791666666666667,
+      "eval/random-vs-policy/seat0_score": 0.1375,
+      "eval/search-vs-random/seat0_score": 0.8666666666666667,
+      "eval/random-vs-search/seat0_score": 0.22083333333333333,
+      "eval/search-vs-policy/seat0_score": 0.75,
+      "eval/policy-vs-search/seat0_score": 0.5333333333333333
+    },
+    "evaluations": {
+      "eval-000000": {
+        "policy-vs-random": {
+          "wins": 94,
+          "draws": 0,
+          "losses": 146,
+          "unfinished": 0,
+          "seconds": 1.8546815160661936
+        },
+        "random-vs-policy": {
+          "wins": 115,
+          "draws": 0,
+          "losses": 125,
+          "unfinished": 0,
+          "seconds": 1.5665258541703224
+        },
+        "search-vs-random": {
+          "wins": 90,
+          "draws": 0,
+          "losses": 150,
+          "unfinished": 0,
+          "seconds": 3.7184482906013727
+        },
+        "random-vs-search": {
+          "wins": 125,
+          "draws": 0,
+          "losses": 115,
+          "unfinished": 0,
+          "seconds": 3.224198435433209
+        },
+        "search-vs-policy": {
+          "wins": 78,
+          "draws": 0,
+          "losses": 162,
+          "unfinished": 0,
+          "seconds": 3.2176954466849566
+        },
+        "policy-vs-search": {
+          "wins": 130,
+          "draws": 0,
+          "losses": 110,
+          "unfinished": 0,
+          "seconds": 3.4720270531252027
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.45625,
+          "search_vs_random": 0.4270833333333333,
+          "search_vs_policy": 0.39166666666666666
+        }
+      },
+      "eval-000050": {
+        "policy-vs-random": {
+          "wins": 166,
+          "draws": 0,
+          "losses": 74,
+          "unfinished": 0,
+          "seconds": 0.005228140391409397
+        },
+        "random-vs-policy": {
+          "wins": 79,
+          "draws": 0,
+          "losses": 161,
+          "unfinished": 0,
+          "seconds": 0.004517898894846439
+        },
+        "search-vs-random": {
+          "wins": 177,
+          "draws": 0,
+          "losses": 63,
+          "unfinished": 0,
+          "seconds": 0.006988938897848129
+        },
+        "random-vs-search": {
+          "wins": 67,
+          "draws": 0,
+          "losses": 173,
+          "unfinished": 0,
+          "seconds": 0.006645419634878635
+        },
+        "search-vs-policy": {
+          "wins": 184,
+          "draws": 0,
+          "losses": 56,
+          "unfinished": 0,
+          "seconds": 0.006408998742699623
+        },
+        "policy-vs-search": {
+          "wins": 98,
+          "draws": 0,
+          "losses": 142,
+          "unfinished": 0,
+          "seconds": 0.0062650591135025024
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.68125,
+          "search_vs_random": 0.7291666666666666,
+          "search_vs_policy": 0.6791666666666667
+        }
+      },
+      "eval-000100": {
+        "policy-vs-random": {
+          "wins": 193,
+          "draws": 0,
+          "losses": 47,
+          "unfinished": 0,
+          "seconds": 0.005411739461123943
+        },
+        "random-vs-policy": {
+          "wins": 70,
+          "draws": 0,
+          "losses": 170,
+          "unfinished": 0,
+          "seconds": 0.004737399518489838
+        },
+        "search-vs-random": {
+          "wins": 194,
+          "draws": 0,
+          "losses": 46,
+          "unfinished": 0,
+          "seconds": 0.006793170236051083
+        },
+        "random-vs-search": {
+          "wins": 77,
+          "draws": 0,
+          "losses": 163,
+          "unfinished": 0,
+          "seconds": 0.006583289243280888
+        },
+        "search-vs-policy": {
+          "wins": 156,
+          "draws": 0,
+          "losses": 84,
+          "unfinished": 0,
+          "seconds": 0.006302048452198505
+        },
+        "policy-vs-search": {
+          "wins": 114,
+          "draws": 0,
+          "losses": 126,
+          "unfinished": 0,
+          "seconds": 0.006178159266710281
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.75625,
+          "search_vs_random": 0.74375,
+          "search_vs_policy": 0.5875
+        }
+      },
+      "eval-000150": {
+        "policy-vs-random": {
+          "wins": 201,
+          "draws": 0,
+          "losses": 39,
+          "unfinished": 0,
+          "seconds": 0.005387339740991592
+        },
+        "random-vs-policy": {
+          "wins": 60,
+          "draws": 0,
+          "losses": 180,
+          "unfinished": 0,
+          "seconds": 0.004773390479385853
+        },
+        "search-vs-random": {
+          "wins": 205,
+          "draws": 0,
+          "losses": 35,
+          "unfinished": 0,
+          "seconds": 0.00679618027061224
+        },
+        "random-vs-search": {
+          "wins": 84,
+          "draws": 0,
+          "losses": 156,
+          "unfinished": 0,
+          "seconds": 0.0066741593182086945
+        },
+        "search-vs-policy": {
+          "wins": 118,
+          "draws": 0,
+          "losses": 122,
+          "unfinished": 0,
+          "seconds": 0.006333068944513798
+        },
+        "policy-vs-search": {
+          "wins": 111,
+          "draws": 0,
+          "losses": 129,
+          "unfinished": 0,
+          "seconds": 0.006180399097502232
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.79375,
+          "search_vs_random": 0.7520833333333333,
+          "search_vs_policy": 0.5145833333333333
+        }
+      },
+      "eval-000200": {
+        "policy-vs-random": {
+          "wins": 202,
+          "draws": 0,
+          "losses": 38,
+          "unfinished": 0,
+          "seconds": 0.005535919219255447
+        },
+        "random-vs-policy": {
+          "wins": 74,
+          "draws": 0,
+          "losses": 166,
+          "unfinished": 0,
+          "seconds": 0.004600829444825649
+        },
+        "search-vs-random": {
+          "wins": 208,
+          "draws": 0,
+          "losses": 32,
+          "unfinished": 0,
+          "seconds": 0.006815330125391483
+        },
+        "random-vs-search": {
+          "wins": 86,
+          "draws": 0,
+          "losses": 154,
+          "unfinished": 0,
+          "seconds": 0.006674648262560368
+        },
+        "search-vs-policy": {
+          "wins": 163,
+          "draws": 0,
+          "losses": 77,
+          "unfinished": 0,
+          "seconds": 0.006340588442981243
+        },
+        "policy-vs-search": {
+          "wins": 123,
+          "draws": 0,
+          "losses": 117,
+          "unfinished": 0,
+          "seconds": 0.006356068886816502
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.7666666666666667,
+          "search_vs_random": 0.7541666666666667,
+          "search_vs_policy": 0.5833333333333334
+        }
+      },
+      "eval-000250": {
+        "policy-vs-random": {
+          "wins": 208,
+          "draws": 0,
+          "losses": 32,
+          "unfinished": 0,
+          "seconds": 0.005152180790901184
+        },
+        "random-vs-policy": {
+          "wins": 80,
+          "draws": 0,
+          "losses": 160,
+          "unfinished": 0,
+          "seconds": 0.004509547725319862
+        },
+        "search-vs-random": {
+          "wins": 197,
+          "draws": 0,
+          "losses": 43,
+          "unfinished": 0,
+          "seconds": 0.0067006805911660194
+        },
+        "random-vs-search": {
+          "wins": 69,
+          "draws": 0,
+          "losses": 171,
+          "unfinished": 0,
+          "seconds": 0.006655379198491573
+        },
+        "search-vs-policy": {
+          "wins": 174,
+          "draws": 0,
+          "losses": 66,
+          "unfinished": 0,
+          "seconds": 0.0061950888484716415
+        },
+        "policy-vs-search": {
+          "wins": 93,
+          "draws": 0,
+          "losses": 147,
+          "unfinished": 0,
+          "seconds": 0.006012679077684879
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.7666666666666667,
+          "search_vs_random": 0.7666666666666667,
+          "search_vs_policy": 0.66875
+        }
+      },
+      "eval-000300": {
+        "policy-vs-random": {
+          "wins": 205,
+          "draws": 0,
+          "losses": 35,
+          "unfinished": 0,
+          "seconds": 0.005406258627772331
+        },
+        "random-vs-policy": {
+          "wins": 71,
+          "draws": 0,
+          "losses": 169,
+          "unfinished": 0,
+          "seconds": 0.0045278193429112434
+        },
+        "search-vs-random": {
+          "wins": 202,
+          "draws": 0,
+          "losses": 38,
+          "unfinished": 0,
+          "seconds": 0.0067882295697927475
+        },
+        "random-vs-search": {
+          "wins": 57,
+          "draws": 0,
+          "losses": 183,
+          "unfinished": 0,
+          "seconds": 0.006842579692602158
+        },
+        "search-vs-policy": {
+          "wins": 122,
+          "draws": 0,
+          "losses": 118,
+          "unfinished": 0,
+          "seconds": 0.006365068256855011
+        },
+        "policy-vs-search": {
+          "wins": 121,
+          "draws": 0,
+          "losses": 119,
+          "unfinished": 0,
+          "seconds": 0.006142779253423214
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.7791666666666667,
+          "search_vs_random": 0.8020833333333334,
+          "search_vs_policy": 0.5020833333333333
+        }
+      },
+      "eval-000350": {
+        "policy-vs-random": {
+          "wins": 204,
+          "draws": 0,
+          "losses": 36,
+          "unfinished": 0,
+          "seconds": 0.0051207393407821655
+        },
+        "random-vs-policy": {
+          "wins": 54,
+          "draws": 0,
+          "losses": 186,
+          "unfinished": 0,
+          "seconds": 0.00446653924882412
+        },
+        "search-vs-random": {
+          "wins": 199,
+          "draws": 0,
+          "losses": 41,
+          "unfinished": 0,
+          "seconds": 0.006860198453068733
+        },
+        "random-vs-search": {
+          "wins": 59,
+          "draws": 0,
+          "losses": 181,
+          "unfinished": 0,
+          "seconds": 0.006682348437607288
+        },
+        "search-vs-policy": {
+          "wins": 161,
+          "draws": 0,
+          "losses": 79,
+          "unfinished": 0,
+          "seconds": 0.0062233395874500275
+        },
+        "policy-vs-search": {
+          "wins": 134,
+          "draws": 0,
+          "losses": 106,
+          "unfinished": 0,
+          "seconds": 0.006144629791378975
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.8125,
+          "search_vs_random": 0.7916666666666666,
+          "search_vs_policy": 0.55625
+        }
+      },
+      "eval-000400": {
+        "policy-vs-random": {
+          "wins": 204,
+          "draws": 0,
+          "losses": 36,
+          "unfinished": 0,
+          "seconds": 0.0049342503771185875
+        },
+        "random-vs-policy": {
+          "wins": 49,
+          "draws": 0,
+          "losses": 191,
+          "unfinished": 0,
+          "seconds": 0.004565608687698841
+        },
+        "search-vs-random": {
+          "wins": 204,
+          "draws": 0,
+          "losses": 36,
+          "unfinished": 0,
+          "seconds": 0.006748599000275135
+        },
+        "random-vs-search": {
+          "wins": 58,
+          "draws": 0,
+          "losses": 182,
+          "unfinished": 0,
+          "seconds": 0.00678767915815115
+        },
+        "search-vs-policy": {
+          "wins": 133,
+          "draws": 0,
+          "losses": 107,
+          "unfinished": 0,
+          "seconds": 0.006361158564686775
+        },
+        "policy-vs-search": {
+          "wins": 103,
+          "draws": 0,
+          "losses": 137,
+          "unfinished": 0,
+          "seconds": 0.006278309039771557
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.8229166666666666,
+          "search_vs_random": 0.8041666666666667,
+          "search_vs_policy": 0.5625
+        }
+      },
+      "eval-000450": {
+        "policy-vs-random": {
+          "wins": 211,
+          "draws": 0,
+          "losses": 29,
+          "unfinished": 0,
+          "seconds": 0.00514506921172142
+        },
+        "random-vs-policy": {
+          "wins": 41,
+          "draws": 0,
+          "losses": 199,
+          "unfinished": 0,
+          "seconds": 0.004506519064307213
+        },
+        "search-vs-random": {
+          "wins": 211,
+          "draws": 0,
+          "losses": 29,
+          "unfinished": 0,
+          "seconds": 0.006714229471981525
+        },
+        "random-vs-search": {
+          "wins": 51,
+          "draws": 0,
+          "losses": 189,
+          "unfinished": 0,
+          "seconds": 0.00670710951089859
+        },
+        "search-vs-policy": {
+          "wins": 167,
+          "draws": 0,
+          "losses": 73,
+          "unfinished": 0,
+          "seconds": 0.006130269728600979
+        },
+        "policy-vs-search": {
+          "wins": 107,
+          "draws": 0,
+          "losses": 133,
+          "unfinished": 0,
+          "seconds": 0.006278308108448982
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.8541666666666666,
+          "search_vs_random": 0.8333333333333334,
+          "search_vs_policy": 0.625
+        }
+      },
+      "eval-000500": {
+        "policy-vs-random": {
+          "wins": 211,
+          "draws": 0,
+          "losses": 29,
+          "unfinished": 0,
+          "seconds": 0.0050399089232087135
+        },
+        "random-vs-policy": {
+          "wins": 33,
+          "draws": 0,
+          "losses": 207,
+          "unfinished": 0,
+          "seconds": 0.004432489164173603
+        },
+        "search-vs-random": {
+          "wins": 208,
+          "draws": 0,
+          "losses": 32,
+          "unfinished": 0,
+          "seconds": 0.006876829080283642
+        },
+        "random-vs-search": {
+          "wins": 53,
+          "draws": 0,
+          "losses": 187,
+          "unfinished": 0,
+          "seconds": 0.006698529236018658
+        },
+        "search-vs-policy": {
+          "wins": 180,
+          "draws": 0,
+          "losses": 60,
+          "unfinished": 0,
+          "seconds": 0.00630129873752594
+        },
+        "policy-vs-search": {
+          "wins": 128,
+          "draws": 0,
+          "losses": 112,
+          "unfinished": 0,
+          "seconds": 0.006185078993439674
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.8708333333333333,
+          "search_vs_random": 0.8229166666666666,
+          "search_vs_policy": 0.6083333333333333
+        }
+      }
+    },
+    "mohex": {},
+    "final_checkpoint": "artifacts/muzero/hex4-alphazero-defaults-seed1-20260905-a/cycle-000500.safetensors",
+    "checkpoint_sha256": "29f1025152ac0bdc26fbd9ec85df0be4ef022b2c58bde3e7b5c8f0dd341aed75"
+  },
+  {
+    "run": "artifacts/muzero/hex4-alphazero-mohex-seed2-20260905-a",
+    "config": {
+      "env": "hex4",
+      "env_id": "hexnoswap_4x4",
+      "width": 64,
+      "depth": 4,
+      "unroll": 5,
+      "discount": 1.0,
+      "max_steps": 16,
+      "roots": 16,
+      "survivors": 8,
+      "exploration_moves": 8,
+      "selfplay_batch_size": 1024,
+      "train_batch_size": 1024,
+      "replay_batches": 125,
+      "updates_per_cycle": 10,
+      "cycles": 500,
+      "seed": 2,
+      "learning_rate": 0.001,
+      "weight_decay": 0.0001,
+      "devices": 4,
+      "platform": "tpu",
+      "wandb": true,
+      "checkpoint_period": 500,
+      "eval_period": 50,
+      "defaults": "alphazero",
+      "warmup_updates": 2036,
+      "decay_kernels_only": true,
+      "exploration_mode": "random_switch",
+      "root_temperature": 1.3,
+      "value_scale": 1.0,
+      "maxvisit_init": 50,
+      "rescale_values": false,
+      "hex_eval_period": 50,
+      "diagnostic_period": 50,
+      "obs_shape": [
+        4,
+        4,
+        4
+      ],
+      "num_actions": 16,
+      "architecture": "vector-residual-v1",
+      "target": "signed-return-boundary-bootstrap",
+      "latent_normalization": "minmax",
+      "dynamics_gradient_scale": 0.5
+    },
+    "wandb_url": "https://wandb.ai/tdoubleu/nanoAlphaZero-muzero/runs/tzld8hda",
+    "parameters": 114514,
+    "transitions": 6281891,
+    "updates": 5000,
+    "elapsed_seconds": 215.30651511717588,
+    "median_training_cycle_seconds": 0.05409253295511007,
+    "final_metrics": {
+      "grad_norm": 3.3814332485198975,
+      "loss": 1.8119298219680786,
+      "norms/param_norm": 46.42805862426758,
+      "norms/update_norm": 0.05023863539099693,
+      "policy_loss": 1.0451533794403076,
+      "reward_loss": 0.05222448706626892,
+      "value_loss": 0.7145518660545349,
+      "cycle": 500,
+      "updates": 5000,
+      "seconds": 0.053331462666392326,
+      "elapsed_seconds": 215.30651511717588,
+      "completed_fraction": 1.0,
+      "real_transitions": 12726,
+      "norms/current_lr": 0.0010000000474974513,
+      "selfplay/episode_length_mean": 12.427734375,
+      "selfplay/episode_length_std": 2.491910934448242,
+      "selfplay/episode_length_min": 7,
+      "selfplay/episode_length_max": 16,
+      "selfplay/truncated_fraction": 0.0,
+      "train_batch/n_reward_pos": 2548,
+      "train_batch/n_reward_neg": 2285,
+      "train_batch/n_reward_zero": 0,
+      "train_batch/n_real_targets": 4833,
+      "train_batch/n_absorbing_targets": 1311,
+      "diagnostics/opening_value_mse": 0.9574471116065979,
+      "diagnostics/opening_value_sign_accuracy": 0.5625,
+      "hex_eval/real_games": 16,
+      "hex_eval/model_wins": 1,
+      "hex_eval/model_losses": 15,
+      "hex_eval/unscored": 0,
+      "hex_eval/model_win_rate": 0.0625,
+      "hex_eval/elapsed_seconds": 0.07126657012850046,
+      "hex_eval/model_search_seconds": 0.006983838975429535,
+      "hex_eval/mohex_search_seconds": 0.03553540352731943,
+      "hex_eval/perfect_opening_wins": 1,
+      "hex_eval/perfect_opening_total": 4,
+      "hex_eval/perfect_opening_fraction": 0.25,
+      "hex_eval/all_known_winning_openings_won": 0,
+      "hex_eval/unexpected_opening_wins": 0,
+      "hex_eval_policy/real_games": 16,
+      "hex_eval_policy/model_wins": 0,
+      "hex_eval_policy/model_losses": 16,
+      "hex_eval_policy/unscored": 0,
+      "hex_eval_policy/model_win_rate": 0.0,
+      "hex_eval_policy/elapsed_seconds": 0.05642135255038738,
+      "hex_eval_policy/model_search_seconds": 0.005036110058426857,
+      "hex_eval_policy/mohex_search_seconds": 0.02329392358660698,
+      "hex_eval_policy/perfect_opening_wins": 0,
+      "hex_eval_policy/perfect_opening_total": 4,
+      "hex_eval_policy/perfect_opening_fraction": 0.0,
+      "hex_eval_policy/all_known_winning_openings_won": 0,
+      "hex_eval_policy/unexpected_opening_wins": 0,
+      "heldout/unroll1/policy_loss": 5.898040771484375,
+      "heldout/unroll1/reward_loss": 0.06056977063417435,
+      "heldout/unroll1/value_loss": 0.8974156379699707,
+      "heldout/unroll1/real_value_mse": 0.9355785250663757,
+      "heldout/unroll1/nonzero_reward_count": 88,
+      "heldout/unroll1/positive_reward_prediction": 0.24356049299240112,
+      "heldout/unroll1/real_reward_mse": 0.06056977063417435,
+      "heldout/unroll1/k0_real_value_mse": 0.9251019954681396,
+      "heldout/unroll1/k1_real_value_mse": 0.9470400214195251,
+      "heldout/unroll3/policy_loss": 5.639708995819092,
+      "heldout/unroll3/reward_loss": 0.06040545552968979,
+      "heldout/unroll3/value_loss": 0.8420732021331787,
+      "heldout/unroll3/real_value_mse": 0.9479972720146179,
+      "heldout/unroll3/nonzero_reward_count": 236,
+      "heldout/unroll3/positive_reward_prediction": 0.16796956956386566,
+      "heldout/unroll3/real_reward_mse": 0.0651153028011322,
+      "heldout/unroll3/k0_real_value_mse": 0.9251019954681396,
+      "heldout/unroll3/k1_real_value_mse": 0.9470400214195251,
+      "heldout/unroll3/k2_real_value_mse": 0.9559573531150818,
+      "heldout/unroll3/k3_real_value_mse": 0.970118522644043,
+      "heldout/unroll5/policy_loss": 5.509216785430908,
+      "heldout/unroll5/reward_loss": 0.06331884115934372,
+      "heldout/unroll5/value_loss": 0.7751177549362183,
+      "heldout/unroll5/real_value_mse": 0.9518986940383911,
+      "heldout/unroll5/nonzero_reward_count": 389,
+      "heldout/unroll5/positive_reward_prediction": 0.13330550491809845,
+      "heldout/unroll5/real_reward_mse": 0.07382653653621674,
+      "heldout/unroll5/k0_real_value_mse": 0.9251019954681396,
+      "heldout/unroll5/k1_real_value_mse": 0.9470400214195251,
+      "heldout/unroll5/k2_real_value_mse": 0.9559573531150818,
+      "heldout/unroll5/k3_real_value_mse": 0.970118522644043,
+      "heldout/unroll5/k4_real_value_mse": 0.9718254208564758,
+      "heldout/unroll5/k5_real_value_mse": 0.9518346786499023,
+      "heldout/unroll10/policy_loss": 5.092587471008301,
+      "heldout/unroll10/reward_loss": 0.06801988929510117,
+      "heldout/unroll10/value_loss": 0.5982669591903687,
+      "heldout/unroll10/real_value_mse": 0.9519166946411133,
+      "heldout/unroll10/nonzero_reward_count": 779,
+      "heldout/unroll10/positive_reward_prediction": 0.09178291261196136,
+      "heldout/unroll10/real_reward_mse": 0.10112649202346802,
+      "heldout/unroll10/k0_real_value_mse": 0.9251019954681396,
+      "heldout/unroll10/k1_real_value_mse": 0.9470400214195251,
+      "heldout/unroll10/k2_real_value_mse": 0.9559573531150818,
+      "heldout/unroll10/k3_real_value_mse": 0.970118522644043,
+      "heldout/unroll10/k4_real_value_mse": 0.9718254208564758,
+      "heldout/unroll10/k5_real_value_mse": 0.9518346786499023,
+      "heldout/unroll10/k6_real_value_mse": 0.9590150713920593,
+      "heldout/unroll10/k7_real_value_mse": 0.9504558444023132,
+      "heldout/unroll10/k8_real_value_mse": 0.9618445038795471,
+      "heldout/unroll10/k9_real_value_mse": 0.9347935914993286,
+      "heldout/unroll10/k10_real_value_mse": 0.9458016753196716,
+      "eval/policy-vs-random/seat0_score": 0.85,
+      "eval/random-vs-policy/seat0_score": 0.25,
+      "eval/search-vs-random/seat0_score": 0.8541666666666666,
+      "eval/random-vs-search/seat0_score": 0.24166666666666667,
+      "eval/search-vs-policy/seat0_score": 0.5875,
+      "eval/policy-vs-search/seat0_score": 0.325
+    },
+    "evaluations": {
+      "eval-000000": {
+        "policy-vs-random": {
+          "wins": 110,
+          "draws": 0,
+          "losses": 130,
+          "unfinished": 0,
+          "seconds": 1.8290664097294211
+        },
+        "random-vs-policy": {
+          "wins": 109,
+          "draws": 0,
+          "losses": 131,
+          "unfinished": 0,
+          "seconds": 1.4646260868757963
+        },
+        "search-vs-random": {
+          "wins": 97,
+          "draws": 0,
+          "losses": 143,
+          "unfinished": 0,
+          "seconds": 3.43224969971925
+        },
+        "random-vs-search": {
+          "wins": 135,
+          "draws": 0,
+          "losses": 105,
+          "unfinished": 0,
+          "seconds": 2.9682358894497156
+        },
+        "search-vs-policy": {
+          "wins": 103,
+          "draws": 0,
+          "losses": 137,
+          "unfinished": 0,
+          "seconds": 2.991211316548288
+        },
+        "policy-vs-search": {
+          "wins": 156,
+          "draws": 0,
+          "losses": 84,
+          "unfinished": 0,
+          "seconds": 2.9952796064317226
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.5020833333333333,
+          "search_vs_random": 0.42083333333333334,
+          "search_vs_policy": 0.38958333333333334
+        }
+      },
+      "eval-000050": {
+        "policy-vs-random": {
+          "wins": 195,
+          "draws": 0,
+          "losses": 45,
+          "unfinished": 0,
+          "seconds": 0.004997998476028442
+        },
+        "random-vs-policy": {
+          "wins": 68,
+          "draws": 0,
+          "losses": 172,
+          "unfinished": 0,
+          "seconds": 0.004410859197378159
+        },
+        "search-vs-random": {
+          "wins": 195,
+          "draws": 0,
+          "losses": 45,
+          "unfinished": 0,
+          "seconds": 0.006748399697244167
+        },
+        "random-vs-search": {
+          "wins": 79,
+          "draws": 0,
+          "losses": 161,
+          "unfinished": 0,
+          "seconds": 0.006758900359272957
+        },
+        "search-vs-policy": {
+          "wins": 207,
+          "draws": 0,
+          "losses": 33,
+          "unfinished": 0,
+          "seconds": 0.006094878539443016
+        },
+        "policy-vs-search": {
+          "wins": 129,
+          "draws": 0,
+          "losses": 111,
+          "unfinished": 0,
+          "seconds": 0.006116109900176525
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.7645833333333333,
+          "search_vs_random": 0.7416666666666667,
+          "search_vs_policy": 0.6625
+        }
+      },
+      "eval-000100": {
+        "policy-vs-random": {
+          "wins": 209,
+          "draws": 0,
+          "losses": 31,
+          "unfinished": 0,
+          "seconds": 0.004780619405210018
+        },
+        "random-vs-policy": {
+          "wins": 74,
+          "draws": 0,
+          "losses": 166,
+          "unfinished": 0,
+          "seconds": 0.00444616936147213
+        },
+        "search-vs-random": {
+          "wins": 193,
+          "draws": 0,
+          "losses": 47,
+          "unfinished": 0,
+          "seconds": 0.0067449891939759254
+        },
+        "random-vs-search": {
+          "wins": 88,
+          "draws": 0,
+          "losses": 152,
+          "unfinished": 0,
+          "seconds": 0.006612218916416168
+        },
+        "search-vs-policy": {
+          "wins": 158,
+          "draws": 0,
+          "losses": 82,
+          "unfinished": 0,
+          "seconds": 0.006189519539475441
+        },
+        "policy-vs-search": {
+          "wins": 101,
+          "draws": 0,
+          "losses": 139,
+          "unfinished": 0,
+          "seconds": 0.005942299962043762
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.78125,
+          "search_vs_random": 0.71875,
+          "search_vs_policy": 0.61875
+        }
+      },
+      "eval-000150": {
+        "policy-vs-random": {
+          "wins": 206,
+          "draws": 0,
+          "losses": 34,
+          "unfinished": 0,
+          "seconds": 0.005053060129284859
+        },
+        "random-vs-policy": {
+          "wins": 70,
+          "draws": 0,
+          "losses": 170,
+          "unfinished": 0,
+          "seconds": 0.004676498472690582
+        },
+        "search-vs-random": {
+          "wins": 197,
+          "draws": 0,
+          "losses": 43,
+          "unfinished": 0,
+          "seconds": 0.006771269254386425
+        },
+        "random-vs-search": {
+          "wins": 89,
+          "draws": 0,
+          "losses": 151,
+          "unfinished": 0,
+          "seconds": 0.006680418737232685
+        },
+        "search-vs-policy": {
+          "wins": 185,
+          "draws": 0,
+          "losses": 55,
+          "unfinished": 0,
+          "seconds": 0.0061644297093153
+        },
+        "policy-vs-search": {
+          "wins": 88,
+          "draws": 0,
+          "losses": 152,
+          "unfinished": 0,
+          "seconds": 0.006064028479158878
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.7833333333333333,
+          "search_vs_random": 0.725,
+          "search_vs_policy": 0.7020833333333333
+        }
+      },
+      "eval-000200": {
+        "policy-vs-random": {
+          "wins": 200,
+          "draws": 0,
+          "losses": 40,
+          "unfinished": 0,
+          "seconds": 0.005429369397461414
+        },
+        "random-vs-policy": {
+          "wins": 65,
+          "draws": 0,
+          "losses": 175,
+          "unfinished": 0,
+          "seconds": 0.004863599315285683
+        },
+        "search-vs-random": {
+          "wins": 196,
+          "draws": 0,
+          "losses": 44,
+          "unfinished": 0,
+          "seconds": 0.0067537203431129456
+        },
+        "random-vs-search": {
+          "wins": 75,
+          "draws": 0,
+          "losses": 165,
+          "unfinished": 0,
+          "seconds": 0.006678169593214989
+        },
+        "search-vs-policy": {
+          "wins": 136,
+          "draws": 0,
+          "losses": 104,
+          "unfinished": 0,
+          "seconds": 0.006341368891298771
+        },
+        "policy-vs-search": {
+          "wins": 128,
+          "draws": 0,
+          "losses": 112,
+          "unfinished": 0,
+          "seconds": 0.006151529029011726
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.78125,
+          "search_vs_random": 0.7520833333333333,
+          "search_vs_policy": 0.5166666666666667
+        }
+      },
+      "eval-000250": {
+        "policy-vs-random": {
+          "wins": 201,
+          "draws": 0,
+          "losses": 39,
+          "unfinished": 0,
+          "seconds": 0.005034180358052254
+        },
+        "random-vs-policy": {
+          "wins": 78,
+          "draws": 0,
+          "losses": 162,
+          "unfinished": 0,
+          "seconds": 0.004740758799016476
+        },
+        "search-vs-random": {
+          "wins": 206,
+          "draws": 0,
+          "losses": 34,
+          "unfinished": 0,
+          "seconds": 0.006708049215376377
+        },
+        "random-vs-search": {
+          "wins": 85,
+          "draws": 0,
+          "losses": 155,
+          "unfinished": 0,
+          "seconds": 0.0067671192809939384
+        },
+        "search-vs-policy": {
+          "wins": 150,
+          "draws": 0,
+          "losses": 90,
+          "unfinished": 0,
+          "seconds": 0.00634319894015789
+        },
+        "policy-vs-search": {
+          "wins": 122,
+          "draws": 0,
+          "losses": 118,
+          "unfinished": 0,
+          "seconds": 0.0062391497194767
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.75625,
+          "search_vs_random": 0.7520833333333333,
+          "search_vs_policy": 0.5583333333333333
+        }
+      },
+      "eval-000300": {
+        "policy-vs-random": {
+          "wins": 201,
+          "draws": 0,
+          "losses": 39,
+          "unfinished": 0,
+          "seconds": 0.005197988823056221
+        },
+        "random-vs-policy": {
+          "wins": 75,
+          "draws": 0,
+          "losses": 165,
+          "unfinished": 0,
+          "seconds": 0.004580428823828697
+        },
+        "search-vs-random": {
+          "wins": 192,
+          "draws": 0,
+          "losses": 48,
+          "unfinished": 0,
+          "seconds": 0.006727969273924828
+        },
+        "random-vs-search": {
+          "wins": 79,
+          "draws": 0,
+          "losses": 161,
+          "unfinished": 0,
+          "seconds": 0.006666839122772217
+        },
+        "search-vs-policy": {
+          "wins": 179,
+          "draws": 0,
+          "losses": 61,
+          "unfinished": 0,
+          "seconds": 0.006194430403411388
+        },
+        "policy-vs-search": {
+          "wins": 135,
+          "draws": 0,
+          "losses": 105,
+          "unfinished": 0,
+          "seconds": 0.0061836084350943565
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.7625,
+          "search_vs_random": 0.7354166666666667,
+          "search_vs_policy": 0.5916666666666667
+        }
+      },
+      "eval-000350": {
+        "policy-vs-random": {
+          "wins": 206,
+          "draws": 0,
+          "losses": 34,
+          "unfinished": 0,
+          "seconds": 0.005271719768643379
+        },
+        "random-vs-policy": {
+          "wins": 53,
+          "draws": 0,
+          "losses": 187,
+          "unfinished": 0,
+          "seconds": 0.004851698875427246
+        },
+        "search-vs-random": {
+          "wins": 205,
+          "draws": 0,
+          "losses": 35,
+          "unfinished": 0,
+          "seconds": 0.006793770007789135
+        },
+        "random-vs-search": {
+          "wins": 74,
+          "draws": 0,
+          "losses": 166,
+          "unfinished": 0,
+          "seconds": 0.006729919463396072
+        },
+        "search-vs-policy": {
+          "wins": 125,
+          "draws": 0,
+          "losses": 115,
+          "unfinished": 0,
+          "seconds": 0.006221048533916473
+        },
+        "policy-vs-search": {
+          "wins": 148,
+          "draws": 0,
+          "losses": 92,
+          "unfinished": 0,
+          "seconds": 0.006138118915259838
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.81875,
+          "search_vs_random": 0.7729166666666667,
+          "search_vs_policy": 0.45208333333333334
+        }
+      },
+      "eval-000400": {
+        "policy-vs-random": {
+          "wins": 208,
+          "draws": 0,
+          "losses": 32,
+          "unfinished": 0,
+          "seconds": 0.00525932852178812
+        },
+        "random-vs-policy": {
+          "wins": 64,
+          "draws": 0,
+          "losses": 176,
+          "unfinished": 0,
+          "seconds": 0.004658619873225689
+        },
+        "search-vs-random": {
+          "wins": 201,
+          "draws": 0,
+          "losses": 39,
+          "unfinished": 0,
+          "seconds": 0.006967049092054367
+        },
+        "random-vs-search": {
+          "wins": 75,
+          "draws": 0,
+          "losses": 165,
+          "unfinished": 0,
+          "seconds": 0.006627729162573814
+        },
+        "search-vs-policy": {
+          "wins": 131,
+          "draws": 0,
+          "losses": 109,
+          "unfinished": 0,
+          "seconds": 0.006168819032609463
+        },
+        "policy-vs-search": {
+          "wins": 95,
+          "draws": 0,
+          "losses": 145,
+          "unfinished": 0,
+          "seconds": 0.0062416791915893555
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.8,
+          "search_vs_random": 0.7625,
+          "search_vs_policy": 0.575
+        }
+      },
+      "eval-000450": {
+        "policy-vs-random": {
+          "wins": 211,
+          "draws": 0,
+          "losses": 29,
+          "unfinished": 0,
+          "seconds": 0.005091219209134579
+        },
+        "random-vs-policy": {
+          "wins": 73,
+          "draws": 0,
+          "losses": 167,
+          "unfinished": 0,
+          "seconds": 0.0044492390006780624
+        },
+        "search-vs-random": {
+          "wins": 201,
+          "draws": 0,
+          "losses": 39,
+          "unfinished": 0,
+          "seconds": 0.006945368833839893
+        },
+        "random-vs-search": {
+          "wins": 69,
+          "draws": 0,
+          "losses": 171,
+          "unfinished": 0,
+          "seconds": 0.0067997584119439125
+        },
+        "search-vs-policy": {
+          "wins": 149,
+          "draws": 0,
+          "losses": 91,
+          "unfinished": 0,
+          "seconds": 0.006194699555635452
+        },
+        "policy-vs-search": {
+          "wins": 85,
+          "draws": 0,
+          "losses": 155,
+          "unfinished": 0,
+          "seconds": 0.00611885916441679
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.7875,
+          "search_vs_random": 0.775,
+          "search_vs_policy": 0.6333333333333333
+        }
+      },
+      "eval-000500": {
+        "policy-vs-random": {
+          "wins": 204,
+          "draws": 0,
+          "losses": 36,
+          "unfinished": 0,
+          "seconds": 0.005559389479458332
+        },
+        "random-vs-policy": {
+          "wins": 60,
+          "draws": 0,
+          "losses": 180,
+          "unfinished": 0,
+          "seconds": 0.004642309620976448
+        },
+        "search-vs-random": {
+          "wins": 205,
+          "draws": 0,
+          "losses": 35,
+          "unfinished": 0,
+          "seconds": 0.00688914954662323
+        },
+        "random-vs-search": {
+          "wins": 58,
+          "draws": 0,
+          "losses": 182,
+          "unfinished": 0,
+          "seconds": 0.006813989952206612
+        },
+        "search-vs-policy": {
+          "wins": 141,
+          "draws": 0,
+          "losses": 99,
+          "unfinished": 0,
+          "seconds": 0.006357189267873764
+        },
+        "policy-vs-search": {
+          "wins": 78,
+          "draws": 0,
+          "losses": 162,
+          "unfinished": 0,
+          "seconds": 0.006091750226914883
+        },
+        "combined_scores": {
+          "policy_vs_random": 0.8,
+          "search_vs_random": 0.80625,
+          "search_vs_policy": 0.63125
+        }
+      }
+    },
+    "mohex": {
+      "mohex-policy": [
+        {
+          "board_size": 4,
+          "cycle": 50,
+          "elapsed_seconds": 0.44309445191174746,
+          "games_total": 16,
+          "model_losses": 15,
+          "model_search_seconds": 0.3812460517510772,
+          "model_win_rate": 0.0625,
+          "model_wins": 1,
+          "mohex_search_seconds": 0.03625568374991417,
+          "opening_results": [
+            {
+              "opening_action": 0,
+              "opening_vertex": "a1",
+              "result": "L"
+            },
+            {
+              "opening_action": 1,
+              "opening_vertex": "b1",
+              "result": "L"
+            },
+            {
+              "opening_action": 2,
+              "opening_vertex": "c1",
+              "result": "L"
+            },
+            {
+              "opening_action": 3,
+              "opening_vertex": "d1",
+              "result": "W"
+            },
+            {
+              "opening_action": 4,
+              "opening_vertex": "a2",
+              "result": "L"
+            },
+            {
+              "opening_action": 5,
+              "opening_vertex": "b2",
+              "result": "L"
+            },
+            {
+              "opening_action": 6,
+              "opening_vertex": "c2",
+              "result": "L"
+            },
+            {
+              "opening_action": 7,
+              "opening_vertex": "d2",
+              "result": "L"
+            },
+            {
+              "opening_action": 8,
+              "opening_vertex": "a3",
+              "result": "L"
+            },
+            {
+              "opening_action": 9,
+              "opening_vertex": "b3",
+              "result": "L"
+            },
+            {
+              "opening_action": 10,
+              "opening_vertex": "c3",
+              "result": "L"
+            },
+            {
+              "opening_action": 11,
+              "opening_vertex": "d3",
+              "result": "L"
+            },
+            {
+              "opening_action": 12,
+              "opening_vertex": "a4",
+              "result": "L"
+            },
+            {
+              "opening_action": 13,
+              "opening_vertex": "b4",
+              "result": "L"
+            },
+            {
+              "opening_action": 14,
+              "opening_vertex": "c4",
+              "result": "L"
+            },
+            {
+              "opening_action": 15,
+              "opening_vertex": "d4",
+              "result": "L"
+            }
+          ],
+          "padding_rows": 0,
+          "perfect_opening_fraction": 0.25,
+          "perfect_opening_total": 4,
+          "perfect_opening_wins": 1,
+          "perfect_play_achieved": 0,
+          "physical_batch_size": 16,
+          "real_games": 16,
+          "schema_version": 1,
+          "state": "complete",
+          "timestamp": "2026-09-05T10:52:39.840482+00:00",
+          "total_plies": 133,
+          "train_step": 500,
+          "unexpected_opening_wins": 0,
+          "unscored": 0
+        },
+        {
+          "board_size": 4,
+          "cycle": 100,
+          "elapsed_seconds": 0.062262872233986855,
+          "games_total": 16,
+          "model_losses": 15,
+          "model_search_seconds": 0.005104918964207172,
+          "model_win_rate": 0.0625,
+          "model_wins": 1,
+          "mohex_search_seconds": 0.03005622699856758,
+          "opening_results": [
+            {
+              "opening_action": 0,
+              "opening_vertex": "a1",
+              "result": "L"
+            },
+            {
+              "opening_action": 1,
+              "opening_vertex": "b1",
+              "result": "L"
+            },
+            {
+              "opening_action": 2,
+              "opening_vertex": "c1",
+              "result": "L"
+            },
+            {
+              "opening_action": 3,
+              "opening_vertex": "d1",
+              "result": "W"
+            },
+            {
+              "opening_action": 4,
+              "opening_vertex": "a2",
+              "result": "L"
+            },
+            {
+              "opening_action": 5,
+              "opening_vertex": "b2",
+              "result": "L"
+            },
+            {
+              "opening_action": 6,
+              "opening_vertex": "c2",
+              "result": "L"
+            },
+            {
+              "opening_action": 7,
+              "opening_vertex": "d2",
+              "result": "L"
+            },
+            {
+              "opening_action": 8,
+              "opening_vertex": "a3",
+              "result": "L"
+            },
+            {
+              "opening_action": 9,
+              "opening_vertex": "b3",
+              "result": "L"
+            },
+            {
+              "opening_action": 10,
+              "opening_vertex": "c3",
+              "result": "L"
+            },
+            {
+              "opening_action": 11,
+              "opening_vertex": "d3",
+              "result": "L"
+            },
+            {
+              "opening_action": 12,
+              "opening_vertex": "a4",
+              "result": "L"
+            },
+            {
+              "opening_action": 13,
+              "opening_vertex": "b4",
+              "result": "L"
+            },
+            {
+              "opening_action": 14,
+              "opening_vertex": "c4",
+              "result": "L"
+            },
+            {
+              "opening_action": 15,
+              "opening_vertex": "d4",
+              "result": "L"
+            }
+          ],
+          "padding_rows": 0,
+          "perfect_opening_fraction": 0.25,
+          "perfect_opening_total": 4,
+          "perfect_opening_wins": 1,
+          "perfect_play_achieved": 0,
+          "physical_batch_size": 16,
+          "real_games": 16,
+          "schema_version": 1,
+          "state": "complete",
+          "timestamp": "2026-09-05T10:52:55.094797+00:00",
+          "total_plies": 135,
+          "train_step": 1000,
+          "unexpected_opening_wins": 0,
+          "unscored": 0
+        },
+        {
+          "board_size": 4,
+          "cycle": 150,
+          "elapsed_seconds": 0.05444326251745224,
+          "games_total": 16,
+          "model_losses": 15,
+          "model_search_seconds": 0.005677471868693829,
+          "model_win_rate": 0.0625,
+          "model_wins": 1,
+          "mohex_search_seconds": 0.020991556346416473,
+          "opening_results": [
+            {
+              "opening_action": 0,
+              "opening_vertex": "a1",
+              "result": "L"
+            },
+            {
+              "opening_action": 1,
+              "opening_vertex": "b1",
+              "result": "L"
+            },
+            {
+              "opening_action": 2,
+              "opening_vertex": "c1",
+              "result": "L"
+            },
+            {
+              "opening_action": 3,
+              "opening_vertex": "d1",
+              "result": "W"
+            },
+            {
+              "opening_action": 4,
+              "opening_vertex": "a2",
+              "result": "L"
+            },
+            {
+              "opening_action": 5,
+              "opening_vertex": "b2",
+              "result": "L"
+            },
+            {
+              "opening_action": 6,
+              "opening_vertex": "c2",
+              "result": "L"
+            },
+            {
+              "opening_action": 7,
+              "opening_vertex": "d2",
+              "result": "L"
+            },
+            {
+              "opening_action": 8,
+              "opening_vertex": "a3",
+              "result": "L"
+            },
+            {
+              "opening_action": 9,
+              "opening_vertex": "b3",
+              "result": "L"
+            },
+            {
+              "opening_action": 10,
+              "opening_vertex": "c3",
+              "result": "L"
+            },
+            {
+              "opening_action": 11,
+              "opening_vertex": "d3",
+              "result": "L"
+            },
+            {
+              "opening_action": 12,
+              "opening_vertex": "a4",
+              "result": "L"
+            },
+            {
+              "opening_action": 13,
+              "opening_vertex": "b4",
+              "result": "L"
+            },
+            {
+              "opening_action": 14,
+              "opening_vertex": "c4",
+              "result": "L"
+            },
+            {
+              "opening_action": 15,
+              "opening_vertex": "d4",
+              "result": "L"
+            }
+          ],
+          "padding_rows": 0,
+          "perfect_opening_fraction": 0.25,
+          "perfect_opening_total": 4,
+          "perfect_opening_wins": 1,
+          "perfect_play_achieved": 0,
+          "physical_batch_size": 16,
+          "real_games": 16,
+          "schema_version": 1,
+          "state": "complete",
+          "timestamp": "2026-09-05T10:53:10.828914+00:00",
+          "total_plies": 135,
+          "train_step": 1500,
+          "unexpected_opening_wins": 0,
+          "unscored": 0
+        },
+        {
+          "board_size": 4,
+          "cycle": 200,
+          "elapsed_seconds": 0.11033217422664165,
+          "games_total": 16,
+          "model_losses": 16,
+          "model_search_seconds": 0.005582890473306179,
+          "model_win_rate": 0.0,
+          "model_wins": 0,
+          "mohex_search_seconds": 0.07497983239591122,
+          "opening_results": [
+            {
+              "opening_action": 0,
+              "opening_vertex": "a1",
+              "result": "L"
+            },
+            {
+              "opening_action": 1,
+              "opening_vertex": "b1",
+              "result": "L"
+            },
+            {
+              "opening_action": 2,
+              "opening_vertex": "c1",
+              "result": "L"
+            },
+            {
+              "opening_action": 3,
+              "opening_vertex": "d1",
+              "result": "L"
+            },
+            {
+              "opening_action": 4,
+              "opening_vertex": "a2",
+              "result": "L"
+            },
+            {
+              "opening_action": 5,
+              "opening_vertex": "b2",
+              "result": "L"
+            },
+            {
+              "opening_action": 6,
+              "opening_vertex": "c2",
+              "result": "L"
+            },
+            {
+              "opening_action": 7,
+              "opening_vertex": "d2",
+              "result": "L"
+            },
+            {
+              "opening_action": 8,
+              "opening_vertex": "a3",
+              "result": "L"
+            },
+            {
+              "opening_action": 9,
+              "opening_vertex": "b3",
+              "result": "L"
+            },
+            {
+              "opening_action": 10,
+              "opening_vertex": "c3",
+              "result": "L"
+            },
+            {
+              "opening_action": 11,
+              "opening_vertex": "d3",
+              "result": "L"
+            },
+            {
+              "opening_action": 12,
+              "opening_vertex": "a4",
+              "result": "L"
+            },
+            {
+              "opening_action": 13,
+              "opening_vertex": "b4",
+              "result": "L"
+            },
+            {
+              "opening_action": 14,
+              "opening_vertex": "c4",
+              "result": "L"
+            },
+            {
+              "opening_action": 15,
+              "opening_vertex": "d4",
+              "result": "L"
+            }
+          ],
+          "padding_rows": 0,
+          "perfect_opening_fraction": 0.0,
+          "perfect_opening_total": 4,
+          "perfect_opening_wins": 0,
+          "perfect_play_achieved": 0,
+          "physical_batch_size": 16,
+          "real_games": 16,
+          "schema_version": 1,
+          "state": "complete",
+          "timestamp": "2026-09-05T10:53:26.306788+00:00",
+          "total_plies": 136,
+          "train_step": 2000,
+          "unexpected_opening_wins": 0,
+          "unscored": 0
+        },
+        {
+          "board_size": 4,
+          "cycle": 250,
+          "elapsed_seconds": 0.06682986114174128,
+          "games_total": 16,
+          "model_losses": 15,
+          "model_search_seconds": 0.005670671351253986,
+          "model_win_rate": 0.0625,
+          "model_wins": 1,
+          "mohex_search_seconds": 0.03198985755443573,
+          "opening_results": [
+            {
+              "opening_action": 0,
+              "opening_vertex": "a1",
+              "result": "L"
+            },
+            {
+              "opening_action": 1,
+              "opening_vertex": "b1",
+              "result": "L"
+            },
+            {
+              "opening_action": 2,
+              "opening_vertex": "c1",
+              "result": "L"
+            },
+            {
+              "opening_action": 3,
+              "opening_vertex": "d1",
+              "result": "W"
+            },
+            {
+              "opening_action": 4,
+              "opening_vertex": "a2",
+              "result": "L"
+            },
+            {
+              "opening_action": 5,
+              "opening_vertex": "b2",
+              "result": "L"
+            },
+            {
+              "opening_action": 6,
+              "opening_vertex": "c2",
+              "result": "L"
+            },
+            {
+              "opening_action": 7,
+              "opening_vertex": "d2",
+              "result": "L"
+            },
+            {
+              "opening_action": 8,
+              "opening_vertex": "a3",
+              "result": "L"
+            },
+            {
+              "opening_action": 9,
+              "opening_vertex": "b3",
+              "result": "L"
+            },
+            {
+              "opening_action": 10,
+              "opening_vertex": "c3",
+              "result": "L"
+            },
+            {
+              "opening_action": 11,
+              "opening_vertex": "d3",
+              "result": "L"
+            },
+            {
+              "opening_action": 12,
+              "opening_vertex": "a4",
+              "result": "L"
+            },
+            {
+              "opening_action": 13,
+              "opening_vertex": "b4",
+              "result": "L"
+            },
+            {
+              "opening_action": 14,
+              "opening_vertex": "c4",
+              "result": "L"
+            },
+            {
+              "opening_action": 15,
+              "opening_vertex": "d4",
+              "result": "L"
+            }
+          ],
+          "padding_rows": 0,
+          "perfect_opening_fraction": 0.25,
+          "perfect_opening_total": 4,
+          "perfect_opening_wins": 1,
+          "perfect_play_achieved": 0,
+          "physical_batch_size": 16,
+          "real_games": 16,
+          "schema_version": 1,
+          "state": "complete",
+          "timestamp": "2026-09-05T10:53:42.194168+00:00",
+          "total_plies": 137,
+          "train_step": 2500,
+          "unexpected_opening_wins": 0,
+          "unscored": 0
+        },
+        {
+          "board_size": 4,
+          "cycle": 300,
+          "elapsed_seconds": 0.06722782086580992,
+          "games_total": 16,
+          "model_losses": 16,
+          "model_search_seconds": 0.005244831554591656,
+          "model_win_rate": 0.0,
+          "model_wins": 0,
+          "mohex_search_seconds": 0.03367622476071119,
+          "opening_results": [
+            {
+              "opening_action": 0,
+              "opening_vertex": "a1",
+              "result": "L"
+            },
+            {
+              "opening_action": 1,
+              "opening_vertex": "b1",
+              "result": "L"
+            },
+            {
+              "opening_action": 2,
+              "opening_vertex": "c1",
+              "result": "L"
+            },
+            {
+              "opening_action": 3,
+              "opening_vertex": "d1",
+              "result": "L"
+            },
+            {
+              "opening_action": 4,
+              "opening_vertex": "a2",
+              "result": "L"
+            },
+            {
+              "opening_action": 5,
+              "opening_vertex": "b2",
+              "result": "L"
+            },
+            {
+              "opening_action": 6,
+              "opening_vertex": "c2",
+              "result": "L"
+            },
+            {
+              "opening_action": 7,
+              "opening_vertex": "d2",
+              "result": "L"
+            },
+            {
+              "opening_action": 8,
+              "opening_vertex": "a3",
+              "result": "L"
+            },
+            {
+              "opening_action": 9,
+              "opening_vertex": "b3",
+              "result": "L"
+            },
+            {
+              "opening_action": 10,
+              "opening_vertex": "c3",
+              "result": "L"
+            },
+            {
+              "opening_action": 11,
+              "opening_vertex": "d3",
+              "result": "L"
+            },
+            {
+              "opening_action": 12,
+              "opening_vertex": "a4",
+              "result": "L"
+            },
+            {
+              "opening_action": 13,
+              "opening_vertex": "b4",
+              "result": "L"
+            },
+            {
+              "opening_action": 14,
+              "opening_vertex": "c4",
+              "result": "L"
+            },
+            {
+              "opening_action": 15,
+              "opening_vertex": "d4",
+              "result": "L"
+            }
+          ],
+          "padding_rows": 0,
+          "perfect_opening_fraction": 0.0,
+          "perfect_opening_total": 4,
+          "perfect_opening_wins": 0,
+          "perfect_play_achieved": 0,
+          "physical_batch_size": 16,
+          "real_games": 16,
+          "schema_version": 1,
+          "state": "complete",
+          "timestamp": "2026-09-05T10:53:58.293840+00:00",
+          "total_plies": 134,
+          "train_step": 3000,
+          "unexpected_opening_wins": 0,
+          "unscored": 0
+        },
+        {
+          "board_size": 4,
+          "cycle": 350,
+          "elapsed_seconds": 0.05011310428380966,
+          "games_total": 16,
+          "model_losses": 16,
+          "model_search_seconds": 0.004275120794773102,
+          "model_win_rate": 0.0,
+          "model_wins": 0,
+          "mohex_search_seconds": 0.021491708233952522,
+          "opening_results": [
+            {
+              "opening_action": 0,
+              "opening_vertex": "a1",
+              "result": "L"
+            },
+            {
+              "opening_action": 1,
+              "opening_vertex": "b1",
+              "result": "L"
+            },
+            {
+              "opening_action": 2,
+              "opening_vertex": "c1",
+              "result": "L"
+            },
+            {
+              "opening_action": 3,
+              "opening_vertex": "d1",
+              "result": "L"
+            },
+            {
+              "opening_action": 4,
+              "opening_vertex": "a2",
+              "result": "L"
+            },
+            {
+              "opening_action": 5,
+              "opening_vertex": "b2",
+              "result": "L"
+            },
+            {
+              "opening_action": 6,
+              "opening_vertex": "c2",
+              "result": "L"
+            },
+            {
+              "opening_action": 7,
+              "opening_vertex": "d2",
+              "result": "L"
+            },
+            {
+              "opening_action": 8,
+              "opening_vertex": "a3",
+              "result": "L"
+            },
+            {
+              "opening_action": 9,
+              "opening_vertex": "b3",
+              "result": "L"
+            },
+            {
+              "opening_action": 10,
+              "opening_vertex": "c3",
+              "result": "L"
+            },
+            {
+              "opening_action": 11,
+              "opening_vertex": "d3",
+              "result": "L"
+            },
+            {
+              "opening_action": 12,
+              "opening_vertex": "a4",
+              "result": "L"
+            },
+            {
+              "opening_action": 13,
+              "opening_vertex": "b4",
+              "result": "L"
+            },
+            {
+              "opening_action": 14,
+              "opening_vertex": "c4",
+              "result": "L"
+            },
+            {
+              "opening_action": 15,
+              "opening_vertex": "d4",
+              "result": "L"
+            }
+          ],
+          "padding_rows": 0,
+          "perfect_opening_fraction": 0.0,
+          "perfect_opening_total": 4,
+          "perfect_opening_wins": 0,
+          "perfect_play_achieved": 0,
+          "physical_batch_size": 16,
+          "real_games": 16,
+          "schema_version": 1,
+          "state": "complete",
+          "timestamp": "2026-09-05T10:54:14.049823+00:00",
+          "total_plies": 132,
+          "train_step": 3500,
+          "unexpected_opening_wins": 0,
+          "unscored": 0
+        },
+        {
+          "board_size": 4,
+          "cycle": 400,
+          "elapsed_seconds": 0.05468448344618082,
+          "games_total": 16,
+          "model_losses": 16,
+          "model_search_seconds": 0.004115169867873192,
+          "model_win_rate": 0.0,
+          "model_wins": 0,
+          "mohex_search_seconds": 0.02591036632657051,
+          "opening_results": [
+            {
+              "opening_action": 0,
+              "opening_vertex": "a1",
+              "result": "L"
+            },
+            {
+              "opening_action": 1,
+              "opening_vertex": "b1",
+              "result": "L"
+            },
+            {
+              "opening_action": 2,
+              "opening_vertex": "c1",
+              "result": "L"
+            },
+            {
+              "opening_action": 3,
+              "opening_vertex": "d1",
+              "result": "L"
+            },
+            {
+              "opening_action": 4,
+              "opening_vertex": "a2",
+              "result": "L"
+            },
+            {
+              "opening_action": 5,
+              "opening_vertex": "b2",
+              "result": "L"
+            },
+            {
+              "opening_action": 6,
+              "opening_vertex": "c2",
+              "result": "L"
+            },
+            {
+              "opening_action": 7,
+              "opening_vertex": "d2",
+              "result": "L"
+            },
+            {
+              "opening_action": 8,
+              "opening_vertex": "a3",
+              "result": "L"
+            },
+            {
+              "opening_action": 9,
+              "opening_vertex": "b3",
+              "result": "L"
+            },
+            {
+              "opening_action": 10,
+              "opening_vertex": "c3",
+              "result": "L"
+            },
+            {
+              "opening_action": 11,
+              "opening_vertex": "d3",
+              "result": "L"
+            },
+            {
+              "opening_action": 12,
+              "opening_vertex": "a4",
+              "result": "L"
+            },
+            {
+              "opening_action": 13,
+              "opening_vertex": "b4",
+              "result": "L"
+            },
+            {
+              "opening_action": 14,
+              "opening_vertex": "c4",
+              "result": "L"
+            },
+            {
+              "opening_action": 15,
+              "opening_vertex": "d4",
+              "result": "L"
+            }
+          ],
+          "padding_rows": 0,
+          "perfect_opening_fraction": 0.0,
+          "perfect_opening_total": 4,
+          "perfect_opening_wins": 0,
+          "perfect_play_achieved": 0,
+          "physical_batch_size": 16,
+          "real_games": 16,
+          "schema_version": 1,
+          "state": "complete",
+          "timestamp": "2026-09-05T10:54:30.030581+00:00",
+          "total_plies": 134,
+          "train_step": 4000,
+          "unexpected_opening_wins": 0,
+          "unscored": 0
+        },
+        {
+          "board_size": 4,
+          "cycle": 450,
+          "elapsed_seconds": 0.056200023740530014,
+          "games_total": 16,
+          "model_losses": 16,
+          "model_search_seconds": 0.004138649441301823,
+          "model_win_rate": 0.0,
+          "model_wins": 0,
+          "mohex_search_seconds": 0.027717226184904575,
+          "opening_results": [
+            {
+              "opening_action": 0,
+              "opening_vertex": "a1",
+              "result": "L"
+            },
+            {
+              "opening_action": 1,
+              "opening_vertex": "b1",
+              "result": "L"
+            },
+            {
+              "opening_action": 2,
+              "opening_vertex": "c1",
+              "result": "L"
+            },
+            {
+              "opening_action": 3,
+              "opening_vertex": "d1",
+              "result": "L"
+            },
+            {
+              "opening_action": 4,
+              "opening_vertex": "a2",
+              "result": "L"
+            },
+            {
+              "opening_action": 5,
+              "opening_vertex": "b2",
+              "result": "L"
+            },
+            {
+              "opening_action": 6,
+              "opening_vertex": "c2",
+              "result": "L"
+            },
+            {
+              "opening_action": 7,
+              "opening_vertex": "d2",
+              "result": "L"
+            },
+            {
+              "opening_action": 8,
+              "opening_vertex": "a3",
+              "result": "L"
+            },
+            {
+              "opening_action": 9,
+              "opening_vertex": "b3",
+              "result": "L"
+            },
+            {
+              "opening_action": 10,
+              "opening_vertex": "c3",
+              "result": "L"
+            },
+            {
+              "opening_action": 11,
+              "opening_vertex": "d3",
+              "result": "L"
+            },
+            {
+              "opening_action": 12,
+              "opening_vertex": "a4",
+              "result": "L"
+            },
+            {
+              "opening_action": 13,
+              "opening_vertex": "b4",
+              "result": "L"
+            },
+            {
+              "opening_action": 14,
+              "opening_vertex": "c4",
+              "result": "L"
+            },
+            {
+              "opening_action": 15,
+              "opening_vertex": "d4",
+              "result": "L"
+            }
+          ],
+          "padding_rows": 0,
+          "perfect_opening_fraction": 0.0,
+          "perfect_opening_total": 4,
+          "perfect_opening_wins": 0,
+          "perfect_play_achieved": 0,
+          "physical_batch_size": 16,
+          "real_games": 16,
+          "schema_version": 1,
+          "state": "complete",
+          "timestamp": "2026-09-05T10:54:45.720649+00:00",
+          "total_plies": 134,
+          "train_step": 4500,
+          "unexpected_opening_wins": 0,
+          "unscored": 0
+        },
+        {
+          "board_size": 4,
+          "cycle": 500,
+          "elapsed_seconds": 0.05642135255038738,
+          "games_total": 16,
+          "model_losses": 16,
+          "model_search_seconds": 0.005036110058426857,
+          "model_win_rate": 0.0,
+          "model_wins": 0,
+          "mohex_search_seconds": 0.02329392358660698,
+          "opening_results": [
+            {
+              "opening_action": 0,
+              "opening_vertex": "a1",
+              "result": "L"
+            },
+            {
+              "opening_action": 1,
+              "opening_vertex": "b1",
+              "result": "L"
+            },
+            {
+              "opening_action": 2,
+              "opening_vertex": "c1",
+              "result": "L"
+            },
+            {
+              "opening_action": 3,
+              "opening_vertex": "d1",
+              "result": "L"
+            },
+            {
+              "opening_action": 4,
+              "opening_vertex": "a2",
+              "result": "L"
+            },
+            {
+              "opening_action": 5,
+              "opening_vertex": "b2",
+              "result": "L"
+            },
+            {
+              "opening_action": 6,
+              "opening_vertex": "c2",
+              "result": "L"
+            },
+            {
+              "opening_action": 7,
+              "opening_vertex": "d2",
+              "result": "L"
+            },
+            {
+              "opening_action": 8,
+              "opening_vertex": "a3",
+              "result": "L"
+            },
+            {
+              "opening_action": 9,
+              "opening_vertex": "b3",
+              "result": "L"
+            },
+            {
+              "opening_action": 10,
+              "opening_vertex": "c3",
+              "result": "L"
+            },
+            {
+              "opening_action": 11,
+              "opening_vertex": "d3",
+              "result": "L"
+            },
+            {
+              "opening_action": 12,
+              "opening_vertex": "a4",
+              "result": "L"
+            },
+            {
+              "opening_action": 13,
+              "opening_vertex": "b4",
+              "result": "L"
+            },
+            {
+              "opening_action": 14,
+              "opening_vertex": "c4",
+              "result": "L"
+            },
+            {
+              "opening_action": 15,
+              "opening_vertex": "d4",
+              "result": "L"
+            }
+          ],
+          "padding_rows": 0,
+          "perfect_opening_fraction": 0.0,
+          "perfect_opening_total": 4,
+          "perfect_opening_wins": 0,
+          "perfect_play_achieved": 0,
+          "physical_batch_size": 16,
+          "real_games": 16,
+          "schema_version": 1,
+          "state": "complete",
+          "timestamp": "2026-09-05T10:55:01.448571+00:00",
+          "total_plies": 134,
+          "train_step": 5000,
+          "unexpected_opening_wins": 0,
+          "unscored": 0
+        }
+      ],
+      "mohex-search": [
+        {
+          "board_size": 4,
+          "cycle": 50,
+          "elapsed_seconds": 2.514418969862163,
+          "games_total": 16,
+          "model_losses": 16,
+          "model_search_seconds": 2.032820202410221,
+          "model_win_rate": 0.0,
+          "model_wins": 0,
+          "mohex_search_seconds": 0.04632595647126436,
+          "opening_results": [
+            {
+              "opening_action": 0,
+              "opening_vertex": "a1",
+              "result": "L"
+            },
+            {
+              "opening_action": 1,
+              "opening_vertex": "b1",
+              "result": "L"
+            },
+            {
+              "opening_action": 2,
+              "opening_vertex": "c1",
+              "result": "L"
+            },
+            {
+              "opening_action": 3,
+              "opening_vertex": "d1",
+              "result": "L"
+            },
+            {
+              "opening_action": 4,
+              "opening_vertex": "a2",
+              "result": "L"
+            },
+            {
+              "opening_action": 5,
+              "opening_vertex": "b2",
+              "result": "L"
+            },
+            {
+              "opening_action": 6,
+              "opening_vertex": "c2",
+              "result": "L"
+            },
+            {
+              "opening_action": 7,
+              "opening_vertex": "d2",
+              "result": "L"
+            },
+            {
+              "opening_action": 8,
+              "opening_vertex": "a3",
+              "result": "L"
+            },
+            {
+              "opening_action": 9,
+              "opening_vertex": "b3",
+              "result": "L"
+            },
+            {
+              "opening_action": 10,
+              "opening_vertex": "c3",
+              "result": "L"
+            },
+            {
+              "opening_action": 11,
+              "opening_vertex": "d3",
+              "result": "L"
+            },
+            {
+              "opening_action": 12,
+              "opening_vertex": "a4",
+              "result": "L"
+            },
+            {
+              "opening_action": 13,
+              "opening_vertex": "b4",
+              "result": "L"
+            },
+            {
+              "opening_action": 14,
+              "opening_vertex": "c4",
+              "result": "L"
+            },
+            {
+              "opening_action": 15,
+              "opening_vertex": "d4",
+              "result": "L"
+            }
+          ],
+          "padding_rows": 0,
+          "perfect_opening_fraction": 0.0,
+          "perfect_opening_total": 4,
+          "perfect_opening_wins": 0,
+          "perfect_play_achieved": 0,
+          "physical_batch_size": 16,
+          "real_games": 16,
+          "schema_version": 1,
+          "state": "complete",
+          "timestamp": "2026-09-05T10:52:39.382931+00:00",
+          "total_plies": 136,
+          "train_step": 500,
+          "unexpected_opening_wins": 0,
+          "unscored": 0
+        },
+        {
+          "board_size": 4,
+          "cycle": 100,
+          "elapsed_seconds": 0.07571145985275507,
+          "games_total": 16,
+          "model_losses": 16,
+          "model_search_seconds": 0.007973998785018921,
+          "model_win_rate": 0.0,
+          "model_wins": 0,
+          "mohex_search_seconds": 0.039294786751270294,
+          "opening_results": [
+            {
+              "opening_action": 0,
+              "opening_vertex": "a1",
+              "result": "L"
+            },
+            {
+              "opening_action": 1,
+              "opening_vertex": "b1",
+              "result": "L"
+            },
+            {
+              "opening_action": 2,
+              "opening_vertex": "c1",
+              "result": "L"
+            },
+            {
+              "opening_action": 3,
+              "opening_vertex": "d1",
+              "result": "L"
+            },
+            {
+              "opening_action": 4,
+              "opening_vertex": "a2",
+              "result": "L"
+            },
+            {
+              "opening_action": 5,
+              "opening_vertex": "b2",
+              "result": "L"
+            },
+            {
+              "opening_action": 6,
+              "opening_vertex": "c2",
+              "result": "L"
+            },
+            {
+              "opening_action": 7,
+              "opening_vertex": "d2",
+              "result": "L"
+            },
+            {
+              "opening_action": 8,
+              "opening_vertex": "a3",
+              "result": "L"
+            },
+            {
+              "opening_action": 9,
+              "opening_vertex": "b3",
+              "result": "L"
+            },
+            {
+              "opening_action": 10,
+              "opening_vertex": "c3",
+              "result": "L"
+            },
+            {
+              "opening_action": 11,
+              "opening_vertex": "d3",
+              "result": "L"
+            },
+            {
+              "opening_action": 12,
+              "opening_vertex": "a4",
+              "result": "L"
+            },
+            {
+              "opening_action": 13,
+              "opening_vertex": "b4",
+              "result": "L"
+            },
+            {
+              "opening_action": 14,
+              "opening_vertex": "c4",
+              "result": "L"
+            },
+            {
+              "opening_action": 15,
+              "opening_vertex": "d4",
+              "result": "L"
+            }
+          ],
+          "padding_rows": 0,
+          "perfect_opening_fraction": 0.0,
+          "perfect_opening_total": 4,
+          "perfect_opening_wins": 0,
+          "perfect_play_achieved": 0,
+          "physical_batch_size": 16,
+          "real_games": 16,
+          "schema_version": 1,
+          "state": "complete",
+          "timestamp": "2026-09-05T10:52:55.018649+00:00",
+          "total_plies": 138,
+          "train_step": 1000,
+          "unexpected_opening_wins": 0,
+          "unscored": 0
+        },
+        {
+          "board_size": 4,
+          "cycle": 150,
+          "elapsed_seconds": 0.11339681502431631,
+          "games_total": 16,
+          "model_losses": 16,
+          "model_search_seconds": 0.009183259680867195,
+          "model_win_rate": 0.0,
+          "model_wins": 0,
+          "mohex_search_seconds": 0.07131210155785084,
+          "opening_results": [
+            {
+              "opening_action": 0,
+              "opening_vertex": "a1",
+              "result": "L"
+            },
+            {
+              "opening_action": 1,
+              "opening_vertex": "b1",
+              "result": "L"
+            },
+            {
+              "opening_action": 2,
+              "opening_vertex": "c1",
+              "result": "L"
+            },
+            {
+              "opening_action": 3,
+              "opening_vertex": "d1",
+              "result": "L"
+            },
+            {
+              "opening_action": 4,
+              "opening_vertex": "a2",
+              "result": "L"
+            },
+            {
+              "opening_action": 5,
+              "opening_vertex": "b2",
+              "result": "L"
+            },
+            {
+              "opening_action": 6,
+              "opening_vertex": "c2",
+              "result": "L"
+            },
+            {
+              "opening_action": 7,
+              "opening_vertex": "d2",
+              "result": "L"
+            },
+            {
+              "opening_action": 8,
+              "opening_vertex": "a3",
+              "result": "L"
+            },
+            {
+              "opening_action": 9,
+              "opening_vertex": "b3",
+              "result": "L"
+            },
+            {
+              "opening_action": 10,
+              "opening_vertex": "c3",
+              "result": "L"
+            },
+            {
+              "opening_action": 11,
+              "opening_vertex": "d3",
+              "result": "L"
+            },
+            {
+              "opening_action": 12,
+              "opening_vertex": "a4",
+              "result": "L"
+            },
+            {
+              "opening_action": 13,
+              "opening_vertex": "b4",
+              "result": "L"
+            },
+            {
+              "opening_action": 14,
+              "opening_vertex": "c4",
+              "result": "L"
+            },
+            {
+              "opening_action": 15,
+              "opening_vertex": "d4",
+              "result": "L"
+            }
+          ],
+          "padding_rows": 0,
+          "perfect_opening_fraction": 0.0,
+          "perfect_opening_total": 4,
+          "perfect_opening_wins": 0,
+          "perfect_play_achieved": 0,
+          "physical_batch_size": 16,
+          "real_games": 16,
+          "schema_version": 1,
+          "state": "complete",
+          "timestamp": "2026-09-05T10:53:10.760437+00:00",
+          "total_plies": 140,
+          "train_step": 1500,
+          "unexpected_opening_wins": 0,
+          "unscored": 0
+        },
+        {
+          "board_size": 4,
+          "cycle": 200,
+          "elapsed_seconds": 0.08098865021020174,
+          "games_total": 16,
+          "model_losses": 16,
+          "model_search_seconds": 0.009288069792091846,
+          "model_win_rate": 0.0,
+          "model_wins": 0,
+          "mohex_search_seconds": 0.03828797582536936,
+          "opening_results": [
+            {
+              "opening_action": 0,
+              "opening_vertex": "a1",
+              "result": "L"
+            },
+            {
+              "opening_action": 1,
+              "opening_vertex": "b1",
+              "result": "L"
+            },
+            {
+              "opening_action": 2,
+              "opening_vertex": "c1",
+              "result": "L"
+            },
+            {
+              "opening_action": 3,
+              "opening_vertex": "d1",
+              "result": "L"
+            },
+            {
+              "opening_action": 4,
+              "opening_vertex": "a2",
+              "result": "L"
+            },
+            {
+              "opening_action": 5,
+              "opening_vertex": "b2",
+              "result": "L"
+            },
+            {
+              "opening_action": 6,
+              "opening_vertex": "c2",
+              "result": "L"
+            },
+            {
+              "opening_action": 7,
+              "opening_vertex": "d2",
+              "result": "L"
+            },
+            {
+              "opening_action": 8,
+              "opening_vertex": "a3",
+              "result": "L"
+            },
+            {
+              "opening_action": 9,
+              "opening_vertex": "b3",
+              "result": "L"
+            },
+            {
+              "opening_action": 10,
+              "opening_vertex": "c3",
+              "result": "L"
+            },
+            {
+              "opening_action": 11,
+              "opening_vertex": "d3",
+              "result": "L"
+            },
+            {
+              "opening_action": 12,
+              "opening_vertex": "a4",
+              "result": "L"
+            },
+            {
+              "opening_action": 13,
+              "opening_vertex": "b4",
+              "result": "L"
+            },
+            {
+              "opening_action": 14,
+              "opening_vertex": "c4",
+              "result": "L"
+            },
+            {
+              "opening_action": 15,
+              "opening_vertex": "d4",
+              "result": "L"
+            }
+          ],
+          "padding_rows": 0,
+          "perfect_opening_fraction": 0.0,
+          "perfect_opening_total": 4,
+          "perfect_opening_wins": 0,
+          "perfect_play_achieved": 0,
+          "physical_batch_size": 16,
+          "real_games": 16,
+          "schema_version": 1,
+          "state": "complete",
+          "timestamp": "2026-09-05T10:53:26.182225+00:00",
+          "total_plies": 134,
+          "train_step": 2000,
+          "unexpected_opening_wins": 0,
+          "unscored": 0
+        },
+        {
+          "board_size": 4,
+          "cycle": 250,
+          "elapsed_seconds": 0.07744896970689297,
+          "games_total": 16,
+          "model_losses": 16,
+          "model_search_seconds": 0.00807252898812294,
+          "model_win_rate": 0.0,
+          "model_wins": 0,
+          "mohex_search_seconds": 0.040015775710344315,
+          "opening_results": [
+            {
+              "opening_action": 0,
+              "opening_vertex": "a1",
+              "result": "L"
+            },
+            {
+              "opening_action": 1,
+              "opening_vertex": "b1",
+              "result": "L"
+            },
+            {
+              "opening_action": 2,
+              "opening_vertex": "c1",
+              "result": "L"
+            },
+            {
+              "opening_action": 3,
+              "opening_vertex": "d1",
+              "result": "L"
+            },
+            {
+              "opening_action": 4,
+              "opening_vertex": "a2",
+              "result": "L"
+            },
+            {
+              "opening_action": 5,
+              "opening_vertex": "b2",
+              "result": "L"
+            },
+            {
+              "opening_action": 6,
+              "opening_vertex": "c2",
+              "result": "L"
+            },
+            {
+              "opening_action": 7,
+              "opening_vertex": "d2",
+              "result": "L"
+            },
+            {
+              "opening_action": 8,
+              "opening_vertex": "a3",
+              "result": "L"
+            },
+            {
+              "opening_action": 9,
+              "opening_vertex": "b3",
+              "result": "L"
+            },
+            {
+              "opening_action": 10,
+              "opening_vertex": "c3",
+              "result": "L"
+            },
+            {
+              "opening_action": 11,
+              "opening_vertex": "d3",
+              "result": "L"
+            },
+            {
+              "opening_action": 12,
+              "opening_vertex": "a4",
+              "result": "L"
+            },
+            {
+              "opening_action": 13,
+              "opening_vertex": "b4",
+              "result": "L"
+            },
+            {
+              "opening_action": 14,
+              "opening_vertex": "c4",
+              "result": "L"
+            },
+            {
+              "opening_action": 15,
+              "opening_vertex": "d4",
+              "result": "L"
+            }
+          ],
+          "padding_rows": 0,
+          "perfect_opening_fraction": 0.0,
+          "perfect_opening_total": 4,
+          "perfect_opening_wins": 0,
+          "perfect_play_achieved": 0,
+          "physical_batch_size": 16,
+          "real_games": 16,
+          "schema_version": 1,
+          "state": "complete",
+          "timestamp": "2026-09-05T10:53:42.112433+00:00",
+          "total_plies": 136,
+          "train_step": 2500,
+          "unexpected_opening_wins": 0,
+          "unscored": 0
+        },
+        {
+          "board_size": 4,
+          "cycle": 300,
+          "elapsed_seconds": 0.06490439083427191,
+          "games_total": 16,
+          "model_losses": 16,
+          "model_search_seconds": 0.00676135066896677,
+          "model_win_rate": 0.0,
+          "model_wins": 0,
+          "mohex_search_seconds": 0.03314911760389805,
+          "opening_results": [
+            {
+              "opening_action": 0,
+              "opening_vertex": "a1",
+              "result": "L"
+            },
+            {
+              "opening_action": 1,
+              "opening_vertex": "b1",
+              "result": "L"
+            },
+            {
+              "opening_action": 2,
+              "opening_vertex": "c1",
+              "result": "L"
+            },
+            {
+              "opening_action": 3,
+              "opening_vertex": "d1",
+              "result": "L"
+            },
+            {
+              "opening_action": 4,
+              "opening_vertex": "a2",
+              "result": "L"
+            },
+            {
+              "opening_action": 5,
+              "opening_vertex": "b2",
+              "result": "L"
+            },
+            {
+              "opening_action": 6,
+              "opening_vertex": "c2",
+              "result": "L"
+            },
+            {
+              "opening_action": 7,
+              "opening_vertex": "d2",
+              "result": "L"
+            },
+            {
+              "opening_action": 8,
+              "opening_vertex": "a3",
+              "result": "L"
+            },
+            {
+              "opening_action": 9,
+              "opening_vertex": "b3",
+              "result": "L"
+            },
+            {
+              "opening_action": 10,
+              "opening_vertex": "c3",
+              "result": "L"
+            },
+            {
+              "opening_action": 11,
+              "opening_vertex": "d3",
+              "result": "L"
+            },
+            {
+              "opening_action": 12,
+              "opening_vertex": "a4",
+              "result": "L"
+            },
+            {
+              "opening_action": 13,
+              "opening_vertex": "b4",
+              "result": "L"
+            },
+            {
+              "opening_action": 14,
+              "opening_vertex": "c4",
+              "result": "L"
+            },
+            {
+              "opening_action": 15,
+              "opening_vertex": "d4",
+              "result": "L"
+            }
+          ],
+          "padding_rows": 0,
+          "perfect_opening_fraction": 0.0,
+          "perfect_opening_total": 4,
+          "perfect_opening_wins": 0,
+          "perfect_play_achieved": 0,
+          "physical_batch_size": 16,
+          "real_games": 16,
+          "schema_version": 1,
+          "state": "complete",
+          "timestamp": "2026-09-05T10:53:58.212471+00:00",
+          "total_plies": 132,
+          "train_step": 3000,
+          "unexpected_opening_wins": 0,
+          "unscored": 0
+        },
+        {
+          "board_size": 4,
+          "cycle": 350,
+          "elapsed_seconds": 0.06518718041479588,
+          "games_total": 16,
+          "model_losses": 16,
+          "model_search_seconds": 0.0063833193853497505,
+          "model_win_rate": 0.0,
+          "model_wins": 0,
+          "mohex_search_seconds": 0.03345225565135479,
+          "opening_results": [
+            {
+              "opening_action": 0,
+              "opening_vertex": "a1",
+              "result": "L"
+            },
+            {
+              "opening_action": 1,
+              "opening_vertex": "b1",
+              "result": "L"
+            },
+            {
+              "opening_action": 2,
+              "opening_vertex": "c1",
+              "result": "L"
+            },
+            {
+              "opening_action": 3,
+              "opening_vertex": "d1",
+              "result": "L"
+            },
+            {
+              "opening_action": 4,
+              "opening_vertex": "a2",
+              "result": "L"
+            },
+            {
+              "opening_action": 5,
+              "opening_vertex": "b2",
+              "result": "L"
+            },
+            {
+              "opening_action": 6,
+              "opening_vertex": "c2",
+              "result": "L"
+            },
+            {
+              "opening_action": 7,
+              "opening_vertex": "d2",
+              "result": "L"
+            },
+            {
+              "opening_action": 8,
+              "opening_vertex": "a3",
+              "result": "L"
+            },
+            {
+              "opening_action": 9,
+              "opening_vertex": "b3",
+              "result": "L"
+            },
+            {
+              "opening_action": 10,
+              "opening_vertex": "c3",
+              "result": "L"
+            },
+            {
+              "opening_action": 11,
+              "opening_vertex": "d3",
+              "result": "L"
+            },
+            {
+              "opening_action": 12,
+              "opening_vertex": "a4",
+              "result": "L"
+            },
+            {
+              "opening_action": 13,
+              "opening_vertex": "b4",
+              "result": "L"
+            },
+            {
+              "opening_action": 14,
+              "opening_vertex": "c4",
+              "result": "L"
+            },
+            {
+              "opening_action": 15,
+              "opening_vertex": "d4",
+              "result": "L"
+            }
+          ],
+          "padding_rows": 0,
+          "perfect_opening_fraction": 0.0,
+          "perfect_opening_total": 4,
+          "perfect_opening_wins": 0,
+          "perfect_play_achieved": 0,
+          "physical_batch_size": 16,
+          "real_games": 16,
+          "schema_version": 1,
+          "state": "complete",
+          "timestamp": "2026-09-05T10:54:13.986262+00:00",
+          "total_plies": 134,
+          "train_step": 3500,
+          "unexpected_opening_wins": 0,
+          "unscored": 0
+        },
+        {
+          "board_size": 4,
+          "cycle": 400,
+          "elapsed_seconds": 0.06738792080432177,
+          "games_total": 16,
+          "model_losses": 16,
+          "model_search_seconds": 0.0066953180357813835,
+          "model_win_rate": 0.0,
+          "model_wins": 0,
+          "mohex_search_seconds": 0.03402273543179035,
+          "opening_results": [
+            {
+              "opening_action": 0,
+              "opening_vertex": "a1",
+              "result": "L"
+            },
+            {
+              "opening_action": 1,
+              "opening_vertex": "b1",
+              "result": "L"
+            },
+            {
+              "opening_action": 2,
+              "opening_vertex": "c1",
+              "result": "L"
+            },
+            {
+              "opening_action": 3,
+              "opening_vertex": "d1",
+              "result": "L"
+            },
+            {
+              "opening_action": 4,
+              "opening_vertex": "a2",
+              "result": "L"
+            },
+            {
+              "opening_action": 5,
+              "opening_vertex": "b2",
+              "result": "L"
+            },
+            {
+              "opening_action": 6,
+              "opening_vertex": "c2",
+              "result": "L"
+            },
+            {
+              "opening_action": 7,
+              "opening_vertex": "d2",
+              "result": "L"
+            },
+            {
+              "opening_action": 8,
+              "opening_vertex": "a3",
+              "result": "L"
+            },
+            {
+              "opening_action": 9,
+              "opening_vertex": "b3",
+              "result": "L"
+            },
+            {
+              "opening_action": 10,
+              "opening_vertex": "c3",
+              "result": "L"
+            },
+            {
+              "opening_action": 11,
+              "opening_vertex": "d3",
+              "result": "L"
+            },
+            {
+              "opening_action": 12,
+              "opening_vertex": "a4",
+              "result": "L"
+            },
+            {
+              "opening_action": 13,
+              "opening_vertex": "b4",
+              "result": "L"
+            },
+            {
+              "opening_action": 14,
+              "opening_vertex": "c4",
+              "result": "L"
+            },
+            {
+              "opening_action": 15,
+              "opening_vertex": "d4",
+              "result": "L"
+            }
+          ],
+          "padding_rows": 0,
+          "perfect_opening_fraction": 0.0,
+          "perfect_opening_total": 4,
+          "perfect_opening_wins": 0,
+          "perfect_play_achieved": 0,
+          "physical_batch_size": 16,
+          "real_games": 16,
+          "schema_version": 1,
+          "state": "complete",
+          "timestamp": "2026-09-05T10:54:29.962113+00:00",
+          "total_plies": 138,
+          "train_step": 4000,
+          "unexpected_opening_wins": 0,
+          "unscored": 0
+        },
+        {
+          "board_size": 4,
+          "cycle": 450,
+          "elapsed_seconds": 0.07085665035992861,
+          "games_total": 16,
+          "model_losses": 16,
+          "model_search_seconds": 0.006975479423999786,
+          "model_win_rate": 0.0,
+          "model_wins": 0,
+          "mohex_search_seconds": 0.03623141534626484,
+          "opening_results": [
+            {
+              "opening_action": 0,
+              "opening_vertex": "a1",
+              "result": "L"
+            },
+            {
+              "opening_action": 1,
+              "opening_vertex": "b1",
+              "result": "L"
+            },
+            {
+              "opening_action": 2,
+              "opening_vertex": "c1",
+              "result": "L"
+            },
+            {
+              "opening_action": 3,
+              "opening_vertex": "d1",
+              "result": "L"
+            },
+            {
+              "opening_action": 4,
+              "opening_vertex": "a2",
+              "result": "L"
+            },
+            {
+              "opening_action": 5,
+              "opening_vertex": "b2",
+              "result": "L"
+            },
+            {
+              "opening_action": 6,
+              "opening_vertex": "c2",
+              "result": "L"
+            },
+            {
+              "opening_action": 7,
+              "opening_vertex": "d2",
+              "result": "L"
+            },
+            {
+              "opening_action": 8,
+              "opening_vertex": "a3",
+              "result": "L"
+            },
+            {
+              "opening_action": 9,
+              "opening_vertex": "b3",
+              "result": "L"
+            },
+            {
+              "opening_action": 10,
+              "opening_vertex": "c3",
+              "result": "L"
+            },
+            {
+              "opening_action": 11,
+              "opening_vertex": "d3",
+              "result": "L"
+            },
+            {
+              "opening_action": 12,
+              "opening_vertex": "a4",
+              "result": "L"
+            },
+            {
+              "opening_action": 13,
+              "opening_vertex": "b4",
+              "result": "L"
+            },
+            {
+              "opening_action": 14,
+              "opening_vertex": "c4",
+              "result": "L"
+            },
+            {
+              "opening_action": 15,
+              "opening_vertex": "d4",
+              "result": "L"
+            }
+          ],
+          "padding_rows": 0,
+          "perfect_opening_fraction": 0.0,
+          "perfect_opening_total": 4,
+          "perfect_opening_wins": 0,
+          "perfect_play_achieved": 0,
+          "physical_batch_size": 16,
+          "real_games": 16,
+          "schema_version": 1,
+          "state": "complete",
+          "timestamp": "2026-09-05T10:54:45.650419+00:00",
+          "total_plies": 134,
+          "train_step": 4500,
+          "unexpected_opening_wins": 0,
+          "unscored": 0
+        },
+        {
+          "board_size": 4,
+          "cycle": 500,
+          "elapsed_seconds": 0.07126657012850046,
+          "games_total": 16,
+          "model_losses": 15,
+          "model_search_seconds": 0.006983838975429535,
+          "model_win_rate": 0.0625,
+          "model_wins": 1,
+          "mohex_search_seconds": 0.03553540352731943,
+          "opening_results": [
+            {
+              "opening_action": 0,
+              "opening_vertex": "a1",
+              "result": "L"
+            },
+            {
+              "opening_action": 1,
+              "opening_vertex": "b1",
+              "result": "L"
+            },
+            {
+              "opening_action": 2,
+              "opening_vertex": "c1",
+              "result": "L"
+            },
+            {
+              "opening_action": 3,
+              "opening_vertex": "d1",
+              "result": "L"
+            },
+            {
+              "opening_action": 4,
+              "opening_vertex": "a2",
+              "result": "L"
+            },
+            {
+              "opening_action": 5,
+              "opening_vertex": "b2",
+              "result": "L"
+            },
+            {
+              "opening_action": 6,
+              "opening_vertex": "c2",
+              "result": "L"
+            },
+            {
+              "opening_action": 7,
+              "opening_vertex": "d2",
+              "result": "L"
+            },
+            {
+              "opening_action": 8,
+              "opening_vertex": "a3",
+              "result": "L"
+            },
+            {
+              "opening_action": 9,
+              "opening_vertex": "b3",
+              "result": "L"
+            },
+            {
+              "opening_action": 10,
+              "opening_vertex": "c3",
+              "result": "L"
+            },
+            {
+              "opening_action": 11,
+              "opening_vertex": "d3",
+              "result": "L"
+            },
+            {
+              "opening_action": 12,
+              "opening_vertex": "a4",
+              "result": "W"
+            },
+            {
+              "opening_action": 13,
+              "opening_vertex": "b4",
+              "result": "L"
+            },
+            {
+              "opening_action": 14,
+              "opening_vertex": "c4",
+              "result": "L"
+            },
+            {
+              "opening_action": 15,
+              "opening_vertex": "d4",
+              "result": "L"
+            }
+          ],
+          "padding_rows": 0,
+          "perfect_opening_fraction": 0.25,
+          "perfect_opening_total": 4,
+          "perfect_opening_wins": 1,
+          "perfect_play_achieved": 0,
+          "physical_batch_size": 16,
+          "real_games": 16,
+          "schema_version": 1,
+          "state": "complete",
+          "timestamp": "2026-09-05T10:55:01.377245+00:00",
+          "total_plies": 135,
+          "train_step": 5000,
+          "unexpected_opening_wins": 0,
+          "unscored": 0
+        }
+      ]
+    },
+    "final_checkpoint": "artifacts/muzero/hex4-alphazero-mohex-seed2-20260905-a/cycle-000500.safetensors",
+    "checkpoint_sha256": "d05c652372759aedddd7904117d47d4392355f682755659cb4a4adfde5d7f55e"
+  }
+]
