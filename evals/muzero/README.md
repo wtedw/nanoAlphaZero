@@ -3,6 +3,13 @@
 Implementation: `src/nanoalphazero/research/muzero/`.
 Production core, search and models are unchanged.
 
+Checkpoint saving is **disabled by default**, including the final checkpoint.
+`--no-save` explicitly overrides any config that enables saves. Only an explicit
+`--save` or `save_checkpoints = true` enables saving; `checkpoint_period = 0`
+then means final-only. Existing MuZero experiment checkpoints were removed on
+2026-09-05 at the user's request. Historical checkpoint paths in reports record
+past runs and no longer identify retained files. Metrics and evaluations remain.
+
 ```bash
 # Correctness tests (CPU only).
 JAX_PLATFORMS=cpu XLA_FLAGS=--xla_force_host_platform_device_count=4 \

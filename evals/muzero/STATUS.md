@@ -273,3 +273,20 @@ Validation:
 ```bash
 uv run muzero-train evals/muzero/hex5-az-metrics-smoke.toml --output artifacts/muzero/hex5-az-metrics-smoke-20260905-a --hex-eval-engine-path /home/tedpsw/benzene-vanilla-cmake/build/src/mohex/mohex
 ```
+
+## Seed-1 replication and Hex6 progression
+
+**Checkpoint retention update:** the user requested removing all MuZero
+checkpoints and disabling saves on 2026-09-05. All 49 checkpoint/archive files
+under `artifacts/muzero/` were removed (6,949,089,280 allocated bytes). Historical
+checkpoint locations below are no longer available; raw evaluations and metrics
+are retained. Training now defaults to no checkpoint writes, including at exit.
+Hex6 is restarted with `hex6-staged-seed1-nosave.toml` and `--no-save` because
+the existing process had already loaded its old save policy.
+
+The requested sequential Hex4 → Hex5 → Hex6 runs are tracked in
+[PROGRESSION-20260905.md](PROGRESSION-20260905.md), with exact commands,
+checkpoint archive hashes, W&B links, and limitations. Selected complete-run
+histories are in `results/progression-20260905.json`. These use the committed
+`8911c7e` implementation and new portable configs; local run outputs remain
+outside Git.

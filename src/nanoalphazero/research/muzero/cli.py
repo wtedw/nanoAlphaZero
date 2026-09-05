@@ -23,7 +23,7 @@ def resolve(raw):
                   selfplay_batch_size=32, train_batch_size=32, replay_batches=8,
                   updates_per_cycle=4, cycles=2, seed=0, learning_rate=1e-3,
                   weight_decay=1e-4, devices=4, platform="tpu", wandb=False,
-                  checkpoint_period=10, eval_period=10, defaults="alphazero",
+                  save_checkpoints=False, checkpoint_period=0, eval_period=10, defaults="alphazero",
                   warmup_updates=0, decay_kernels_only=False,
                   exploration_mode="fixed", root_temperature=1.0,
                   value_scale=1.0, maxvisit_init=50., rescale_values=False,
@@ -51,8 +51,7 @@ def resolve(raw):
             root_temperature=base.get("exp_root_temperature", 1.) if base.get("exp_use_root_temperature") else 1.,
             value_scale=base["mcts_value_scale"], maxvisit_init=base["mcts_maxvisit_init"],
             rescale_values=base["mcts_rescale_values"],
-            eval_period=base["eval_period"], checkpoint_period=base["ckpt_period"] or
-            (base["num_iters"] // base["cycle_n_train"]),
+            eval_period=base["eval_period"],
         )
     elif raw.get("defaults") != "pilot_v1":
         raise ValueError("defaults must be alphazero or pilot_v1")
@@ -72,6 +71,8 @@ def resolve(raw):
         raise ValueError("survivors exceeds roots")
     if config["root_temperature"] <= 0 or config["warmup_updates"] < 0:
         raise ValueError("Invalid root temperature or warmup")
+    if not isinstance(config["save_checkpoints"], bool) or config["checkpoint_period"] < 0:
+        raise ValueError("save_checkpoints must be boolean and checkpoint_period nonnegative")
     if config["exploration_mode"] not in ("fixed", "random_switch"):
         raise ValueError("Unknown exploration mode")
     if config["network"] not in ("vector", "spatial"):
@@ -100,11 +101,16 @@ def main():
     parser.add_argument("config", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--resume", type=Path)
+    parser.add_argument("--save", dest="save_checkpoints", action=argparse.BooleanOptionalAction,
+                        default=None, help="Save checkpoints (disabled by default; --no-save forces off)")
     parser.add_argument("--hex-eval-engine-path")
     parser.add_argument("--hex-eval-engine-config", default="default")
     args = parser.parse_args()
     with args.config.open("rb") as stream:
-        config = resolve(tomllib.load(stream))
+        raw = tomllib.load(stream)
+    if args.save_checkpoints is not None:
+        raw["save_checkpoints"] = args.save_checkpoints
+    config = resolve(raw)
     engine_pool = None
     if config["hex_eval_period"] or config["decision_eval_positions"]:
         if not config["env"].startswith("hex") or not args.hex_eval_engine_path:
@@ -277,9 +283,12 @@ def _run(args, config, engine_pool):
         print(json.dumps({"initial_evaluation": baseline}), flush=True)
 
     def collect_and_insert(params, rng, staged, replayed):
+        collection_started = time.monotonic()
         rng, ck = jax.random.split(rng)
         episodes = collect(params, ck)
         jax.block_until_ready(episodes)
+        collection_seconds = time.monotonic() - collection_started
+        insertion_started = time.monotonic()
         if bool(jnp.any(episodes["illegal"])):
             raise RuntimeError("Illegal real self-play action")
         data_metrics = {}
@@ -293,8 +302,16 @@ def _run(args, config, engine_pool):
                 raise RuntimeError("Staging overflow or malformed episode; refusing to train")
             staged, replayed, rng, drain_metrics = drain(staged, replayed, rng)
             data_metrics = {**data_metrics, **drain_metrics}
-        return episodes, rng, staged, replayed, {
+        data_metrics = {
             k: float(v) if jnp.issubdtype(v.dtype, jnp.floating) else int(v) for k, v in data_metrics.items()}
+        # Synchronize insertion for truthful stage timings, including the legacy
+        # episode pipeline where there are no drain counters to synchronize it.
+        jax.block_until_ready(replayed.current_index)
+        data_metrics.update({
+            "muzero/timing/collection_seconds": collection_seconds,
+            "muzero/timing/replay_insert_seconds": time.monotonic() - insertion_started,
+        })
+        return episodes, rng, staged, replayed, data_metrics
 
     warmup_start = time.monotonic()
     if staging_state is not None and not args.resume:
@@ -322,6 +339,7 @@ def _run(args, config, engine_pool):
             state.params, key, staging_state, replay_state)
         if not bool(replay.can_sample(replay_state)):
             raise RuntimeError("Replay has no complete consumable batch; increase collection/warmup")
+        optimizer_started = time.monotonic()
         for _ in range(config["updates_per_cycle"]):
             key, rk, bk = jax.random.split(key, 3)
             sampled = sample(replay_state, rk)
@@ -335,6 +353,7 @@ def _run(args, config, engine_pool):
                 "training_local_shapes": [list(s.data.shape) for s in batch["observation"].addressable_shards],
             }
         metrics = {k: float(v) for k, v in metrics.items()}
+        metrics["muzero/timing/optimizer_seconds"] = time.monotonic() - optimizer_started
         metrics.update(data_metrics)
         if not all(np.isfinite(v) for v in metrics.values()):
             raise RuntimeError(f"Nonfinite training metrics: {metrics}")
@@ -412,7 +431,10 @@ def _run(args, config, engine_pool):
                 consumed_info = jax.tree.map(lambda x: x[:, last_slot], replay_state.experience["sample_info"])
             histograms = {name: wandb.Histogram(values) for name, values in histogram_data(episodes, batch, consumed_info).items()}
             run.log({**metrics, **histograms, **wandb_board_logs(diagnostic_tables)}, step=cycle + priming_cycles)
-        if cycle % config["checkpoint_period"] == 0 or cycle == config["cycles"]:
+        if config["save_checkpoints"] and (
+            cycle == config["cycles"] or
+            (config["checkpoint_period"] > 0 and cycle % config["checkpoint_period"] == 0)
+        ):
             saved = {"train": state, "replay": vars(replay_state), "key": key, "cycle": jnp.array(cycle)}
             if staging_state is not None:
                 saved["staging"] = staging_state
