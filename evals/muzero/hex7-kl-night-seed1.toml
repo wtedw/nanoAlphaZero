@@ -1,0 +1,12 @@
+env = "hex7"
+defaults = "alphazero"
+data_pipeline = "staged"
+network = "spatial"
+seed = 1
+cycles = 100
+heldout_batch_size = 512
+remat_unroll = true
+wandb = true
+hex_eval_period = 50
+save_checkpoints = false
+checkpoint_period = 0

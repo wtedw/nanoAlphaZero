@@ -49,12 +49,13 @@ AZ's consumed copies do, while the staging flags clear immediately.
 
 ## Important semantic differences
 
-- Metric names do not change the MuZero objective. `loss_pi` remains masked
-  cross-entropy across real unroll states; `loss_v` remains masked scalar MSE;
-  the total also includes predicted reward MSE. AZ's policy KL and optional WDL
-  or half-MSE value objectives have different numerical scales. Loss values
-  are not directly comparable across those objectives. Root KL is available
-  separately at `muzero/root_policy_kl`.
+- New runs use masked target-to-prediction **KL** for `loss_pi` across real
+  unroll states, matching AZ's KL direction. Historical runs used cross-entropy.
+  KL subtracts the fixed target entropy and has the same parameter gradient.
+  `loss_v` remains masked scalar MSE and the total includes reward MSE. The
+  root-only KL is `muzero/root_policy_kl`; per-terminal-distance policy losses
+  now also use KL. AZ averages over its fixed root batch; MuZero averages over
+  valid unroll states. Neither MuZero's masking nor its value objective changed.
 - Spatial WDL probabilities describe the actual head parameterization. MuZero
   currently trains the scalar win-minus-loss expectation, not a WDL loss;
   the draw probability is not claimed to be calibrated.
@@ -115,6 +116,16 @@ Tables and Plotly numeric JSON only—no Matplotlib, raster image or screenshot.
 Latent one-move values and per-opening reply logits are under `muzero/model/`.
 
 ## Validation
+
+Held-out unroll metrics retain the original mixed-distribution MSE and now
+also report `exploration_root_*` and `nonexploration_root_*` under
+`muzero/heldout*/unrollN/`. Each group has its sampled-root count, real-state
+unroll value MSE (absorbing/padded states excluded), and root-only value MSE.
+Groups are defined by whether the sampled root was exploratory. This matters
+because the AZ-style replay consumer excludes exploratory starts. These
+additional metrics do not alter collection RNGs, replay, or optimization.
+`heldout_batch_size` controls only independent diagnostic collection; zero
+inherits the full self-play batch. Hex7–9 use 512 to limit saved data.
 
 - Original chart table/layout/palette/highlights parity test passed against AZ.
 - Root-count tests demonstrate that a two-position, six-head unroll reports two

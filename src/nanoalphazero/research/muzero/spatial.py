@@ -67,13 +67,16 @@ class SpatialMuZero(nn.Module):
     depth: int
     activation: str = "mish"
     use_rvgl: bool = True
+    remat_blocks: bool = False
 
     def setup(self):
         cfg = resolve_preset(f"b{self.depth}c{self.width}nbt")
         trunk = {k: v for k, v in cfg.items() if k in (
             "c_trunk", "c_mid", "c_gpool", "block_gpool", "internal_length")}
-        self.representation = KataGoTrunk(**trunk, activation=self.activation, use_rvgl=self.use_rvgl)
-        self.dynamics = KataGoTrunk(**trunk, activation=self.activation, use_rvgl=self.use_rvgl)
+        from nanoalphazero.research.muzero.remat import RematerializedTrunk
+        trunk_type = RematerializedTrunk if self.remat_blocks else KataGoTrunk
+        self.representation = trunk_type(**trunk, activation=self.activation, use_rvgl=self.use_rvgl)
+        self.dynamics = trunk_type(**trunk, activation=self.activation, use_rvgl=self.use_rvgl)
         self.prediction = Prediction(self.num_actions, self.env_id, self.width, self.depth, self.activation)
         self.reward = ValueHead(cfg["c_v1"], cfg["c_v2"], self.activation)
 

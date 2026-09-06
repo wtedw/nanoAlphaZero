@@ -1,0 +1,9 @@
+# First Hex6 learning validation, using the original AZ Hex6 defaults.
+env = "hex6"
+defaults = "alphazero"
+data_pipeline = "staged"
+network = "spatial"
+seed = 1
+wandb = true
+hex_eval_period = 50
+checkpoint_period = 3500

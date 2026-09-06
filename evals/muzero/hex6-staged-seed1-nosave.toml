@@ -1,0 +1,10 @@
+# User-requested continuation: identical learning settings, no checkpoint writes.
+env = "hex6"
+defaults = "alphazero"
+data_pipeline = "staged"
+network = "spatial"
+seed = 1
+wandb = true
+hex_eval_period = 50
+save_checkpoints = false
+checkpoint_period = 0

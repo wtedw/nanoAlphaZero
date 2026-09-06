@@ -111,6 +111,17 @@ def heldout_metrics(model, params, episodes, key, unrolls=(1, 3, 5, 10)):
         def masked_mean(x, mask):
             return float(jnp.sum(jnp.where(mask, x, 0.)) / jnp.maximum(jnp.sum(mask), 1))
         result[f"heldout/unroll{unroll}/real_value_mse"] = masked_mean((values - batch["value"]) ** 2, batch["policy_mask"])
+        # Production-style replay excludes exploratory starts. Keep the mixed
+        # held-out metric, but expose this distribution difference explicitly.
+        # These groups are defined by the sampled root, not by each later ply.
+        exploration = batch["sample_info"]["is_exploration"]
+        for label, roots in (("exploration", exploration), ("nonexploration", ~exploration)):
+            mask = batch["policy_mask"] & roots[:, None]
+            prefix = f"heldout/unroll{unroll}/{label}_root"
+            result[f"{prefix}_count"] = int(jnp.sum(roots))
+            result[f"{prefix}_real_value_mse"] = masked_mean((values - batch["value"]) ** 2, mask)
+            result[f"{prefix}_k0_value_mse"] = masked_mean(
+                (values[:, 0] - batch["value"][:, 0]) ** 2, roots)
         positive = batch["reward_mask"] & (batch["reward"] > 0)
         result[f"heldout/unroll{unroll}/nonzero_reward_count"] = int(jnp.sum(positive))
         result[f"heldout/unroll{unroll}/positive_reward_prediction"] = masked_mean(rewards, positive)

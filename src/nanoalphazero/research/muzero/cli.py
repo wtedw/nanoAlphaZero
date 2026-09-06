@@ -20,14 +20,14 @@ def resolve(raw):
                   discount=1.0, max_steps=base["game_max_steps"],
                   roots=base["mcts_num_root_considered"], survivors=base["mcts_num_survivors"],
                   exploration_moves=base["num_exploratory_moves"],
-                  selfplay_batch_size=32, train_batch_size=32, replay_batches=8,
+                  selfplay_batch_size=32, train_batch_size=32, heldout_batch_size=0, replay_batches=8,
                   updates_per_cycle=4, cycles=2, seed=0, learning_rate=1e-3,
                   weight_decay=1e-4, devices=4, platform="tpu", wandb=False,
                   save_checkpoints=False, checkpoint_period=0, eval_period=10, defaults="alphazero",
                   warmup_updates=0, decay_kernels_only=False,
-                  exploration_mode="fixed", root_temperature=1.0,
+                  exploration_mode="fixed", root_temperature=1.0, remat_unroll=False, remat_blocks=False,
                   value_scale=1.0, maxvisit_init=50., rescale_values=False,
-                  hex_eval_period=0, diagnostic_period=base["diagnostic_period"],
+                  hex_eval_period=0, opening_coverage_streak=0, diagnostic_period=base["diagnostic_period"],
                   network="vector", activation=base.get("katago_activation", "mish"),
                   use_rvgl=base.get("katago_use_rvgl", True), decision_eval_positions=0,
                   data_pipeline="episodes", staging_batches=8,
@@ -42,7 +42,8 @@ def resolve(raw):
             selfplay_batch_size=base["selfplay_batch_size"], train_batch_size=train_batch,
             learning_rate=base["learning_rate"], weight_decay=base["weight_decay"],
             updates_per_cycle=base["cycle_n_train"],
-            cycles=base["num_iters"] // base["cycle_n_train"],
+            # Production num_iters counts self-play steps, not updates.
+            cycles=base["num_iters"] // base["cycle_n_selfplay"],
             replay_batches=max(1, base["replay_buffer_total_size"] //
                                (base["selfplay_batch_size"] * base["game_max_steps"])),
             warmup_updates=base["lr_warmup_steps"],
@@ -59,12 +60,16 @@ def resolve(raw):
     if unknown:
         raise ValueError(f"Unknown configuration keys: {sorted(unknown)}")
     config.update(raw)
+    # Diagnostics have independent RNGs and never enter training replay.
+    # Zero preserves the historical full self-play batch diagnostic size.
+    if config["heldout_batch_size"] == 0:
+        config["heldout_batch_size"] = config["selfplay_batch_size"]
     if config["network"] == "vector":
         # These architectural options belong to the spatial production modules.
         # Record the vector tower's actual choices rather than unused defaults.
         config.update(activation="relu", use_rvgl=False)
     for key in ("width", "unroll", "max_steps", "roots", "survivors", "selfplay_batch_size",
-                "train_batch_size", "replay_batches", "updates_per_cycle", "cycles", "devices"):
+                "train_batch_size", "heldout_batch_size", "replay_batches", "updates_per_cycle", "cycles", "devices"):
         if config[key] < 1:
             raise ValueError(f"{key} must be positive")
     if config["survivors"] > config["roots"]:
@@ -73,6 +78,17 @@ def resolve(raw):
         raise ValueError("Invalid root temperature or warmup")
     if not isinstance(config["save_checkpoints"], bool) or config["checkpoint_period"] < 0:
         raise ValueError("save_checkpoints must be boolean and checkpoint_period nonnegative")
+    if not isinstance(config["remat_unroll"], bool):
+        raise ValueError("remat_unroll must be boolean")
+    if not isinstance(config["remat_blocks"], bool):
+        raise ValueError("remat_blocks must be boolean")
+    if (type(config["opening_coverage_streak"]) is not int
+            or config["opening_coverage_streak"] < 0):
+        raise ValueError("opening_coverage_streak must be a nonnegative integer")
+    if config["opening_coverage_streak"] and (
+        not config["env"].startswith("hex") or config["hex_eval_period"] <= 0
+    ):
+        raise ValueError("Opening coverage stopping requires periodic Hex evaluation")
     if config["exploration_mode"] not in ("fixed", "random_switch"):
         raise ValueError("Unknown exploration mode")
     if config["network"] not in ("vector", "spatial"):
@@ -101,6 +117,8 @@ def main():
     parser.add_argument("config", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--resume", type=Path)
+    parser.add_argument("--stop-file", type=Path,
+                        help="Finish the current cycle, evaluate, and exit when this file exists")
     parser.add_argument("--save", dest="save_checkpoints", action=argparse.BooleanOptionalAction,
                         default=None, help="Save checkpoints (disabled by default; --no-save forces off)")
     parser.add_argument("--hex-eval-engine-path")
@@ -148,7 +166,7 @@ def _run(args, config, engine_pool):
     devices = jax.devices()
     if len(devices) != config["devices"]:
         raise ValueError(f"Expected {config['devices']} devices, found {devices}")
-    for key in ("selfplay_batch_size", "train_batch_size", "consume_size"):
+    for key in ("selfplay_batch_size", "train_batch_size", "heldout_batch_size", "consume_size"):
         if config[key] % len(devices):
             raise ValueError(f"{key} must be divisible by device count")
     args.output.mkdir(parents=True, exist_ok=False)
@@ -159,7 +177,7 @@ def _run(args, config, engine_pool):
     config.update(obs_shape=list(env.obs_shape), num_actions=env.num_actions,
                   architecture=f"{config['network']}-v1", target="signed-return-boundary-bootstrap",
                   latent_normalization="minmax", latent_normalization_epsilon=1e-5,
-                  dynamics_gradient_scale=0.5, policy_loss="cross_entropy",
+                  dynamics_gradient_scale=0.5, policy_loss="kl_target_prediction",
                   value_loss="scalar_mse", reward_loss="scalar_mse", max_grad_norm=1.0,
                   optimizer="adamw", initial_warmup_lr=1e-6,
                   metric_schema="alphazero-v1",
@@ -207,6 +225,11 @@ def _run(args, config, engine_pool):
     state = jax.device_put(state, replicated)
     search = make_search(model, env, config)
     collect = jax.jit(make_collect(env, model, search, config), out_shardings=data)
+    diagnostic_collect = collect
+    if config["heldout_batch_size"] != config["selfplay_batch_size"]:
+        diagnostic_collect = jax.jit(make_collect(
+            env, model, search, {**config, "selfplay_batch_size": config["heldout_batch_size"]}),
+            out_shardings=data)
     dummy = jax.eval_shape(collect, state.params, key)
     example = jax.tree.map(lambda x: jnp.zeros(x.shape[1:], x.dtype), dummy)
     staging_state = None
@@ -230,7 +253,7 @@ def _run(args, config, engine_pool):
                         donate_argnums=(0, 1))
     sample = jax.jit(lambda s, k: jax.tree.map(lambda x: x[:, 0], replay.sample(s, k).experience), out_shardings=data)
     make_batch = jax.jit(functools.partial(sequences, unroll=config["unroll"]), out_shardings=data)
-    train = jax.jit(functools.partial(train_step, model), in_shardings=(replicated, data),
+    train = jax.jit(functools.partial(train_step, model, remat=config["remat_unroll"]), in_shardings=(replicated, data),
                     out_shardings=(replicated, replicated), donate_argnums=(0,))
     start_cycle = 0
     if args.resume:
@@ -273,7 +296,7 @@ def _run(args, config, engine_pool):
             with np.load(heldout_path) as saved:
                 heldout = jax.device_put({name: saved[name] for name in saved.files}, data)
         else:
-            heldout = collect(state.params, jax.random.PRNGKey(config["seed"] + 1000000))
+            heldout = diagnostic_collect(state.params, jax.random.PRNGKey(config["seed"] + 1000000))
         jax.block_until_ready(heldout)
         np.savez_compressed(args.output / "heldout-initial-selfplay.npz", **jax.device_get(heldout))
         initial_metrics = heldout_metrics(model, state.params, heldout, jax.random.PRNGKey(12345))
@@ -333,6 +356,11 @@ def _run(args, config, engine_pool):
     if run:
         run.summary["stats/warmup_duration"] = time.monotonic() - warmup_start
     learning_started = time.monotonic()
+    stop_requested = False
+    from nanoalphazero.research.muzero.convergence import OpeningCoverageGate
+    coverage_gate = OpeningCoverageGate(config["opening_coverage_streak"])
+    coverage_reached = False
+    cycle = start_cycle
     for cycle in range(start_cycle + 1, config["cycles"] + 1):
         cycle_start = time.monotonic()
         episodes, key, staging_state, replay_state, data_metrics = collect_and_insert(
@@ -354,6 +382,8 @@ def _run(args, config, engine_pool):
             }
         metrics = {k: float(v) for k, v in metrics.items()}
         metrics["muzero/timing/optimizer_seconds"] = time.monotonic() - optimizer_started
+        stop_requested = args.stop_file is not None and args.stop_file.exists()
+        final_cycle = cycle == config["cycles"] or stop_requested
         metrics.update(data_metrics)
         if not all(np.isfinite(v) for v in metrics.values()):
             raise RuntimeError(f"Nonfinite training metrics: {metrics}")
@@ -385,7 +415,7 @@ def _run(args, config, engine_pool):
                             "training/spbuf_num_consumables": int(jnp.sum(staging_state.fresh)),
                             "training/n_slices_drained": data_metrics["drain/n_slices"]})
         diagnostic_tables = {}
-        if cycle == 1 or (config["diagnostic_period"] and cycle % config["diagnostic_period"] == 0):
+        if cycle == 1 or final_cycle or (config["diagnostic_period"] and cycle % config["diagnostic_period"] == 0):
             metrics.update(inspect_position_values(model, state.params, env, inspection_config))
             if config["env"].startswith("hex"):
                 from nanoalphazero.research.muzero.inspection import opening_head_tables
@@ -393,14 +423,26 @@ def _run(args, config, engine_pool):
                     model, state.params, env, inspection_config, args.output / f"diagnostics-{cycle:06d}")
                 metrics.update(diagnostic_scalars)
         for mode, hex_evaluator in hex_evaluators.items():
-            results = hex_evaluator.run_if_due(
-                cycle, search if mode == "search" else policy_search, env,
-                inspection_config, state.params, train_step=int(state.step))
+            # This research-owned evaluator instance can force a final actual-
+            # game evaluation without changing the production evaluator API.
+            period = hex_evaluator.period
+            if final_cycle and period:
+                hex_evaluator.period = 1
+            try:
+                results = hex_evaluator.run_if_due(
+                    cycle, search if mode == "search" else policy_search, env,
+                    inspection_config, state.params, train_step=int(state.step))
+            finally:
+                hex_evaluator.period = period
             prefix = "hex_eval/" if mode == "search" else "hex_eval_policy/"
             metrics.update({k.replace("hex_eval/", prefix): v for k, v in results.items()})
-        if heldout is not None and cycle % config["eval_period"] == 0:
+        coverage_reached = coverage_gate.observe(metrics)
+        metrics["muzero/opening_coverage_streak"] = coverage_gate.streak
+        metrics["muzero/opening_coverage_reached"] = int(coverage_reached)
+        final_cycle = final_cycle or coverage_reached
+        if heldout is not None and (cycle % config["eval_period"] == 0 or final_cycle):
             metrics.update(heldout_metrics(model, state.params, heldout, jax.random.PRNGKey(12345)))
-            fresh = collect(state.params, jax.random.PRNGKey(config["seed"] + 3000000 + cycle))
+            fresh = diagnostic_collect(state.params, jax.random.PRNGKey(config["seed"] + 3000000 + cycle))
             fresh_metrics = heldout_metrics(model, state.params, fresh, jax.random.PRNGKey(12345))
             metrics.update({k.replace("heldout/", "heldout_current/"): v for k, v in fresh_metrics.items()})
             metrics["heldout_current/real_transitions"] = int(jnp.sum(fresh["length"]))
@@ -410,7 +452,7 @@ def _run(args, config, engine_pool):
             for label, result in scores.items():
                 total = result["wins"] + result["draws"] + result["losses"]
                 metrics[f"eval/{label}/seat0_score"] = (result["wins"] + .5 * result["draws"]) / total
-        if cycle == config["cycles"] and config["decision_eval_positions"]:
+        if final_cycle and config["decision_eval_positions"]:
             from nanoalphazero.research.muzero.decisions import evaluate_decisions
             result = evaluate_decisions(model, state.params, env, config, engine_pool,
                                         args.output / "exact-decisions", config["decision_eval_positions"])
@@ -418,6 +460,7 @@ def _run(args, config, engine_pool):
         metrics["elapsed_seconds"] = time.monotonic() - learning_started
         metrics["muzero/timing/run_seconds"] = time.monotonic() - started
         metrics["cycle_wall_seconds"] = time.monotonic() - cycle_start
+        metrics["muzero/operator_stop_requested"] = int(stop_requested)
         metrics["loop/loop_total_duration"] = metrics["elapsed_seconds"]
         metrics = standardize(metrics)
         print(json.dumps(metrics), flush=True)
@@ -432,7 +475,7 @@ def _run(args, config, engine_pool):
             histograms = {name: wandb.Histogram(values) for name, values in histogram_data(episodes, batch, consumed_info).items()}
             run.log({**metrics, **histograms, **wandb_board_logs(diagnostic_tables)}, step=cycle + priming_cycles)
         if config["save_checkpoints"] and (
-            cycle == config["cycles"] or
+            final_cycle or
             (config["checkpoint_period"] > 0 and cycle % config["checkpoint_period"] == 0)
         ):
             saved = {"train": state, "replay": vars(replay_state), "key": key, "cycle": jnp.array(cycle)}
@@ -440,7 +483,13 @@ def _run(args, config, engine_pool):
                 saved["staging"] = staging_state
             checkpoint.save(args.output / f"cycle-{cycle:06d}.safetensors",
                             saved, config)
+        if stop_requested or coverage_reached:
+            break
     manifest.update(finished=datetime.now(timezone.utc).isoformat(),
+                    completed_cycles=cycle, completed_updates=int(state.step),
+                    stop_reason=("operator_stop_file" if stop_requested else
+                                 "opening_coverage_reached" if coverage_reached else "configured_cycles_complete"),
+                    opening_coverage_streak=coverage_gate.streak,
                     parameter_count=sum(x.size for x in jax.tree.leaves(state.params)),
                     memory_stats=[d.memory_stats() for d in devices])
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

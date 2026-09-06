@@ -1,0 +1,26 @@
+# Finish the first Hex9 learning trial, then pursue repeated MoHex coverage.
+prerequisite = "artifacts/muzero/hex9-block-remat-smoke-20260906-a"
+smoke_max_reserved_bytes = 24000000000
+
+[[phase]]
+name = "hex9-initial"
+config = "evals/muzero/hex9-kl-night-seed1.toml"
+output = "artifacts/muzero/hex9-kl-night-seed1-20260905-a"
+
+[[phase]]
+name = "hex7-coverage"
+config = "evals/muzero/hex7-opening-coverage-seed1.toml"
+output = "artifacts/muzero/hex7-opening-coverage-seed1-20260906-a"
+require_coverage = true
+
+[[phase]]
+name = "hex8-coverage"
+config = "evals/muzero/hex8-opening-coverage-seed1.toml"
+output = "artifacts/muzero/hex8-opening-coverage-seed1-20260906-a"
+require_coverage = true
+
+[[phase]]
+name = "hex9-coverage"
+config = "evals/muzero/hex9-opening-coverage-seed1.toml"
+output = "artifacts/muzero/hex9-opening-coverage-seed1-20260906-a"
+require_coverage = true

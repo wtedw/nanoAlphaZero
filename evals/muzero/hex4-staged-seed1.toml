@@ -1,0 +1,10 @@
+# Independent-seed replication with the current staged replay and AZ monitoring.
+env = "hex4"
+defaults = "alphazero"
+data_pipeline = "staged"
+network = "spatial"
+seed = 1
+wandb = true
+hex_eval_period = 50
+# Full replay checkpoint at completion; preserve every periodic evaluation.
+checkpoint_period = 500

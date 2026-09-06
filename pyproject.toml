@@ -32,6 +32,7 @@ artifacts = "nanoalphazero.cli:artifacts_main"
 bayeselo = "nanoalphazero.cli:bayeselo_main"
 muzero-train = "nanoalphazero.research.muzero.cli:main"
 muzero-eval = "nanoalphazero.research.muzero.evaluation:main"
+muzero-status = "nanoalphazero.research.muzero.status:main"
 
 [build-system]
 requires = ["uv_build>=0.9.26,<0.10.0"]

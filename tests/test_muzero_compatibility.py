@@ -16,14 +16,19 @@ from nanoalphazero.research.muzero.search import make_search, legal_actions
 from nanoalphazero.research.muzero.staging import make_staging
 
 
-@pytest.mark.parametrize("name", list(CONFIG_FACTORIES))
-def test_environment_cycle(name, tmp_path):
+@pytest.mark.parametrize("name,network", [(name, "vector") for name in CONFIG_FACTORIES] +
+                         [(name, "spatial") for name in ("hex7", "hex8", "hex9")])
+def test_environment_cycle(name, network, tmp_path):
     from nanoalphazero.core import make_env
     base = CONFIG_FACTORIES[name]()
     env = make_env(base)
     config = dict(selfplay_batch_size=4, roots=min(4, env.num_actions), survivors=2,
                   discount=1., exploration_moves=2, max_steps=base["game_max_steps"])
-    model = MuZero(env.num_actions, 8, 0)
+    if network == "spatial":
+        from nanoalphazero.research.muzero.spatial import SpatialMuZero
+        model = SpatialMuZero(env.num_actions, base["env_id"], 8, 1, "mish", True)
+    else:
+        model = MuZero(env.num_actions, 8, 0)
     params = model.init(jax.random.PRNGKey(0), jnp.zeros((1, *env.obs_shape)), jnp.zeros(1, jnp.int32))["params"]
     search = make_search(model, env, config)
     collect = jax.jit(make_collect(env, model, search, config))

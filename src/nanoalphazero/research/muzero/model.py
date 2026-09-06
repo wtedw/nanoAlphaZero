@@ -21,7 +21,8 @@ def build_model(config):
     if config["network"] == "spatial":
         from nanoalphazero.research.muzero.spatial import SpatialMuZero
         return SpatialMuZero(config["num_actions"], config["env_id"], config["width"], config["depth"],
-                             config["activation"], config["use_rvgl"])
+                             config["activation"], config["use_rvgl"],
+                             remat_blocks=config.get("remat_blocks", False))
     raise ValueError("Unknown MuZero network")
 
 

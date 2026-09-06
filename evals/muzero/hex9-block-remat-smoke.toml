@@ -1,0 +1,19 @@
+# Controlled counterpart to hex9-staged-smoke: only block recomputation changes.
+env = "hex9"
+defaults = "alphazero"
+data_pipeline = "staged"
+network = "spatial"
+seed = 1
+heldout_batch_size = 512
+remat_unroll = true
+remat_blocks = true
+replay_positions = 32768
+replay_warmup_cycles = 2
+cycles = 2
+updates_per_cycle = 2
+eval_period = 0
+diagnostic_period = 1
+hex_eval_period = 2
+wandb = false
+save_checkpoints = false
+checkpoint_period = 0

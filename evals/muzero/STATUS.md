@@ -1,5 +1,46 @@
 # MuZero status — 2026-09-05
 
+September 6 pre-commit review: hardened the independent game audit against
+missing pairing files, mismatched game rows and fractional actions. The MuZero
+CPU suite passed 68 tests in 849.75 seconds with four virtual devices; the
+updated audit checks separately passed six tests. Command:
+`JAX_PLATFORMS=cpu XLA_FLAGS=--xla_force_host_platform_device_count=4 uv run pytest tests/test_muzero*.py --ignore=tests/test_muzero_standalone.py -q`.
+Standalone-export work is separate and excluded from this review/commit.
+The running queue's frozen source/config hashes remained unchanged.
+
+Latest continuation: [known-opening coverage plan](OPENING-COVERAGE-20260906.md).
+Hex9's baseline and block-recomputation full-size TPU smokes passed, but
+memory reservation remained high. The full-replay/full-evaluation smoke passed
+at 06:01 UTC and the first 1,250-update Hex9 trial started. The new coverage runs stop after three
+consecutive complete MoHex opening evaluations in both modes. Hex4/5 KL and
+the earlier Hex6 CE run already have such recorded streaks. Hex7–9 remain open.
+
+Latest work: [overnight Hex5–9 progression](OVERNIGHT-20260905.md), starting
+19:39 UTC. Hex4/5 KL reruns completed. Hex6 KL reproduced the checked CE
+trajectory and stopped after 352 cycles; cycle 350 converted 24/24 known
+winning openings in both modes. Hex7 passed its full-size four-TPU smoke;
+activation recomputation then reduced per-device allocator reservation from
+30.4 to 10.9 GB. A 100-cycle / 3,000-update full-replay Hex7 learning trial
+launched at 21:17 UTC with unchanged AZ batch size and learning rate. Hex8/9
+small spatial CPU compatibility passed; Hex9's full-size TPU gate is next.
+Hex7 completed 3,000 updates: both modes scored 100% against random on the
+fixed two-ply slate, search scored 77.4% against its policy, and MoHex
+known-winning-opening conversions were 2/27 search versus 0/27 policy.
+This demonstrates learning and useful search, not expert-level Hex7 play.
+Hex8's full-size TPU smoke passed at 23:25 UTC (four updates, both MoHex
+evaluations, 14.2 GB reservation/device, no data anomalies). A 50-cycle /
+2,500-update full-replay learning trial completed at 01:18 UTC: policy/random
+86.2%, search/random 99.6%, search/policy 99.7%, but both lost all MoHex games
+and terminal reward predictions remained weak. W&B:
+https://wandb.ai/tdoubleu/nanoAlphaZero-muzero/runs/0gwa3qly.
+Hex9's full-size four-TPU smoke started at 01:20 UTC.
+New runs use no checkpoints, smaller independent diagnostic batches,
+and an operator stop file that preserves final evaluations. Half-hour health
+audits are recorded under `artifacts/muzero/night-watch-20260905/`.
+
+The sections below retain the research history; historical checkpoint paths
+are not available after the user's explicit checkpoint deletion request.
+
 Branch: `research/muzero`, base ancestor `feature/hex-mohex-eval`.
 Started with a clean tree at `deecd9fa5211f790a861a54e4094e4885e9e3d88`.
 No commits, pushes, branch changes, or production core/MCTS/model edits.
@@ -275,6 +316,10 @@ uv run muzero-train evals/muzero/hex5-az-metrics-smoke.toml --output artifacts/m
 ```
 
 ## Seed-1 replication and Hex6 progression
+
+**Current experiment:** the user stopped the cross-entropy Hex6 run and requested
+KL reruns of Hex4, Hex5, and Hex6. See [KL-20260905.md](KL-20260905.md) for the
+loss comparison, fixed settings, tests, and live sequential queue locations.
 
 **Checkpoint retention update:** the user requested removing all MuZero
 checkpoints and disabling saves on 2026-09-05. All 49 checkpoint/archive files

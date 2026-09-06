@@ -11,10 +11,10 @@ are checked only at real roots. Illegal real actions fail the research run.
 | connect4 | 6×7×3 bool | 7 | nonfull columns | full-cap CPU train/save/load/evaluation | none |
 | hex4 | 4×4×4 bool | 16 | empty squares | four-TPU self-play/replay/train/save and real-game evaluation | preliminary three-seed study |
 | hex5 | 5×5×4 bool | 25 | empty squares | vector CPU full-cap cycle; spatial four-TPU staged training, train batch 4096 | one seed: 13/13 known winning MoHex openings in both modes; broad optimality unproven |
-| hex6 | 6×6×4 bool | 36 | empty squares | vector CPU train/save/load/evaluation; full-size spatial four-TPU staged smoke, train batch 8192 | first full training run launched; strength pending |
-| hex7 | 7×7×4 bool | 49 | empty squares | full-cap CPU train/save/load/evaluation | none |
-| hex8 | 8×8×4 bool | 64 | empty squares | full-cap CPU train/save/load/evaluation | none |
-| hex9 | 9×9×4 bool | 81 | empty squares | full-cap CPU train/save/load/evaluation | none |
+| hex6 | 6×6×4 bool | 36 | empty squares | vector CPU train/save/load/evaluation; full-size spatial four-TPU staged training, train batch 8192 | CE seed1 reached 24/24 known-winning openings in both modes, with regressions; KL reproduced the checked trajectory through cycle 352, then deliberately stopped |
+| hex7 | 7×7×4 bool | 49 | empty squares | vector/small spatial CPU train/save/load/evaluation; full-size spatial four-TPU staged training and MoHex evaluation | seed1 at 3,000 updates: both 100% vs random on fixed slate, search/policy 77.4%; MoHex conversions 2/27 search, 0/27 policy; expert strength unproven |
+| hex8 | 8×8×4 bool | 64 | empty squares | vector/small spatial CPU train/save/load/evaluation; full-size four-TPU staged training and MoHex evaluation | seed1, 2,500 updates: policy/random 86.2%, search/random 99.6%, search/policy 99.7%; 0 MoHex wins, weak terminal reward prediction |
+| hex9 | 9×9×4 bool | 81 | empty squares | vector/small spatial CPU train/save/load/evaluation; b32c256 four-TPU smoke with full replay allocation, four updates, full real-game evaluation and both 81-game MoHex evaluations | first learning trial running; no learning-strength result yet |
 | go3 | 3×3×17 bool | 10 | board legality + pass | full-cap CPU train/save/load/evaluation | none |
 | go4 | 4×4×17 bool | 17 | board legality + pass | full-cap CPU train/save/load/evaluation | none |
 | go5 | 5×5×17 bool | 26 | board legality + pass | full-cap CPU train/save/load/evaluation | none |
@@ -30,12 +30,19 @@ evaluation games after loading. All 16 pass this CPU compatibility gate with
 a small **vector** model, now including production consume, staged unroll drain,
 position replay, and staged-state checkpoint loading (16 tests, 337.88 seconds).
 Spatial architecture compatibility has been exercised on Hex4, Hex5, and Hex6,
-including full-size four-TPU staged smokes. The action encoders also have focused shape/orientation tests;
+including full-size four-TPU staged smokes. Small spatial Hex7–9 full-cap
+compatibility tests also passed on CPU (three tests, 102.76 seconds);
+Hex7 then passed its full-size four-TPU staged smoke (four updates, 8,192
+training batch, 49 MoHex games in each mode). Hex8 also passed its full-size
+four-TPU gate; Hex9 also passed with full replay allocation and the full
+evaluation workload. The action encoders have focused shape/orientation tests;
 that is not all-environment spatial training validation.
-Production-size TPU memory and speed remain unvalidated beyond
-Hex6. Hex5 and Hex6 smokes use reduced replay capacity; completed Hex4/5
-training runs use full replay capacity. Hex6 full-run performance remains
-pending. Terminal/absorbing/return semantics have separate controlled tests.
+Production-size TPU memory and speed have been measured through Hex9, including
+its full replay allocation. Hex5–9 initial smokes used reduced replay capacity;
+completed Hex4/5/7/8 learning trials used full replay. Hex6 training runs also use full replay
+capacity; the CE run was stopped at 896 cycles for the user's KL request,
+so its full configured training budget was not completed.
+Terminal/absorbing/return semantics have separate controlled tests.
 Chess games can reach the rollout cap and then train with a bootstrap; evaluation
 reports capped games as draws. No full-game termination rate or strength is
 claimed from these four-game compatibility samples.

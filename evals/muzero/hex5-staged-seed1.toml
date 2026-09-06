@@ -1,0 +1,9 @@
+env = "hex5"
+defaults = "alphazero"
+data_pipeline = "staged"
+network = "spatial"
+seed = 1
+train_batch_size = 4096
+wandb = true
+hex_eval_period = 50
+checkpoint_period = 1700
