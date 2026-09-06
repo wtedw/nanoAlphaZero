@@ -53,6 +53,20 @@ cd nanoAlphaZero
 uv run train --env ttt
 ```
 
+## Standalone MuZero research
+
+The research branch also includes [muzero.py](muzero.py), a readable single-file
+MuZero implementation. Copy the file and run it with `uv`; no repository package
+installation is required. Start with the four-device CPU smoke preset:
+
+```bash
+uv run muzero.py train --preset smoke-cpu --output /tmp/muzero-smoke-unique
+```
+
+See [the standalone guide](evals/muzero/STANDALONE.md) for configuration,
+checkpoint saving/resume, evaluation, and TPU instructions. This experimental
+MuZero implementation does not inherit AlphaZero's demonstrated playing strength.
+
 ## Code layout
 
 ```text

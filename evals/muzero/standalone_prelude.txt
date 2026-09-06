@@ -1,0 +1,109 @@
+"""Readable, standalone MuZero research snapshot (Python 3.11+).
+
+Run anywhere with uv; dependencies and their custom Git revisions are above:
+  uv run muzero.py train --preset smoke-cpu --output /tmp/muzero-smoke-unique
+  uv run muzero.py train config.toml --output artifacts/my-run
+  uv run muzero.py eval checkpoint.safetensors --platform cpu --output /tmp/eval
+
+The package implementation remains authoritative. Regenerate this snapshot with
+`uv run evals/muzero/export_flat.py` from its repository root. All code below is
+ordinary Python: no embedded modules, source-string execution or package imports.
+
+Algorithm: actual self-play -> staging -> consume/drain -> contiguous replay ->
+unrolled h/g/f losses. Root observations/legality are real; both hypothetical
+search rungs use learned dynamics. Vector and spatial architectures are included.
+Network depth, two-rung search budget and training unroll are separate settings.
+MoHex and AlphaZero references are evaluation only. Supply external engines and
+checkpoints yourself. Checkpoint saving is opt-in via --save. Long runs use W&B.
+Environment compatibility and playing strength are those of the source snapshot;
+this export does not establish new strength or TPU performance results.
+"""
+
+import atexit
+import hashlib
+import json
+import os
+from pathlib import Path
+import sys
+import tempfile
+import tomllib
+
+STANDALONE_PRESETS = __EMBEDDED_PRESETS__
+STANDALONE_SOURCE = __EMBEDDED_PROVENANCE__
+STANDALONE_MOHEX_CONFIG = __EMBEDDED_MOHEX_CONFIG__
+
+
+def standalone_bootstrap():
+    """Select backend before third-party imports; never probe a running TPU."""
+    if __name__ != "__main__":
+        return
+    import argparse
+    argv = sys.argv[1:]
+    if not argv or argv[0] not in ("train", "eval") or any(a in ("-h", "--help") for a in argv):
+        return
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("source", nargs="?")
+    for option in ("preset", "platform", "env", "output", "resume", "stop-file", "alphazero", "opening-plies",
+                   "hex-eval-engine-path", "hex-eval-engine-config", "mohex-engine-path", "mohex-engine-config"):
+        parser.add_argument("--" + option)
+    parser.add_argument("--save", action=argparse.BooleanOptionalAction)
+    args, _ = parser.parse_known_args(argv[1:])
+    raw = dict(STANDALONE_PRESETS.get(args.preset, {}))
+    if argv[0] == "train" and args.source:
+        with open(args.source, "rb") as stream:
+            raw.update(tomllib.load(stream))
+    if args.platform:
+        raw["platform"] = args.platform
+    if "platform" in raw:
+        os.environ["JAX_PLATFORMS"] = raw["platform"]
+    if os.environ.get("JAX_PLATFORMS") == "cpu":
+        flag = "--xla_force_host_platform_device_count="
+        if flag not in os.environ.get("XLA_FLAGS", ""):
+            os.environ["XLA_FLAGS"] = (os.environ.get("XLA_FLAGS", "") +
+                                       f" {flag}{raw.get('devices', 4)}").strip()
+
+
+standalone_bootstrap()
+
+
+def standalone_provenance():
+    """Describe the exported source, even outside Git or inside another repo."""
+    return {"source_snapshot": STANDALONE_SOURCE,
+            "standalone_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+
+
+def standalone_snapshot(output, manifest):
+    import shutil
+    source = Path(__file__)
+    snapshot = output / "source-muzero"
+    snapshot.mkdir()
+    shutil.copyfile(source, snapshot / "muzero.py")
+    manifest["source_sha256"] = {"muzero.py": hashlib.sha256(source.read_bytes()).hexdigest()}
+
+
+def standalone_mohex_config():
+    """Materialize only the optional engine's tiny config, never Python modules."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".cfg", delete=False) as stream:
+        stream.write(STANDALONE_MOHEX_CONFIG)
+        path = Path(stream.name)
+    atexit.register(path.unlink, missing_ok=True)
+    return path
+
+
+def standalone_data_sharding():
+    return jax.sharding.NamedSharding(
+        jax.sharding.Mesh(np.array(jax.devices()), ("x",)), jax.sharding.PartitionSpec("x"))
+
+
+def standalone_main():
+    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
+        print(__doc__)
+        print("Commands: train [config.toml] [--preset NAME] --output DIR; eval CHECKPOINT --output DIR")
+        return
+    command = sys.argv.pop(1)
+    if command == "train":
+        training_main()
+    elif command == "eval":
+        evaluation_main()
+    else:
+        raise SystemExit(f"Unknown command {command!r}; use train or eval")
