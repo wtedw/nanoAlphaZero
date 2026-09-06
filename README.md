@@ -60,11 +60,11 @@ MuZero implementation. Copy the file and run it with `uv`; no repository package
 installation is required. Start with the four-device CPU smoke preset:
 
 ```bash
-uv run muzero.py train --preset smoke-cpu --output /tmp/muzero-smoke-unique
+uv run muzero.py train --preset smoke-cpu
 ```
 
-See [the standalone guide](evals/muzero/STANDALONE.md) for configuration,
-checkpoint saving/resume, evaluation, and TPU instructions. This experimental
+All running instructions and defaults live in [muzero.py](muzero.py), also shown
+by `uv run muzero.py --help`. No TOML is required. This experimental
 MuZero implementation does not inherit AlphaZero's demonstrated playing strength.
 
 ## Code layout

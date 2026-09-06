@@ -96,27 +96,92 @@
 # DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-"""Readable, standalone MuZero research snapshot (Python 3.11+).
+"""MuZero: single-file implementation and running instructions.
 
-Run anywhere with uv; dependencies and their custom Git revisions are above:
-  uv run muzero.py train --preset smoke-cpu --output /tmp/muzero-smoke-unique
-  uv run muzero.py train config.toml --output artifacts/my-run
-  uv run muzero.py eval checkpoint.safetensors --platform cpu --output /tmp/eval
+GET STARTED
+Copy only this file. Install uv and Python 3.11+; uv fetches the dependencies
+declared above on first use (network access and Git are needed for that fetch).
+You do not need a repository checkout, package installation, or TOML config.
+Run these commands in the directory containing muzero.py:
 
-The package implementation remains authoritative. Regenerate this snapshot with
-`uv run evals/muzero/export_flat.py` from its repository root. All code below is
-ordinary Python: no embedded modules, source-string execution or package imports.
+  uv run muzero.py train --preset smoke-cpu       # Tiny four-device CPU smoke
+  uv run muzero.py train --preset smoke-tpu       # Tiny four-device TPU smoke
+  uv run muzero.py train --env hex4               # Full Hex 4 training on TPU
+  uv run muzero.py train --env hex5               # Full Hex 5 training on TPU
+  uv run muzero.py train                         # Same as --env hex4
 
-Algorithm: actual self-play -> staging -> consume/drain -> contiguous replay ->
-unrolled h/g/f losses. Root observations/legality are real; both hypothetical
-search rungs use learned dynamics. Vector and spatial architectures are included.
-Network depth, two-rung search budget and training unroll are separate settings.
-MoHex and AlphaZero references are evaluation only. Supply external engines and
-checkpoints yourself. Checkpoint saving is opt-in via --save. Long runs use W&B.
-Environment compatibility and playing strength are those of the source snapshot;
-this export does not establish new strength or TPU performance results.
+FULL TRAINING DEFAULTS
+TPU, four devices, spatial h/g/f networks, staged sequence replay, seed 0, and
+AlphaZero's per-environment network size, batch sizes, learning rate and update
+schedule. Hex 5 uses training batch 4,096. W&B is enabled for full training;
+authenticate before launching. Each run gets a unique descriptive W&B name.
+Only one JAX process may own the TPU; finish/stop your run before starting another.
+Smoke presets use tiny settings and disable W&B. CPU smokes validate behavior,
+not TPU performance. CPU mode supplies four virtual devices unless XLA_FLAGS
+already specifies a count. Full training defaults are large, including on CPU.
+
+OUTPUT AND CHECKPOINTS
+Output defaults to a new artifacts/muzero-ENV-TIMESTAMP-ID directory, printed
+when training starts. Override it with --output DIR (DIR must not exist).
+Runs retain resolved config, manifest, script snapshot and metrics.jsonl.
+Checkpoints are opt-in; --save saves the final checkpoint, and
+--checkpoint-period 50 also saves every 50 cycles. They are not W&B artifacts.
+
+  uv run muzero.py train --env hex4 --save --checkpoint-period 50
+  uv run muzero.py train --env hex4 --save --checkpoint-period 50 \
+    --resume artifacts/previous-run/cycle-000050.safetensors
+
+Resume with the same settings as the interrupted run; resolved configuration
+must match exactly. Keep heldout-initial-selfplay.npz beside its checkpoint when
+held-out evaluation was enabled. Use --stop-file PATH to request a graceful stop
+at a cycle boundary by creating PATH while the run is active.
+
+SETTINGS WITHOUT TOML
+  uv run muzero.py train --env hex5 --seed 2 --learning-rate 0.001 --save
+  uv run muzero.py train --env hex4 --cycles 5 --no-wandb
+  uv run muzero.py train --env hex6 --remat-blocks --remat-unroll --save
+  uv run muzero.py train --env hex5 --print-config
+  uv run muzero.py train --help
+
+Other flags include --network vector|spatial, --width, --depth, --unroll,
+--train-batch-size, --selfplay-batch-size, --eval-period and --platform cpu|tpu.
+--remat-blocks and --remat-unroll recompute activations to reduce training memory.
+More than ten cycles require W&B; use --no-wandb only for short checks.
+Environments: ttt, connect4, hex4 through hex9, go3 through go9, chess.
+Compatible interfaces do not imply strong play; Hex has the most training evidence.
+An existing TOML can still be supplied for advanced experiments. Precedence is
+defaults/preset, optional TOML, explicit CLI flags. With a TOML and no preset,
+the original package's TOML defaults apply for backward compatibility.
+
+EVALUATION
+  uv run muzero.py eval CHECKPOINT --platform cpu --output /tmp/muzero-eval-new
+  uv run muzero.py eval CHECKPOINT --alphazero AZ_CHECKPOINT --output artifacts/eval-new
+  uv run muzero.py train --env hex4 --hex-eval-period 50 \
+    --hex-eval-engine-path /path/to/mohex --save
+
+Evaluation compares policy-only and learned-search play against each other and
+random play. --alphazero adds a supplied reference checkpoint. For MoHex, supply
+--mohex-engine-path to eval, or --hex-eval-engine-path with --hex-eval-period to
+train. The engine binary is external; its default configuration is embedded.
+MoHex evaluation is off by default so training needs no external engine.
+Use --platform tpu for TPU evaluation (the eval default); never overlap TPU jobs.
+Use `uv run muzero.py eval --help` for all evaluation options.
+
+IMPLEMENTATION AND MAINTENANCE
+Actual self-play -> staging -> consume/drain -> contiguous replay -> unrolled
+h/g/f losses. The root uses real observations and legality; both hypothetical
+search rungs use learned dynamics only. Network depth, search budget and training
+unroll length are separate. Reference engines/tables are evaluation-only.
+The package remains authoritative. From its root, regenerate the readable export:
+  uv run evals/muzero/export_flat.py
+  JAX_PLATFORMS=cpu XLA_FLAGS=--xla_force_host_platform_device_count=4 \
+    uv run pytest tests/test_muzero_standalone.py
+There are no embedded Python modules or import loaders. Package equivalence,
+copied-script training and checkpoint loading are CPU-tested; this export does
+not establish new playing-strength or TPU performance results.
 """
 
+import argparse
 import atexit
 import hashlib
 import json
@@ -170,7 +235,7 @@ STANDALONE_PRESETS = {'smoke-cpu': {'env': 'ttt',
                        'diagnostic_period': 1,
                        'checkpoint_period': 1,
                        'hex_eval_period': 1}}
-STANDALONE_SOURCE = {'git_commit': '9d53b5f12eda7235bd65c838bfb05bfa0860f6cc',
+STANDALONE_SOURCE = {'git_commit': '0bf30000cdaaee23ddcd6c457e813271a539f063',
  'source_sha256': {'src/nanoalphazero/config.py': '0dd387912de774d77a111fefadb1bf310a84408d17fe2ea48ffc451f53452426',
                    'src/nanoalphazero/buffers.py': '61eb1102f77ccdb0d4e878be9e560d0e8aec0038d75e32c2e0c23d2f68c71588',
                    'src/nanoalphazero/model.py': '700ea6a9d503196abb1778c47a7523a293ac32ad57fde4e69d3b21839fb91bbd',
@@ -200,27 +265,74 @@ STANDALONE_SOURCE = {'git_commit': '9d53b5f12eda7235bd65c838bfb05bfa0860f6cc',
 STANDALONE_MOHEX_CONFIG = '# Strong, uncapped defaults matching the historical ~/az Hex validator.\nparam_mohex knowledge_threshold 0\nparam_mohex use_parallel_solver 1\nparam_dfpn threads 4\n\n'
 
 
+def standalone_train_parser():
+    parser = argparse.ArgumentParser(description="MuZero self-play training; no config file required.",
+                                     epilog="Full running instructions: uv run muzero.py --help")
+    parser.add_argument("config", type=Path, nargs="?", help="Optional advanced TOML overrides")
+    parser.add_argument("--preset", choices=sorted(STANDALONE_PRESETS))
+    parser.add_argument("--env", help="Game name (default: hex4)")
+    parser.add_argument("--platform", choices=("cpu", "tpu"), help="Default: tpu")
+    parser.add_argument("--network", choices=("vector", "spatial"))
+    parser.add_argument("--output", type=Path, help="Default: unique directory under artifacts/")
+    parser.add_argument("--resume", type=Path)
+    parser.add_argument("--stop-file", type=Path)
+    parser.add_argument("--hex-eval-engine-path")
+    parser.add_argument("--hex-eval-engine-config", default="default")
+    parser.add_argument("--print-config", action="store_true", help="Print resolved settings and exit without training")
+    parser.add_argument("--save", dest="save_checkpoints", action=argparse.BooleanOptionalAction, default=None)
+    for name in ("wandb", "remat-unroll", "remat-blocks"):
+        parser.add_argument("--" + name, action=argparse.BooleanOptionalAction, default=None)
+    for name in ("seed", "cycles", "width", "depth", "unroll", "train-batch-size", "selfplay-batch-size",
+                 "checkpoint-period", "hex-eval-period", "eval-period"):
+        parser.add_argument("--" + name, type=int)
+    parser.add_argument("--learning-rate", type=float)
+    return parser
+
+
+def standalone_train_settings(args):
+    if args.preset or args.config:
+        raw = dict(STANDALONE_PRESETS.get(args.preset, {}))
+    else:
+        raw = dict(env="hex4", defaults="alphazero", platform="tpu", devices=4,
+                   network="spatial", data_pipeline="staged", wandb=True)
+    if args.config:
+        with args.config.open("rb") as stream:
+            raw.update(tomllib.load(stream))
+    for name in ("env", "platform", "network", "save_checkpoints", "wandb", "remat_unroll", "remat_blocks",
+                 "seed", "cycles", "width", "depth", "unroll", "train_batch_size", "selfplay_batch_size",
+                 "checkpoint_period", "hex_eval_period", "eval_period", "learning_rate"):
+        value = getattr(args, name)
+        if value is not None:
+            raw[name] = value
+    return raw
+
+
+def standalone_output(config):
+    from datetime import datetime, timezone
+    import uuid
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return Path("artifacts") / f"muzero-{config['env']}-{stamp}-{uuid.uuid4().hex[:8]}"
+
+
 def standalone_bootstrap():
     """Select backend before third-party imports; never probe a running TPU."""
     if __name__ != "__main__":
         return
-    import argparse
     argv = sys.argv[1:]
     if not argv or argv[0] not in ("train", "eval") or any(a in ("-h", "--help") for a in argv):
         return
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("source", nargs="?")
-    for option in ("preset", "platform", "env", "output", "resume", "stop-file", "alphazero", "opening-plies",
-                   "hex-eval-engine-path", "hex-eval-engine-config", "mohex-engine-path", "mohex-engine-config"):
-        parser.add_argument("--" + option)
-    parser.add_argument("--save", action=argparse.BooleanOptionalAction)
-    args, _ = parser.parse_known_args(argv[1:])
-    raw = dict(STANDALONE_PRESETS.get(args.preset, {}))
-    if argv[0] == "train" and args.source:
-        with open(args.source, "rb") as stream:
-            raw.update(tomllib.load(stream))
-    if args.platform:
-        raw["platform"] = args.platform
+    if argv[0] == "train":
+        args = standalone_train_parser().parse_args(argv[1:])
+        raw = standalone_train_settings(args)
+        if args.print_config:
+            # Resolving config needs no accelerator, even when its target is TPU.
+            os.environ["JAX_PLATFORMS"] = "cpu"
+            return
+    else:
+        parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument("--platform", choices=("cpu", "tpu"), default="tpu")
+        args, _ = parser.parse_known_args(argv[1:])
+        raw = {"platform": args.platform}
     if "platform" in raw:
         os.environ["JAX_PLATFORMS"] = raw["platform"]
     if os.environ.get("JAX_PLATFORMS") == "cpu":
@@ -265,7 +377,6 @@ def standalone_data_sharding():
 def standalone_main():
     if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
         print(__doc__)
-        print("Commands: train [config.toml] [--preset NAME] --output DIR; eval CHECKPOINT --output DIR")
         return
     command = sys.argv.pop(1)
     if command == "train":
@@ -322,7 +433,6 @@ from flax.traverse_util import flatten_dict
 from flax.traverse_util import unflatten_dict
 from flax.traverse_util import empty_node
 from safetensors.numpy import save_file
-import argparse
 
 
 # =============================================================================
@@ -5344,31 +5454,15 @@ def resolve(raw):
 
 
 def training_main():
-    parser = argparse.ArgumentParser(description="Standalone MuZero self-play training")
-    parser.add_argument("config", type=Path, nargs="?")
-    parser.add_argument("--preset", choices=sorted(STANDALONE_PRESETS))
-    parser.add_argument("--env", choices=sorted(CONFIG_FACTORIES))
-    parser.add_argument("--platform", choices=("cpu", "tpu"))
-    parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--resume", type=Path)
-    parser.add_argument("--stop-file", type=Path,
-                        help="Finish the current cycle, evaluate, and exit when this file exists")
-    parser.add_argument("--save", dest="save_checkpoints", action=argparse.BooleanOptionalAction,
-                        default=None, help="Save checkpoints (disabled by default; --no-save forces off)")
-    parser.add_argument("--hex-eval-engine-path")
-    parser.add_argument("--hex-eval-engine-config", default="default")
-    args = parser.parse_args()
-    raw = dict(STANDALONE_PRESETS.get(args.preset, {}))
-    if args.config:
-        with args.config.open("rb") as stream:
-            raw.update(tomllib.load(stream))
-    if args.env:
-        raw["env"] = args.env
-    if args.platform:
-        raw["platform"] = args.platform
-    if args.save_checkpoints is not None:
-        raw["save_checkpoints"] = args.save_checkpoints
+    args = standalone_train_parser().parse_args()
+    raw = standalone_train_settings(args)
     config = resolve(raw)
+    if args.print_config:
+        print(json.dumps(config, indent=2))
+        return
+    if args.output is None:
+        args.output = standalone_output(config)
+    print(f"Run output: {args.output}", flush=True)
     engine_pool = None
     if config["hex_eval_period"] or config["decision_eval_positions"]:
         if not config["env"].startswith("hex") or not args.hex_eval_engine_path:

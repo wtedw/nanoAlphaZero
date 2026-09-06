@@ -117,20 +117,22 @@ def section_source(module, selected):
         source = replace_once(source, "def main():", "def evaluation_main():")
     if module == "research.muzero.cli":
         source = replace_once(source, "def main():", "def training_main():")
-        source = replace_once(source, 'description=__doc__', 'description="Standalone MuZero self-play training"')
-        source = replace_once(source, 'parser.add_argument("config", type=Path)',
-            'parser.add_argument("config", type=Path, nargs="?")\n'
-            '    parser.add_argument("--preset", choices=sorted(STANDALONE_PRESETS))\n'
-            '    parser.add_argument("--env", choices=sorted(CONFIG_FACTORIES))\n'
-            '    parser.add_argument("--platform", choices=("cpu", "tpu"))')
+        start = source.index('    parser = argparse.ArgumentParser', source.index('def training_main():'))
+        end = source.index('    config = resolve(raw)', start)
+        source = source[:start] + (
+            '    args = standalone_train_parser().parse_args()\n'
+            '    raw = standalone_train_settings(args)\n'
+        ) + source[end:]
         source = replace_once(source,
-            'with args.config.open("rb") as stream:\n        raw = tomllib.load(stream)',
-            'raw = dict(STANDALONE_PRESETS.get(args.preset, {}))\n'
-            '    if args.config:\n'
-            '        with args.config.open("rb") as stream:\n'
-            '            raw.update(tomllib.load(stream))\n'
-            '    if args.env:\n        raw["env"] = args.env\n'
-            '    if args.platform:\n        raw["platform"] = args.platform')
+            '    config = resolve(raw)\n    engine_pool = None',
+            '    config = resolve(raw)\n'
+            '    if args.print_config:\n'
+            '        print(json.dumps(config, indent=2))\n'
+            '        return\n'
+            '    if args.output is None:\n'
+            '        args.output = standalone_output(config)\n'
+            '    print(f"Run output: {args.output}", flush=True)\n'
+            '    engine_pool = None')
         source = source.replace("checkpoint.metadata(", "metadata(").replace("checkpoint.load(", "load(").replace("checkpoint.save(", "save(")
         source = replace_once(source,
             '"git_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),\n'

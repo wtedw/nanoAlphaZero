@@ -51,6 +51,31 @@ def test_no_package_imports_or_embedded_module_loader():
                 node.func.id == "__import__" and node.args[0].value == "sys")
 
 
+@pytest.mark.parametrize("env", ["hex4", "hex5"])
+def test_training_defaults_need_no_config_file(flat, env):
+    args = flat.standalone_train_parser().parse_args(["--env", env])
+    config = flat.resolve(flat.standalone_train_settings(args))
+    base = flat.CONFIG_FACTORIES[env]()
+    assert config["platform"] == "tpu" and config["devices"] == 4
+    assert config["network"] == "spatial" and config["data_pipeline"] == "staged"
+    assert config["learning_rate"] == base["learning_rate"]
+    assert config["train_batch_size"] == (4096 if env == "hex5" else base["train_batch_size"])
+    assert config["wandb"] and not config["save_checkpoints"]
+    assert config["hex_eval_period"] == 0
+    assert args.output is None
+    assert flat.standalone_output(config) != flat.standalone_output(config)
+
+
+def test_cli_overrides_optional_toml_and_preset(flat, tmp_path):
+    path = tmp_path / "overrides.toml"
+    path.write_text('seed = 3\nlearning_rate = 0.002\n')
+    args = flat.standalone_train_parser().parse_args([
+        str(path), "--preset", "smoke-cpu", "--seed", "7", "--cycles", "3", "--no-wandb"])
+    config = flat.resolve(flat.standalone_train_settings(args))
+    assert config["seed"] == 7 and config["cycles"] == 3
+    assert config["learning_rate"] == .002 and not config["wandb"]
+
+
 @pytest.mark.parametrize("network", ["vector", "spatial"])
 def test_model_search_loss_and_gradients_match_package(flat, network):
     config = flat.resolve({**flat.STANDALONE_PRESETS["smoke-cpu"], "network": network})
@@ -82,10 +107,7 @@ def test_model_search_loss_and_gradients_match_package(flat, network):
 def test_copied_script_trains_and_checkpoint_loads_without_repo(tmp_path, flat, network, env):
     copied = tmp_path / "muzero.py"
     copied.write_bytes((ROOT / "muzero.py").read_bytes())
-    config = tmp_path / "smoke.toml"
-    extra = 'remat_blocks = true\nremat_unroll = true\n' if network == "spatial" else ""
-    config.write_text(f'network = "{network}"\nenv = "{env}"\neval_period = 0\n' + extra)
-    output = tmp_path / "run"
+    extra = ["--remat-blocks", "--remat-unroll"] if network == "spatial" else []
     # Block even accidental lazy package imports; this also runs outside Git.
     runner = '''import runpy, sys
 class BlockPackage:
@@ -96,12 +118,16 @@ sys.meta_path.insert(0, BlockPackage())
 sys.argv = sys.argv[1:]
 runpy.run_path(sys.argv[0], run_name="__main__")
 '''
-    result = subprocess.run([sys.executable, "-c", runner, str(copied), "train", str(config),
-                             "--preset", "smoke-cpu", "--save", "--output", str(output)],
+    result = subprocess.run([sys.executable, "-c", runner, str(copied), "train",
+                             "--preset", "smoke-cpu", "--save", "--network", network,
+                             "--env", env, "--eval-period", "0", *extra],
                             cwd=tmp_path, env={**os.environ, "JAX_PLATFORMS": "cpu",
                             "XLA_FLAGS": "--xla_force_host_platform_device_count=4"},
                             text=True, capture_output=True, timeout=180)
     assert result.returncode == 0, result.stdout + result.stderr
+    outputs = list((tmp_path / "artifacts").glob("muzero-*"))
+    assert len(outputs) == 1
+    output = outputs[0]
     metrics = [json.loads(line) for line in (output / "metrics.jsonl").read_text().splitlines()]
     assert metrics[-1]["runner_state/n_updates"] == 4
     assert metrics[-1]["muzero/drain/inserted_positions"] > 0
