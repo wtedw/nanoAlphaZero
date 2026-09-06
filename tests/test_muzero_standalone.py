@@ -51,19 +51,37 @@ def test_no_package_imports_or_embedded_module_loader():
                 node.func.id == "__import__" and node.args[0].value == "sys")
 
 
-@pytest.mark.parametrize("env", ["hex4", "hex5"])
+@pytest.mark.parametrize("env", [f"hex{size}" for size in range(4, 10)])
 def test_training_defaults_need_no_config_file(flat, env):
     args = flat.standalone_train_parser().parse_args(["--env", env])
-    config = flat.resolve(flat.standalone_train_settings(args))
+    raw = flat.standalone_train_settings(args)
+    config = flat.resolve(raw)
     base = flat.CONFIG_FACTORIES[env]()
     assert config["platform"] == "tpu" and config["devices"] == 4
     assert config["network"] == "spatial" and config["data_pipeline"] == "staged"
     assert config["learning_rate"] == base["learning_rate"]
-    assert config["train_batch_size"] == (4096 if env == "hex5" else base["train_batch_size"])
+    assert config["train_batch_size"] == (4096 if env == "hex5" else min(4096, base["train_batch_size"]))
+    assert config["selfplay_batch_size"] <= 4096 and config["heldout_batch_size"] <= 4096
+    assert config["width"] <= 256 and config["depth"] <= 10
+    assert config["roots"] <= 8 and config["survivors"] <= 4
+    assert not config["initial_evaluation"]
     assert config["wandb"] and not config["save_checkpoints"]
     assert config["hex_eval_period"] == 0
     assert args.output is None
     assert flat.standalone_output(config) != flat.standalone_output(config)
+
+
+def test_explicit_cli_overrides_respect_new_limits(flat):
+    args = flat.standalone_train_parser().parse_args([
+        "--env", "hex7", "--width", "512", "--depth", "32", "--roots", "16", "--survivors", "8",
+        "--train-batch-size", "8192", "--selfplay-batch-size", "8192", "--heldout-batch-size", "8192",
+        "--initial-evaluation", "--opening-coverage-streak", "3", "--hex-eval-period", "50",
+        "--opening-value-mse-threshold", "0.01"])
+    config = flat.resolve(flat.standalone_train_settings(args))
+    assert (config["width"], config["depth"], config["roots"], config["survivors"]) == (256, 10, 8, 4)
+    assert all(config[key] == 4096 for key in ("train_batch_size", "selfplay_batch_size", "heldout_batch_size"))
+    assert config["initial_evaluation"] and config["opening_coverage_streak"] == 3
+    assert config["opening_value_mse_threshold"] == .01
 
 
 def test_cli_overrides_optional_toml_and_preset(flat, tmp_path):

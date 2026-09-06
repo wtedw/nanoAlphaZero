@@ -1,86 +1,35 @@
-"""MuZero: single-file implementation and running instructions.
+"""MuZero. Requires uv, Python 3.11+, and Git for the first dependency install.
 
-GET STARTED
-Copy only this file. Install uv and Python 3.11+; uv fetches the dependencies
-declared above on first use (network access and Git are needed for that fetch).
-You do not need a repository checkout, package installation, or TOML config.
-Run these commands in the directory containing muzero.py:
+  uv run muzero.py train --env hex4 --save        # Four-device TPU training
+  uv run muzero.py train --env hex5 --save        # Hex 5, batch 4096
+  uv run muzero.py train --preset smoke-cpu       # Small CPU check
+  uv run muzero.py train --preset smoke-tpu       # Small TPU check
+  uv run muzero.py train --env hex7 --print-config
+  uv run muzero.py eval CHECKPOINT --platform cpu --output /tmp/eval-new
+  uv run muzero.py train --help                  # All training flags
+  uv run muzero.py eval --help                   # All evaluation flags
 
-  uv run muzero.py train --preset smoke-cpu       # Tiny four-device CPU smoke
-  uv run muzero.py train --preset smoke-tpu       # Tiny four-device TPU smoke
-  uv run muzero.py train --env hex4               # Full Hex 4 training on TPU
-  uv run muzero.py train --env hex5               # Full Hex 5 training on TPU
-  uv run muzero.py train                         # Same as --env hex4
+No TOML required. Defaults: Hex 4, TPU, spatial networks, staged replay, seed 0.
+AlphaZero settings are capped at search 8+4, width 256, depth 10, batches 4096.
+Smaller settings stay smaller. Initial playing-strength evaluation is off.
+Full training uses W&B: authenticate first. Only one job may own the TPU.
 
-FULL TRAINING DEFAULTS
-TPU, four devices, spatial h/g/f networks, staged sequence replay, seed 0, and
-AlphaZero's per-environment network size, batch sizes, learning rate and update
-schedule. Hex 5 uses training batch 4,096. W&B is enabled for full training;
-authenticate before launching. Each run gets a unique descriptive W&B name.
-Only one JAX process may own the TPU; finish/stop your run before starting another.
-Smoke presets use tiny settings and disable W&B. CPU smokes validate behavior,
-not TPU performance. CPU mode supplies four virtual devices unless XLA_FLAGS
-already specifies a count. Full training defaults are large, including on CPU.
+Outputs go to a new directory under artifacts/; --output overrides it.
+--save enables final checkpoints; --checkpoint-period N adds periodic saves.
+--resume CHECKPOINT requires the same settings and, if used, the original
+heldout-initial-selfplay.npz beside it. --stop-file PATH stops after a cycle
+when PATH is created. Checkpoints are local, never uploaded as W&B artifacts.
 
-OUTPUT AND CHECKPOINTS
-Output defaults to a new artifacts/muzero-ENV-TIMESTAMP-ID directory, printed
-when training starts. Override it with --output DIR (DIR must not exist).
-Runs retain resolved config, manifest, script snapshot and metrics.jsonl.
-Checkpoints are opt-in; --save saves the final checkpoint, and
---checkpoint-period 50 also saves every 50 cycles. They are not W&B artifacts.
+--seed, --learning-rate, --cycles, --width, --depth and batch-size flags override
+defaults. --remat-blocks / --remat-unroll reduce activation memory. For short
+checks use --cycles 5 --no-wandb. TOML overrides remain optional.
+Games: ttt, connect4, hex4-hex9, go3-go9, chess; strength varies by game.
 
-  uv run muzero.py train --env hex4 --save --checkpoint-period 50
-  uv run muzero.py train --env hex4 --save --checkpoint-period 50 \
-    --resume artifacts/previous-run/cycle-000050.safetensors
+MoHex is optional: training needs --hex-eval-period N and
+--hex-eval-engine-path EXECUTABLE. Evaluation accepts --mohex-engine-path
+EXECUTABLE or --alphazero CHECKPOINT. Reference engines are evaluation-only.
 
-Resume with the same settings as the interrupted run; resolved configuration
-must match exactly. Keep heldout-initial-selfplay.npz beside its checkpoint when
-held-out evaluation was enabled. Use --stop-file PATH to request a graceful stop
-at a cycle boundary by creating PATH while the run is active.
-
-SETTINGS WITHOUT TOML
-  uv run muzero.py train --env hex5 --seed 2 --learning-rate 0.001 --save
-  uv run muzero.py train --env hex4 --cycles 5 --no-wandb
-  uv run muzero.py train --env hex6 --remat-blocks --remat-unroll --save
-  uv run muzero.py train --env hex5 --print-config
-  uv run muzero.py train --help
-
-Other flags include --network vector|spatial, --width, --depth, --unroll,
---train-batch-size, --selfplay-batch-size, --eval-period and --platform cpu|tpu.
---remat-blocks and --remat-unroll recompute activations to reduce training memory.
-More than ten cycles require W&B; use --no-wandb only for short checks.
-Environments: ttt, connect4, hex4 through hex9, go3 through go9, chess.
-Compatible interfaces do not imply strong play; Hex has the most training evidence.
-An existing TOML can still be supplied for advanced experiments. Precedence is
-defaults/preset, optional TOML, explicit CLI flags. With a TOML and no preset,
-the original package's TOML defaults apply for backward compatibility.
-
-EVALUATION
-  uv run muzero.py eval CHECKPOINT --platform cpu --output /tmp/muzero-eval-new
-  uv run muzero.py eval CHECKPOINT --alphazero AZ_CHECKPOINT --output artifacts/eval-new
-  uv run muzero.py train --env hex4 --hex-eval-period 50 \
-    --hex-eval-engine-path /path/to/mohex --save
-
-Evaluation compares policy-only and learned-search play against each other and
-random play. --alphazero adds a supplied reference checkpoint. For MoHex, supply
---mohex-engine-path to eval, or --hex-eval-engine-path with --hex-eval-period to
-train. The engine binary is external; its default configuration is embedded.
-MoHex evaluation is off by default so training needs no external engine.
-Use --platform tpu for TPU evaluation (the eval default); never overlap TPU jobs.
-Use `uv run muzero.py eval --help` for all evaluation options.
-
-IMPLEMENTATION AND MAINTENANCE
-Actual self-play -> staging -> consume/drain -> contiguous replay -> unrolled
-h/g/f losses. The root uses real observations and legality; both hypothetical
-search rungs use learned dynamics only. Network depth, search budget and training
-unroll length are separate. Reference engines/tables are evaluation-only.
-The package remains authoritative. From its root, regenerate the readable export:
-  uv run evals/muzero/export_flat.py
-  JAX_PLATFORMS=cpu XLA_FLAGS=--xla_force_host_platform_device_count=4 \
-    uv run pytest tests/test_muzero_standalone.py
-There are no embedded Python modules or import loaders. Package equivalence,
-copied-script training and checkpoint loading are CPU-tested; this export does
-not establish new playing-strength or TPU performance results.
+Regenerate from the package: uv run evals/muzero/export_flat.py
 """
 
 import argparse
@@ -94,7 +43,6 @@ import tempfile
 import tomllib
 
 STANDALONE_PRESETS = __EMBEDDED_PRESETS__
-STANDALONE_SOURCE = __EMBEDDED_PROVENANCE__
 STANDALONE_MOHEX_CONFIG = __EMBEDDED_MOHEX_CONFIG__
 
 
@@ -113,12 +61,14 @@ def standalone_train_parser():
     parser.add_argument("--hex-eval-engine-config", default="default")
     parser.add_argument("--print-config", action="store_true", help="Print resolved settings and exit without training")
     parser.add_argument("--save", dest="save_checkpoints", action=argparse.BooleanOptionalAction, default=None)
-    for name in ("wandb", "remat-unroll", "remat-blocks"):
+    for name in ("wandb", "remat-unroll", "remat-blocks", "initial-evaluation"):
         parser.add_argument("--" + name, action=argparse.BooleanOptionalAction, default=None)
     for name in ("seed", "cycles", "width", "depth", "unroll", "train-batch-size", "selfplay-batch-size",
-                 "checkpoint-period", "hex-eval-period", "eval-period"):
+                 "checkpoint-period", "hex-eval-period", "eval-period", "roots", "survivors",
+                 "heldout-batch-size", "opening-coverage-streak"):
         parser.add_argument("--" + name, type=int)
     parser.add_argument("--learning-rate", type=float)
+    parser.add_argument("--opening-value-mse-threshold", type=float)
     return parser
 
 
@@ -133,7 +83,9 @@ def standalone_train_settings(args):
             raw.update(tomllib.load(stream))
     for name in ("env", "platform", "network", "save_checkpoints", "wandb", "remat_unroll", "remat_blocks",
                  "seed", "cycles", "width", "depth", "unroll", "train_batch_size", "selfplay_batch_size",
-                 "checkpoint_period", "hex_eval_period", "eval_period", "learning_rate"):
+                 "checkpoint_period", "hex_eval_period", "eval_period", "learning_rate",
+                 "roots", "survivors", "heldout_batch_size", "initial_evaluation",
+                 "opening_coverage_streak", "opening_value_mse_threshold"):
         value = getattr(args, name)
         if value is not None:
             raw[name] = value
@@ -176,12 +128,6 @@ def standalone_bootstrap():
 
 
 standalone_bootstrap()
-
-
-def standalone_provenance():
-    """Describe the exported source, even outside Git or inside another repo."""
-    return {"source_snapshot": STANDALONE_SOURCE,
-            "standalone_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
 
 
 def standalone_snapshot(output, manifest):

@@ -25,160 +25,38 @@
 # flashbax = { git = "https://github.com/instadeepai/flashbax.git", rev = "e0199d7bb232c622a19d3c28f9d6b34eb8215eab" }
 # ///
 
-# MIT License
-#
-# Copyright (c) 2026 Ted Wong
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-#
-# --------------------------------------------------------------------------------
-#
-# Code in `src/nanoalphazero/mcts.py` is adapted (with modifications) from
-# https://github.com/google-deepmind/mctx, used under the Apache License,
-# Version 2.0. The adapted code carries the following notice from the original
-# source files:
-#
-#     Copyright 2021 DeepMind Technologies Limited. All Rights Reserved.
-#
-#     Licensed under the Apache License, Version 2.0 (the "License");
-#     you may not use this file except in compliance with the License.
-#     You may obtain a copy of the License at
-#
-#         http://www.apache.org/licenses/LICENSE-2.0
-#
-#     Unless required by applicable law or agreed to in writing, software
-#     distributed under the License is distributed on an "AS IS" BASIS,
-#     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#     See the License for the specific language governing permissions and
-#     limitations under the License.
-#
-# --------------------------------------------------------------------------------
-#
-# The neural-network architecture in `src/nanoalphazero/model.py` is adapted (with
-# modifications) from KataGo:
-# https://github.com/lightvector/KataGo
-#
-# The adapted code is used under the following KataGo MIT license:
-#
-# ----------------------------------------
-#
-# Copyright 2025 David J Wu ("lightvector") and/or other authors of the content in this repository.
-# (See 'CONTRIBUTORS' file for a list of authors as well as other indirect contributors).
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
-# associated documentation files (the "Software"), to deal in the Software without restriction,
-# including without limitation the rights to use, copy, modify, merge, publish, distribute,
-# sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all copies or
-# substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
-# NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-# DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""MuZero. Requires uv, Python 3.11+, and Git for the first dependency install.
 
-"""MuZero: single-file implementation and running instructions.
+  uv run muzero.py train --env hex4 --save        # Four-device TPU training
+  uv run muzero.py train --env hex5 --save        # Hex 5, batch 4096
+  uv run muzero.py train --preset smoke-cpu       # Small CPU check
+  uv run muzero.py train --preset smoke-tpu       # Small TPU check
+  uv run muzero.py train --env hex7 --print-config
+  uv run muzero.py eval CHECKPOINT --platform cpu --output /tmp/eval-new
+  uv run muzero.py train --help                  # All training flags
+  uv run muzero.py eval --help                   # All evaluation flags
 
-GET STARTED
-Copy only this file. Install uv and Python 3.11+; uv fetches the dependencies
-declared above on first use (network access and Git are needed for that fetch).
-You do not need a repository checkout, package installation, or TOML config.
-Run these commands in the directory containing muzero.py:
+No TOML required. Defaults: Hex 4, TPU, spatial networks, staged replay, seed 0.
+AlphaZero settings are capped at search 8+4, width 256, depth 10, batches 4096.
+Smaller settings stay smaller. Initial playing-strength evaluation is off.
+Full training uses W&B: authenticate first. Only one job may own the TPU.
 
-  uv run muzero.py train --preset smoke-cpu       # Tiny four-device CPU smoke
-  uv run muzero.py train --preset smoke-tpu       # Tiny four-device TPU smoke
-  uv run muzero.py train --env hex4               # Full Hex 4 training on TPU
-  uv run muzero.py train --env hex5               # Full Hex 5 training on TPU
-  uv run muzero.py train                         # Same as --env hex4
+Outputs go to a new directory under artifacts/; --output overrides it.
+--save enables final checkpoints; --checkpoint-period N adds periodic saves.
+--resume CHECKPOINT requires the same settings and, if used, the original
+heldout-initial-selfplay.npz beside it. --stop-file PATH stops after a cycle
+when PATH is created. Checkpoints are local, never uploaded as W&B artifacts.
 
-FULL TRAINING DEFAULTS
-TPU, four devices, spatial h/g/f networks, staged sequence replay, seed 0, and
-AlphaZero's per-environment network size, batch sizes, learning rate and update
-schedule. Hex 5 uses training batch 4,096. W&B is enabled for full training;
-authenticate before launching. Each run gets a unique descriptive W&B name.
-Only one JAX process may own the TPU; finish/stop your run before starting another.
-Smoke presets use tiny settings and disable W&B. CPU smokes validate behavior,
-not TPU performance. CPU mode supplies four virtual devices unless XLA_FLAGS
-already specifies a count. Full training defaults are large, including on CPU.
+--seed, --learning-rate, --cycles, --width, --depth and batch-size flags override
+defaults. --remat-blocks / --remat-unroll reduce activation memory. For short
+checks use --cycles 5 --no-wandb. TOML overrides remain optional.
+Games: ttt, connect4, hex4-hex9, go3-go9, chess; strength varies by game.
 
-OUTPUT AND CHECKPOINTS
-Output defaults to a new artifacts/muzero-ENV-TIMESTAMP-ID directory, printed
-when training starts. Override it with --output DIR (DIR must not exist).
-Runs retain resolved config, manifest, script snapshot and metrics.jsonl.
-Checkpoints are opt-in; --save saves the final checkpoint, and
---checkpoint-period 50 also saves every 50 cycles. They are not W&B artifacts.
+MoHex is optional: training needs --hex-eval-period N and
+--hex-eval-engine-path EXECUTABLE. Evaluation accepts --mohex-engine-path
+EXECUTABLE or --alphazero CHECKPOINT. Reference engines are evaluation-only.
 
-  uv run muzero.py train --env hex4 --save --checkpoint-period 50
-  uv run muzero.py train --env hex4 --save --checkpoint-period 50 \
-    --resume artifacts/previous-run/cycle-000050.safetensors
-
-Resume with the same settings as the interrupted run; resolved configuration
-must match exactly. Keep heldout-initial-selfplay.npz beside its checkpoint when
-held-out evaluation was enabled. Use --stop-file PATH to request a graceful stop
-at a cycle boundary by creating PATH while the run is active.
-
-SETTINGS WITHOUT TOML
-  uv run muzero.py train --env hex5 --seed 2 --learning-rate 0.001 --save
-  uv run muzero.py train --env hex4 --cycles 5 --no-wandb
-  uv run muzero.py train --env hex6 --remat-blocks --remat-unroll --save
-  uv run muzero.py train --env hex5 --print-config
-  uv run muzero.py train --help
-
-Other flags include --network vector|spatial, --width, --depth, --unroll,
---train-batch-size, --selfplay-batch-size, --eval-period and --platform cpu|tpu.
---remat-blocks and --remat-unroll recompute activations to reduce training memory.
-More than ten cycles require W&B; use --no-wandb only for short checks.
-Environments: ttt, connect4, hex4 through hex9, go3 through go9, chess.
-Compatible interfaces do not imply strong play; Hex has the most training evidence.
-An existing TOML can still be supplied for advanced experiments. Precedence is
-defaults/preset, optional TOML, explicit CLI flags. With a TOML and no preset,
-the original package's TOML defaults apply for backward compatibility.
-
-EVALUATION
-  uv run muzero.py eval CHECKPOINT --platform cpu --output /tmp/muzero-eval-new
-  uv run muzero.py eval CHECKPOINT --alphazero AZ_CHECKPOINT --output artifacts/eval-new
-  uv run muzero.py train --env hex4 --hex-eval-period 50 \
-    --hex-eval-engine-path /path/to/mohex --save
-
-Evaluation compares policy-only and learned-search play against each other and
-random play. --alphazero adds a supplied reference checkpoint. For MoHex, supply
---mohex-engine-path to eval, or --hex-eval-engine-path with --hex-eval-period to
-train. The engine binary is external; its default configuration is embedded.
-MoHex evaluation is off by default so training needs no external engine.
-Use --platform tpu for TPU evaluation (the eval default); never overlap TPU jobs.
-Use `uv run muzero.py eval --help` for all evaluation options.
-
-IMPLEMENTATION AND MAINTENANCE
-Actual self-play -> staging -> consume/drain -> contiguous replay -> unrolled
-h/g/f losses. The root uses real observations and legality; both hypothetical
-search rungs use learned dynamics only. Network depth, search budget and training
-unroll length are separate. Reference engines/tables are evaluation-only.
-The package remains authoritative. From its root, regenerate the readable export:
-  uv run evals/muzero/export_flat.py
-  JAX_PLATFORMS=cpu XLA_FLAGS=--xla_force_host_platform_device_count=4 \
-    uv run pytest tests/test_muzero_standalone.py
-There are no embedded Python modules or import loaders. Package equivalence,
-copied-script training and checkpoint loading are CPU-tested; this export does
-not establish new playing-strength or TPU performance results.
+Regenerate from the package: uv run evals/muzero/export_flat.py
 """
 
 import argparse
@@ -235,33 +113,6 @@ STANDALONE_PRESETS = {'smoke-cpu': {'env': 'ttt',
                        'diagnostic_period': 1,
                        'checkpoint_period': 1,
                        'hex_eval_period': 1}}
-STANDALONE_SOURCE = {'git_commit': '0bf30000cdaaee23ddcd6c457e813271a539f063',
- 'source_sha256': {'src/nanoalphazero/config.py': '0dd387912de774d77a111fefadb1bf310a84408d17fe2ea48ffc451f53452426',
-                   'src/nanoalphazero/buffers.py': '61eb1102f77ccdb0d4e878be9e560d0e8aec0038d75e32c2e0c23d2f68c71588',
-                   'src/nanoalphazero/model.py': '700ea6a9d503196abb1778c47a7523a293ac32ad57fde4e69d3b21839fb91bbd',
-                   'src/nanoalphazero/mcts.py': '2b42f2204227539d64858ee0521ef781a0c9c0ea764fa2205887358e908fa9cc',
-                   'src/nanoalphazero/checkpoint.py': '435047097207e8c891c92bf38b9387888206fcbe7c9fe48584eabe5f9f857221',
-                   'src/nanoalphazero/core.py': 'c8adb2b7692dfc1de037ad0a082cd26d9e211d2b183def5b7074f943ed9be1c4',
-                   'src/nanoalphazero/eval/hex/perfect_play.py': '6b91c309ecc5ec8b98082371bba8ba156d3ffebe9fc21ef41a571feb440ede0f',
-                   'src/nanoalphazero/eval/hex/engine.py': 'bc4e01e200271c5f1d9c6424b296c2b545c84c99eaa34d4cebf002cdedf0bd62',
-                   'src/nanoalphazero/eval/hex/runtime.py': 'bec5ca703f708d670b70737d1a673a2f061f20678577ebe6fafca4418da774ee',
-                   'src/nanoalphazero/eval/hex/training.py': 'd664401dae051813eca72b9c6b8a8b66852e7932015e1ca5d90d28a31c0a2bb5',
-                   'src/nanoalphazero/training.py': '028056278e178a4ed36eaf5e2e2dd9cc4d15c22c66eb0da3206715710335aecb',
-                   'src/nanoalphazero/research/muzero/model.py': '68db09152ae592025d2cba55009d4f087ee03d189a73cc4cd18049d934959722',
-                   'src/nanoalphazero/research/muzero/remat.py': '087a237e3ebe600df48261d70f832c17191c708117624e6387905196d5ac3b75',
-                   'src/nanoalphazero/research/muzero/spatial.py': '5f382d581b4ca87f5b578732557ab1bdad10aeacc8fef0502fc098f2241617a1',
-                   'src/nanoalphazero/research/muzero/search.py': '4d1d957cc3dbf75317a29d9861937c4cf9961e5344038209ce232703243214ad',
-                   'src/nanoalphazero/research/muzero/replay.py': '203891929124dcd2f8755b6c5ed077e00a3dd5b5186851b63bcefbf6e16b350c',
-                   'src/nanoalphazero/research/muzero/staging.py': '730a3a58ad2e7fe401ac667e776d5a5cb6b5cb66a1b1212fc218effebdec0ca2',
-                   'src/nanoalphazero/research/muzero/learning.py': '23b740e9e0fb4b2fe5772ceb62d4a24163b7eaed2f709d5142a1ad31a47ede58',
-                   'src/nanoalphazero/research/muzero/checkpoint.py': 'e0d3e8043e3b45fd55791b21eea17578af3c1e1ba8f7f6ccd89bafe8addb2ddf',
-                   'src/nanoalphazero/research/muzero/charts.py': 'eec2ae5660831cee792268e1c76ce43013faec738259306a9a37741b6333ed0d',
-                   'src/nanoalphazero/research/muzero/metrics.py': '0e6175267f629ee32cc22904409be4bbefc7763977ef058e4c563eab40bcf572',
-                   'src/nanoalphazero/research/muzero/inspection.py': 'd3247fe4e13c289c02ac5a53f6e067ed3983906ce01b395c9859926a557bbfb5',
-                   'src/nanoalphazero/research/muzero/decisions.py': 'e8dcbda0f0c16f211f8c4dca52c3c9f0399a168a904935fb8429634552096938',
-                   'src/nanoalphazero/research/muzero/evaluation.py': 'cb91d9c5d8e2d61fe9641372176a56aa0ca59c8b3889c15bc9599d9b1d1dd656',
-                   'src/nanoalphazero/research/muzero/convergence.py': 'c4cf21a6bebdc2297cd2366cda6719ea965cc008cd67249f1320491a44fd18da',
-                   'src/nanoalphazero/research/muzero/cli.py': 'e5962d1ac15ab5de4d826e42fb6d0c630e4ef74235c07b360e808bf1bec88214'}}
 STANDALONE_MOHEX_CONFIG = '# Strong, uncapped defaults matching the historical ~/az Hex validator.\nparam_mohex knowledge_threshold 0\nparam_mohex use_parallel_solver 1\nparam_dfpn threads 4\n\n'
 
 
@@ -280,12 +131,14 @@ def standalone_train_parser():
     parser.add_argument("--hex-eval-engine-config", default="default")
     parser.add_argument("--print-config", action="store_true", help="Print resolved settings and exit without training")
     parser.add_argument("--save", dest="save_checkpoints", action=argparse.BooleanOptionalAction, default=None)
-    for name in ("wandb", "remat-unroll", "remat-blocks"):
+    for name in ("wandb", "remat-unroll", "remat-blocks", "initial-evaluation"):
         parser.add_argument("--" + name, action=argparse.BooleanOptionalAction, default=None)
     for name in ("seed", "cycles", "width", "depth", "unroll", "train-batch-size", "selfplay-batch-size",
-                 "checkpoint-period", "hex-eval-period", "eval-period"):
+                 "checkpoint-period", "hex-eval-period", "eval-period", "roots", "survivors",
+                 "heldout-batch-size", "opening-coverage-streak"):
         parser.add_argument("--" + name, type=int)
     parser.add_argument("--learning-rate", type=float)
+    parser.add_argument("--opening-value-mse-threshold", type=float)
     return parser
 
 
@@ -300,7 +153,9 @@ def standalone_train_settings(args):
             raw.update(tomllib.load(stream))
     for name in ("env", "platform", "network", "save_checkpoints", "wandb", "remat_unroll", "remat_blocks",
                  "seed", "cycles", "width", "depth", "unroll", "train_batch_size", "selfplay_batch_size",
-                 "checkpoint_period", "hex_eval_period", "eval_period", "learning_rate"):
+                 "checkpoint_period", "hex_eval_period", "eval_period", "learning_rate",
+                 "roots", "survivors", "heldout_batch_size", "initial_evaluation",
+                 "opening_coverage_streak", "opening_value_mse_threshold"):
         value = getattr(args, name)
         if value is not None:
             raw[name] = value
@@ -345,12 +200,6 @@ def standalone_bootstrap():
 standalone_bootstrap()
 
 
-def standalone_provenance():
-    """Describe the exported source, even outside Git or inside another repo."""
-    return {"source_snapshot": STANDALONE_SOURCE,
-            "standalone_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
-
-
 def standalone_snapshot(output, manifest):
     import shutil
     source = Path(__file__)
@@ -387,7 +236,6 @@ def standalone_main():
         raise SystemExit(f"Unknown command {command!r}; use train or eval")
 
 
-# Third-party libraries and shared standard-library imports.
 import functools
 from dataclasses import dataclass
 from typing import Callable
@@ -435,17 +283,9 @@ from flax.traverse_util import empty_node
 from safetensors.numpy import save_file
 
 
-# =============================================================================
 # Environment and AlphaZero-compatible training defaults
-# Source: src/nanoalphazero/config.py
-# =============================================================================
 
-"""Built-in training configurations for supported games."""
-
-
-# =============================================================================
 # Configuration
-# =============================================================================
 def get_ttt_config():
     board_size = 3
     game_max_steps = board_size * board_size
@@ -1003,17 +843,9 @@ CONFIG_FACTORIES = {
 }
 
 
-# =============================================================================
 # Shared buffer primitives and packed chess legality
-# Source: src/nanoalphazero/buffers.py
-# =============================================================================
 
-"""Replay/self-play buffers and their stored sample representation."""
-
-
-# =============================================================================
 # Self-play records
-# =============================================================================
 @chex.dataclass(frozen=True)
 class SelfplayOutput:
     col_id: ArrayLike
@@ -1088,9 +920,7 @@ def unpack_bitmask(bitset):
 pack_mask_vmap = jax.vmap(pack_mask)
 unpack_bitmask_vmap = jax.vmap(unpack_bitmask)
 
-# =============================================================================
 # Replay & self-play buffers
-# =============================================================================
 @chex.dataclass(frozen=True)
 class CustomTrajectoryBufferState(TrajectoryBufferState[Experience]):
     num_valid_consumable: jax.Array = 0
@@ -1460,22 +1290,14 @@ def make_selfplay_buffer(config, dummy_selfplay_output, data_sharding=None):
     return buffer, selfplay_buffer_state
 
 
-# =============================================================================
 # Shared KataGo network blocks and AlphaZero reference model
-# Source: src/nanoalphazero/model.py
-# =============================================================================
 
-"""KataGo-style neural-network model definitions."""
-
-
-# =============================================================================
 # Neural network model
 #
 # KataGo's fixup nested-bottleneck architecture is the sole network used by
 # nanoAlphaZero. The trunk is game-agnostic. Go uses KataGo's native board-point
 # plus pass policy head; other games use a generic action-space policy head.
 # MCTS consumes the scalar P(win)-P(loss), while training uses the raw WDL logits.
-# =============================================================================
 _TRUNC_STD_CORRECTION = 0.87962566103423978
 
 _GAINS = {
@@ -2165,15 +1987,8 @@ def init_and_shard_model(config, model, rng, obs, valid_mask, sharding):
     return model_state
 
 
-# =============================================================================
 # Fixed two-rung Gumbel search (unchanged production algorithm)
-# Source: src/nanoalphazero/mcts.py
-# =============================================================================
 
-"""One-round sequential-halving MCTS used by nanoAlphaZero."""
-
-
-# =============================================================================
 # MCTS
 #
 # Adapted from https://github.com/google-deepmind/mctx.
@@ -2193,7 +2008,6 @@ def init_and_shard_model(config, model, rng, obs, valid_mask, sharding):
 #   - mcts_max_m           : max sampled actions at the root
 #   - mcts_use_gumbel      : Gumbel-MuZero vs. regular MuZero
 #   - mcts_variant         : which MCTX policy to dispatch to
-# =============================================================================
 
 
 # Parameters are an arbitrary nested structure of chex.Array.
@@ -2804,20 +2618,9 @@ def make_mcts(config, wenv, model, data_sharding=None):
     return run_mcts
 
 
-# =============================================================================
-
-
-# =============================================================================
 # AlphaZero reference checkpoint format and path encoding
-# Source: src/nanoalphazero/checkpoint.py
-# =============================================================================
 
-"""Safetensors checkpoint paths, metadata, saving, and loading."""
-
-
-# =============================================================================
 # Checkpointing
-# =============================================================================
 def default_ckpt_path(env_name: str) -> str:
     """Default on-disk location for a saved alphazero checkpoint."""
     return os.path.join("artifacts", f"alphazero_{env_name}.safetensors")
@@ -2970,11 +2773,7 @@ def load_checkpoint(path: str):
     return params, model_config
 
 
-# =============================================================================
 # Real environment adapter: actual transitions only
-# Source: src/nanoalphazero/core.py
-# =============================================================================
-
 
 @dataclass
 class WrappedEnv:
@@ -3033,13 +2832,7 @@ def make_env(config):
     )
 
 
-# =============================================================================
 # Opening reference tables: diagnostics only
-# Source: src/nanoalphazero/eval/hex/perfect_play.py
-# =============================================================================
-
-"""Solved first-move outcomes for the supported Hex boards."""
-
 
 P1_WINNING_OPENINGS: dict[int, tuple[int, ...]] = {
     4: (3, 6, 9, 12),
@@ -3097,17 +2890,7 @@ def opening_metrics(board_size: int, records: list[dict]) -> dict[str, int | flo
     }
 
 
-# =============================================================================
 # Optional external MoHex engine management
-# Source: src/nanoalphazero/eval/hex/engine.py
-# =============================================================================
-
-"""Pure-stdlib MoHex GTP process management.
-
-This module intentionally does not import JAX.  Callers can create the engine
-bank before libtpu is initialized.
-"""
-
 
 # The default engine configuration is embedded in this script.
 
@@ -3336,13 +3119,7 @@ class MoHexPool:
         self.close()
 
 
-# =============================================================================
 # Real-game MoHex evaluation
-# Source: src/nanoalphazero/eval/hex/runtime.py
-# =============================================================================
-
-"""Batched Hex model-vs-MoHex match runtime."""
-
 
 def _physical_size(real_size: int, *, sharded: bool) -> int:
     if not sharded:
@@ -3533,13 +3310,7 @@ def print_grid(records: list[dict], board_size: int) -> None:
         print("  " + " ".join(cells[row * board_size + col] for col in range(board_size)))
 
 
-# =============================================================================
 # Periodic MoHex evaluation and raw result logging
-# Source: src/nanoalphazero/eval/hex/training.py
-# =============================================================================
-
-"""Training adapter and local observability for Hex engine evaluations."""
-
 
 SCHEMA_VERSION = 1
 
@@ -3668,11 +3439,7 @@ class HexTrainingEvaluator:
         return training_metrics(summary)
 
 
-# =============================================================================
 # Shared opening enumeration and value diagnostics
-# Source: src/nanoalphazero/training.py
-# =============================================================================
-
 
 def _legal_mask_from_state(env_state, config):
     if config["env_id"] == "chess":
@@ -3891,17 +3658,11 @@ def _run_go_diagnostics(model_ts, wenv, config):
         print("  " + " ".join(f"{values_2d[r, c]:+.2f}" for c in range(boardsize)))
 
 
-# =============================================================================
 # Vector MuZero: representation h, dynamics g, prediction f
-# Source: src/nanoalphazero/research/muzero/model.py
 # h maps each root observation to [batch, width]. g concatenates the latent
 # with a one-hot action and predicts an immediate reward and next latent.
 # f predicts policy logits and side-to-move value. The three towers have
 # separate parameters; their latent interface is trained end to end.
-# =============================================================================
-
-"""Small vector-latent MuZero baseline, with no observation reconstruction."""
-
 
 def scale_gradient(x, scale):
     return scale * x + (1 - scale) * jax.lax.stop_gradient(x)
@@ -3972,13 +3733,7 @@ class MuZero(nn.Module):
         return self.recurrent(latent, action)
 
 
-# =============================================================================
 # Optional activation recomputation to reduce training memory
-# Source: src/nanoalphazero/research/muzero/remat.py
-# =============================================================================
-
-"""Memory adapter composing the production trunk's unchanged building blocks."""
-
 
 class RematerializedTrunk(KataGoTrunk):
     """Recompute each nested block during backward; preserve parameter paths.
@@ -4014,16 +3769,10 @@ class RematerializedTrunk(KataGoTrunk):
         return out, mask, mask_sum
 
 
-# =============================================================================
 # Spatial MuZero: board-shaped latent and action planes
-# Source: src/nanoalphazero/research/muzero/spatial.py
 # The latent is [batch, board_height, board_width, channels]. Its cells
 # are learned features, not reconstructed stones or simulator states.
 # Action planes encode action coordinates/type, never future legality.
-# =============================================================================
-
-"""MuZero with production KataGo trunk/heads and a spatial latent state."""
-
 
 def normalize_spatial(x):
     lo = jnp.min(x, axis=(1, 2, 3), keepdims=True)
@@ -4119,16 +3868,10 @@ class SpatialMuZero(nn.Module):
         return self.recurrent(latent, action)
 
 
-# =============================================================================
 # Latent search: root legality, learned hypothetical transitions
-# Source: src/nanoalphazero/research/muzero/search.py
 # Encode the root once. Both search rungs expand through g and f only.
 # The simulator supplies root legality. Internal nodes use the full action
 # vocabulary. Alternating-player backups are reward - discount * value.
-# =============================================================================
-
-"""Adapters for the unchanged production two-rung search."""
-
 
 @chex.dataclass(frozen=True)
 class ResearchPolicyOutput(PolicyOutput):
@@ -4192,16 +3935,10 @@ def make_search(model, env, config, policy_only=False):
     return search
 
 
-# =============================================================================
 # Contiguous replay, signed returns, absorbing and padded targets
-# Source: src/nanoalphazero/research/muzero/replay.py
 # At unroll index k: policy/value describe s_k; reward describes action
 # a_k taking s_k to s_(k+1). Terminal absorbing targets differ from padding
 # beyond a truncated boundary; masks keep those distinctions in the loss.
-# =============================================================================
-
-"""Episode replay and aligned unrolls, separate from AlphaZero outcome records."""
-
 
 def discounted_returns(rewards, discounts, bootstrap):
     """[B,T] actor rewards; signed discounts map next-player values to actors."""
@@ -4269,17 +4006,7 @@ def sequences(episodes, key, unroll, starts=None):
     return result
 
 
-# =============================================================================
 # Self-play staging -> consume/drain -> sequence replay
-# Source: src/nanoalphazero/research/muzero/staging.py
-# =============================================================================
-
-"""Completed-episode staging using AlphaZero's actual fresh-position consumer.
-
-Collection/backfill remains synchronous: no unresolved outcome enters staging.
-Only consumption selects positions; Flashbax replay stores materialized unrolls.
-"""
-
 
 @chex.dataclass(frozen=True)
 class ConsumptionView:
@@ -4435,18 +4162,12 @@ def make_staging(config):
     return init, add_backfill, consume, drain, replay
 
 
-# =============================================================================
 # Actual self-play and differentiable recurrent training
-# Source: src/nanoalphazero/research/muzero/learning.py
 # The collector may step the real environment; hypothetical search may not.
 # Rewards use the acting player's perspective; signed discounts propagate
 # returns between players. Recurrent gradients are scaled by 0.5, while
 # forward latent values are unchanged. Unroll length is independent of
 # network depth and the fixed two-rung search expansion budget.
-# =============================================================================
-
-"""Self-play episode generation and end-to-end unrolled optimization."""
-
 
 def make_collect(env, model, search, config):
     batch = config["selfplay_batch_size"]
@@ -4610,13 +4331,7 @@ def train_step(model, state, batch, remat=False):
     }
 
 
-# =============================================================================
 # MuZero checkpoints: parameters, optimizer, replay, RNG and metadata
-# Source: src/nanoalphazero/research/muzero/checkpoint.py
-# =============================================================================
-
-"""Versioned MuZero snapshots including optimizer, replay, RNG and full config."""
-
 
 def metadata(path):
     with safe_open(str(path), framework="flax") as reader:
@@ -4673,17 +4388,7 @@ def load_params(path):
     return unflatten_dict(flat), config
 
 
-# =============================================================================
 # Optional W&B charts
-# Source: src/nanoalphazero/research/muzero/charts.py
-# =============================================================================
-
-"""Portable adaptation of az/diagnostics/opening_value_charts.py board helpers.
-
-Preserves AZ's table columns, palette, coordinates, highlights and square cells.
-Plotly serializes numeric chart data; no raster images are generated or uploaded.
-"""
-
 
 OPENING_VALUE_COLUMNS = [
     "game", "boardsize", "action", "row", "col", "value", "ground_truth", "highlight", "label",
@@ -4737,13 +4442,7 @@ def wandb_board_logs(tables):
     return logs
 
 
-# =============================================================================
 # Training and replay metrics
-# Source: src/nanoalphazero/research/muzero/metrics.py
-# =============================================================================
-
-"""AlphaZero metric names with explicit root/sequence and collection semantics."""
-
 
 RENAMES = {
     "loss": "total_loss", "policy_loss": "loss_pi", "value_loss": "loss_v",
@@ -4920,13 +4619,7 @@ def histogram_data(episodes, batch, consumed=None):
     return {name: values for name, values in arrays.items() if len(values)}
 
 
-# =============================================================================
 # Model diagnostics using real observations
-# Source: src/nanoalphazero/research/muzero/inspection.py
-# =============================================================================
-
-"""Compose production value diagnostics with MuZero initial inference."""
-
 
 def opening_head_tables(model, params, env, config, output):
     """Log small numeric tables for dynamic charts, never rendered images."""
@@ -5007,13 +4700,7 @@ def inspect_position_values(model, params, env, config):
     return {}
 
 
-# =============================================================================
 # Optional solver evaluation of actual decisions
-# Source: src/nanoalphazero/research/muzero/decisions.py
-# =============================================================================
-
-"""Evaluation-only exact Hex 4 decisions on varied held-out midgame positions."""
-
 
 def summarize(records):
     winning = [r for r in records if r["root_value"] == 1]
@@ -5124,13 +4811,7 @@ def evaluate_decisions(model, params, env, config, pool, output, positions=256, 
     return result
 
 
-# =============================================================================
 # Held-out predictions and policy/search playing strength
-# Source: src/nanoalphazero/research/muzero/evaluation.py
-# =============================================================================
-
-"""Real-environment matches and held-out unroll diagnostics."""
-
 
 def make_evaluator(model, env, config, reference=None):
     search = make_search(model, env, config)
@@ -5316,17 +4997,12 @@ def _run_evaluation(args, pool):
     print(json.dumps(scores, indent=2))
 
 
-# =============================================================================
 # Optional stopping gate for repeated MoHex opening coverage
-# Source: src/nanoalphazero/research/muzero/convergence.py
-# =============================================================================
-
-"""Host-only stopping gate for repeated, actual MoHex opening evaluations."""
-
 
 class OpeningCoverageGate:
-    def __init__(self, required=0):
+    def __init__(self, required=0, mse_threshold=None):
         self.required = required
+        self.mse_threshold = mse_threshold
         self.streak = 0
 
     def observe(self, metrics):
@@ -5342,33 +5018,32 @@ class OpeningCoverageGate:
             and metrics.get(prefix + "unscored", -1) == 0
             for prefix in prefixes
         )
+        if self.mse_threshold is not None:
+            mse = metrics.get("hex_perf/mse_vs_perfect", float("nan"))
+            success = success and 0 <= mse <= self.mse_threshold
         self.streak = self.streak + 1 if success else 0
         return self.streak >= self.required
 
 
-# =============================================================================
 # Four-device training loop and command line
-# Source: src/nanoalphazero/research/muzero/cli.py
-# =============================================================================
-
-"""Installed MuZero research training and smoke entry point."""
-
 
 def resolve(raw):
     name = raw.get("env", "hex4")
     base = CONFIG_FACTORIES[name]()
     config = dict(env=name, env_id=base["env_id"], width=128, depth=2, unroll=5,
                   discount=1.0, max_steps=base["game_max_steps"],
-                  roots=base["mcts_num_root_considered"], survivors=base["mcts_num_survivors"],
+                  roots=min(8, base["mcts_num_root_considered"]), survivors=4,
                   exploration_moves=base["num_exploratory_moves"],
                   selfplay_batch_size=32, train_batch_size=32, heldout_batch_size=0, replay_batches=8,
                   updates_per_cycle=4, cycles=2, seed=0, learning_rate=1e-3,
                   weight_decay=1e-4, devices=4, platform="tpu", wandb=False,
-                  save_checkpoints=False, checkpoint_period=0, eval_period=10, defaults="alphazero",
+                  save_checkpoints=False, checkpoint_period=0, eval_period=10,
+                  initial_evaluation=False, defaults="alphazero",
                   warmup_updates=0, decay_kernels_only=False,
                   exploration_mode="fixed", root_temperature=1.0, remat_unroll=False, remat_blocks=False,
                   value_scale=1.0, maxvisit_init=50., rescale_values=False,
-                  hex_eval_period=0, opening_coverage_streak=0, diagnostic_period=base["diagnostic_period"],
+                  hex_eval_period=0, opening_coverage_streak=0, opening_value_mse_threshold=None,
+                  diagnostic_period=base["diagnostic_period"],
                   network="vector", activation=base.get("katago_activation", "mish"),
                   use_rvgl=base.get("katago_use_rvgl", True), decision_eval_positions=0,
                   data_pipeline="episodes", staging_batches=8,
@@ -5401,6 +5076,12 @@ def resolve(raw):
     if unknown:
         raise ValueError(f"Unknown configuration keys: {sorted(unknown)}")
     config.update(raw)
+    # User-requested research resource ceilings. Historical run snapshots and
+    # checkpoint architectures are preserved; this applies to newly resolved runs.
+    for field, maximum in (("roots", 8), ("survivors", 4), ("width", 256), ("depth", 10),
+                           ("selfplay_batch_size", 4096), ("train_batch_size", 4096),
+                           ("heldout_batch_size", 4096)):
+        config[field] = min(config[field], maximum)
     # Diagnostics have independent RNGs and never enter training replay.
     # Zero preserves the historical full self-play batch diagnostic size.
     if config["heldout_batch_size"] == 0:
@@ -5421,6 +5102,8 @@ def resolve(raw):
         raise ValueError("save_checkpoints must be boolean and checkpoint_period nonnegative")
     if not isinstance(config["remat_unroll"], bool):
         raise ValueError("remat_unroll must be boolean")
+    if not isinstance(config["initial_evaluation"], bool):
+        raise ValueError("initial_evaluation must be boolean")
     if not isinstance(config["remat_blocks"], bool):
         raise ValueError("remat_blocks must be boolean")
     if (type(config["opening_coverage_streak"]) is not int
@@ -5430,6 +5113,12 @@ def resolve(raw):
         not config["env"].startswith("hex") or config["hex_eval_period"] <= 0
     ):
         raise ValueError("Opening coverage stopping requires periodic Hex evaluation")
+    threshold = config["opening_value_mse_threshold"]
+    if threshold is not None:
+        import math
+        if (type(threshold) not in (int, float) or not math.isfinite(threshold)
+                or threshold < 0 or not config["opening_coverage_streak"]):
+            raise ValueError("Opening MSE threshold must be finite, nonnegative and require coverage stopping")
     if config["exploration_mode"] not in ("fixed", "random_switch"):
         raise ValueError("Unknown exploration mode")
     if config["network"] not in ("vector", "spatial"):
@@ -5515,7 +5204,7 @@ def _run(args, config, engine_pool):
     (args.output / "config.json").write_text(json.dumps(config, indent=2) + "\n")
     manifest = {"command": __import__("sys").argv, "devices": [str(d) for d in devices],
                 "jax": jax.__version__, "started": datetime.now(timezone.utc).isoformat(),
-                **standalone_provenance()}
+                "standalone": True}
     if engine_pool is not None:
         manifest["mohex"] = {"executable": str(engine_pool.executable),
                               "config": engine_pool.config.read_text(),
@@ -5615,9 +5304,13 @@ def _run(args, config, engine_pool):
         np.savez_compressed(args.output / "heldout-initial-selfplay.npz", **jax.device_get(heldout))
         initial_metrics = heldout_metrics(model, state.params, heldout, jax.random.PRNGKey(12345))
         (args.output / "heldout-initial-metrics.json").write_text(json.dumps(initial_metrics, indent=2) + "\n")
-        baseline = evaluator(state.params, jax.random.PRNGKey(config["seed"] + 2000000),
-                             args.output / f"eval-{start_cycle:06d}")
-        print(json.dumps({"initial_evaluation": baseline}), flush=True)
+        if config["initial_evaluation"]:
+            print("Starting initial playing-strength evaluation", flush=True)
+            baseline = evaluator(state.params, jax.random.PRNGKey(config["seed"] + 2000000),
+                                 args.output / f"eval-{start_cycle:06d}")
+            print(json.dumps({"initial_evaluation": baseline}), flush=True)
+        else:
+            print("Initial playing-strength evaluation disabled; proceeding to replay warmup", flush=True)
 
     def collect_and_insert(params, rng, staged, replayed):
         collection_started = time.monotonic()
@@ -5653,6 +5346,7 @@ def _run(args, config, engine_pool):
     warmup_start = time.monotonic()
     if staging_state is not None and not args.resume:
         for warmup in range(config["replay_warmup_cycles"]):
+            print(f"Replay warmup {warmup + 1}/{config['replay_warmup_cycles']}: collecting and inserting", flush=True)
             warmup_cycle_start = time.monotonic()
             episodes, key, staging_state, replay_state, data_metrics = collect_and_insert(
                 state.params, key, staging_state, replay_state)
@@ -5662,8 +5356,7 @@ def _run(args, config, engine_pool):
                                   "runner_state/n_updates": int(state.step), **data_metrics})
             with (args.output / "warmup.jsonl").open("a") as stream:
                 stream.write(json.dumps(record) + "\n")
-            if warmup == 0 or (warmup + 1) % 10 == 0:
-                print(json.dumps(record), flush=True)
+            print(json.dumps(record), flush=True)
             if run:
                 run.log(record, step=warmup)
         manifest["replay_warmup_cycles"] = config["replay_warmup_cycles"]
@@ -5671,16 +5364,20 @@ def _run(args, config, engine_pool):
         run.summary["stats/warmup_duration"] = time.monotonic() - warmup_start
     learning_started = time.monotonic()
     stop_requested = False
-    coverage_gate = OpeningCoverageGate(config["opening_coverage_streak"])
+    coverage_gate = OpeningCoverageGate(config["opening_coverage_streak"],
+                                       config["opening_value_mse_threshold"])
     coverage_reached = False
     cycle = start_cycle
     for cycle in range(start_cycle + 1, config["cycles"] + 1):
+        print(f"Cycle {cycle}: collecting self-play", flush=True)
         cycle_start = time.monotonic()
         episodes, key, staging_state, replay_state, data_metrics = collect_and_insert(
             state.params, key, staging_state, replay_state)
         if not bool(replay.can_sample(replay_state)):
             raise RuntimeError("Replay has no complete consumable batch; increase collection/warmup")
         optimizer_started = time.monotonic()
+        print(f"Cycle {cycle}: {config['updates_per_cycle']} optimizer updates"
+              + (" (first call includes compilation)" if cycle == start_cycle + 1 else ""), flush=True)
         for _ in range(config["updates_per_cycle"]):
             key, rk, bk = jax.random.split(key, 3)
             sampled = sample(replay_state, rk)
@@ -5728,7 +5425,9 @@ def _run(args, config, engine_pool):
                             "training/spbuf_num_consumables": int(jnp.sum(staging_state.fresh)),
                             "training/n_slices_drained": data_metrics["drain/n_slices"]})
         diagnostic_tables = {}
-        if cycle == 1 or final_cycle or (config["diagnostic_period"] and cycle % config["diagnostic_period"] == 0):
+        mse_gate_due = (config["opening_value_mse_threshold"] is not None
+                        and cycle % config["hex_eval_period"] == 0)
+        if cycle == 1 or final_cycle or mse_gate_due or (config["diagnostic_period"] and cycle % config["diagnostic_period"] == 0):
             metrics.update(inspect_position_values(model, state.params, env, inspection_config))
             if config["env"].startswith("hex"):
                 diagnostic_tables, diagnostic_scalars = opening_head_tables(
@@ -5806,6 +5505,78 @@ def _run(args, config, engine_pool):
     if run:
         run.summary["stats/total_learn_duration"] = time.monotonic() - learning_started
         run.finish()
+
+
+# MIT License
+#
+# Copyright (c) 2026 Ted Wong
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+#
+# --------------------------------------------------------------------------------
+#
+# Code in `src/nanoalphazero/mcts.py` is adapted (with modifications) from
+# https://github.com/google-deepmind/mctx, used under the Apache License,
+# Version 2.0. The adapted code carries the following notice from the original
+# source files:
+#
+#     Copyright 2021 DeepMind Technologies Limited. All Rights Reserved.
+#
+#     Licensed under the Apache License, Version 2.0 (the "License");
+#     you may not use this file except in compliance with the License.
+#     You may obtain a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+#     Unless required by applicable law or agreed to in writing, software
+#     distributed under the License is distributed on an "AS IS" BASIS,
+#     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#     See the License for the specific language governing permissions and
+#     limitations under the License.
+#
+# --------------------------------------------------------------------------------
+#
+# The neural-network architecture in `src/nanoalphazero/model.py` is adapted (with
+# modifications) from KataGo:
+# https://github.com/lightvector/KataGo
+#
+# The adapted code is used under the following KataGo MIT license:
+#
+# ----------------------------------------
+#
+# Copyright 2025 David J Wu ("lightvector") and/or other authors of the content in this repository.
+# (See 'CONTRIBUTORS' file for a list of authors as well as other indirect contributors).
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+# associated documentation files (the "Software"), to deal in the Software without restriction,
+# including without limitation the rights to use, copy, modify, merge, publish, distribute,
+# sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all copies or
+# substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+# NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+# DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 if __name__ == "__main__":

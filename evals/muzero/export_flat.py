@@ -6,12 +6,10 @@ assumptions change. The package remains authoritative.
 """
 
 import ast
-import hashlib
 import json
 from pathlib import Path
 import pprint
 import re
-import subprocess
 import tomllib
 
 
@@ -106,7 +104,12 @@ def section_source(module, selected):
         ):
             for index in range(node.lineno - 1, node.end_lineno):
                 lines[index] = ""
+    tree = ast.parse(source)
+    if tree.body and isinstance(tree.body[0], ast.Expr) and isinstance(tree.body[0].value, ast.Constant) and isinstance(tree.body[0].value.value, str):
+        for index in range(tree.body[0].lineno - 1, tree.body[0].end_lineno):
+            lines[index] = ""
     source = "".join(lines)
+    source = re.sub(r"^# ={5,}.*\n", "", source, flags=re.MULTILINE)
     if module == "eval.hex.engine":
         source = replace_once(source, 'DEFAULT_CONFIG = Path(__file__).with_name("mohex.cfg")',
                               '# The default engine configuration is embedded in this script.')
@@ -137,7 +140,7 @@ def section_source(module, selected):
         source = replace_once(source,
             '"git_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),\n'
             '                "git_status": subprocess.check_output(["git", "status", "--short"], text=True)',
-            '**standalone_provenance()')
+            '"standalone": True')
         start = source.index('    source_root = Path(__file__).parent')
         end = source.index('    model = build_model(config)', start)
         source = source[:start] + '    standalone_snapshot(args.output, manifest)\n' + source[end:]
@@ -146,7 +149,6 @@ def section_source(module, selected):
 
 def main():
     sections = []
-    hashes = {}
     definitions = {}
     imports = {}
     for module, selected, title in SECTIONS:
@@ -165,10 +167,8 @@ def main():
                     raise ValueError(f"Global collision: {node.name}: {definitions[node.name]} / {module}")
                 definitions[node.name] = module
         source = "".join(lines)
-        relative = "src/nanoalphazero/" + module.replace(".", "/") + ".py"
-        hashes[relative] = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
         notes = "".join(f"# {line}\n" for line in SECTION_NOTES.get(module, ()))
-        sections.append(f"\n\n# {'=' * 77}\n# {title}\n# Source: {relative}\n{notes}# {'=' * 77}\n\n{source.rstrip()}\n")
+        sections.append(f"\n\n# {title}\n{notes}\n{source.strip()}\n")
     config = tomllib.loads((ROOT / "pyproject.toml").read_text())
     metadata = ['# /// script', '# requires-python = ">=3.11"', '# dependencies = [']
     metadata.extend(f"#     {json.dumps(dep)}," for dep in config["project"]["dependencies"])
@@ -182,18 +182,16 @@ def main():
     # Exercise the real staging/drain path in the built-in CPU smoke as well.
     presets["smoke-cpu"].update(data_pipeline="staged", staging_batches=2,
                                consume_size=8, replay_positions=128, replay_warmup_cycles=1)
-    provenance = dict(git_commit=subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
-                      source_sha256=hashes)
     prelude = (ROOT / "evals/muzero/standalone_prelude.txt").read_text()
     prelude = prelude.replace("__EMBEDDED_PRESETS__", pprint.pformat(presets, width=100, sort_dicts=False))
-    prelude = prelude.replace("__EMBEDDED_PROVENANCE__", pprint.pformat(provenance, width=110, sort_dicts=False))
     prelude = prelude.replace("__EMBEDDED_MOHEX_CONFIG__", repr((SRC / "eval/hex/mohex.cfg").read_text()))
     prelude_imports = {ast.unparse(node) for node in ast.parse(prelude).body
                        if isinstance(node, (ast.Import, ast.ImportFrom))}
     imports = [line for line in imports if line not in prelude_imports]
     license_notice = "\n".join(("# " + line).rstrip() for line in (ROOT / "LICENSE").read_text().splitlines())
-    output = ("\n".join(metadata) + "\n\n" + license_notice + "\n\n" + prelude + "\n\n# Third-party libraries and shared standard-library imports.\n"
+    output = ("\n".join(metadata) + "\n\n" + prelude + "\n\n"
               + "\n".join(imports) + "\n" + "".join(sections))
+    output += "\n\n" + license_notice + "\n"
     output += '\n\nif __name__ == "__main__":\n    standalone_main()\n'
     output = re.sub(r"\n{4,}", "\n\n\n", output)
     compile(output, "muzero.py", "exec")
