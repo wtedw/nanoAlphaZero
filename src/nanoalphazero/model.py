@@ -706,3 +706,229 @@ def init_and_shard_model(config, model, rng, obs, valid_mask, sharding):
         model_state = sharded_init(rng, obs, valid_mask)
     return model_state
 
+
+# MuZero components
+# Kept separate from the AlphaZero definitions above during migration.
+
+"""Small vector-latent MuZero baseline, with no observation reconstruction."""
+
+
+
+def scale_gradient(x, scale):
+    return scale * x + (1 - scale) * jax.lax.stop_gradient(x)
+
+
+def normalize_muzero_latent(x):
+    lo = jnp.min(x, axis=-1, keepdims=True)
+    span = jnp.max(x, axis=-1, keepdims=True) - lo
+    return (x - lo) / jnp.maximum(span, 1e-5)
+
+
+
+
+class MuZeroTower(nn.Module):
+    width: int
+    depth: int
+
+    @nn.compact
+    def __call__(self, x):
+        x = nn.relu(nn.Dense(self.width)(x))
+        for _ in range(self.depth):
+            residual = nn.relu(nn.Dense(self.width)(x))
+            x = nn.relu(x + nn.Dense(self.width)(residual))
+        return x
+
+
+class MuZero(nn.Module):
+    num_actions: int
+    width: int = 128
+    depth: int = 2
+
+    def setup(self):
+        self.representation = MuZeroTower(self.width, self.depth)
+        self.dynamics = MuZeroTower(self.width, self.depth)
+        self.prediction = MuZeroTower(self.width, self.depth)
+        self.policy = nn.Dense(self.num_actions)
+        self.value = nn.Dense(1)
+        self.reward = nn.Dense(1)
+
+    def predict(self, latent):
+        features = self.prediction(latent)
+        return self.policy(features), jnp.tanh(self.value(features)[..., 0])
+
+    def initial(self, observation):
+        flat = observation.astype(jnp.float32).reshape((observation.shape[0], -1))
+        latent = normalize_muzero_latent(self.representation(flat))
+        logits, value = self.predict(latent)
+        return latent, logits, value
+
+    def recurrent(self, latent, action):
+        action = jax.nn.one_hot(action, self.num_actions)
+        features = self.dynamics(jnp.concatenate([latent, action], axis=-1))
+        reward = jnp.tanh(self.reward(features)[..., 0])
+        latent = normalize_muzero_latent(features)
+        logits, value = self.predict(latent)
+        return latent, reward, logits, value
+
+    def __call__(self, observation, action):
+        latent, _, _ = self.initial(observation)
+        return self.recurrent(latent, action)
+
+"""Memory adapter composing the production trunk's unchanged building blocks."""
+
+
+
+
+
+class RematerializedTrunk(KataGoTrunk):
+    """Recompute each nested block during backward; preserve parameter paths.
+
+    This mirrors only KataGoTrunk's composition because its block factory is
+    not configurable. All layers, initializers and blocks remain production
+    implementations. Explicit block names retain checkpoint/init equivalence.
+    """
+
+    @nn.compact
+    def __call__(self, input_spatial, input_global=None, mask=None):
+        input_spatial = input_spatial.astype(jnp.float32)
+        if mask is None:
+            mask = jnp.ones_like(input_spatial[..., :1])
+        mask_sum = jnp.sum(mask, axis=(1, 2))
+        out = nn.Conv(self.c_trunk, (3, 3), use_bias=False,
+                      kernel_init=kata_init(0.8, self.activation))(input_spatial * mask)
+        if input_global is not None:
+            out = out + nn.Dense(self.c_trunk, use_bias=False,
+                                 kernel_init=kata_init(0.6, self.activation))(
+                                     input_global.astype(jnp.float32))[:, None, None, :]
+        block = nn.remat(NestedBottleneckResBlock)
+        fixup_scale = 1.0 / math.sqrt(len(self.block_gpool))
+        for index, use_gpool in enumerate(self.block_gpool):
+            out = out + block(
+                self.c_trunk, self.c_mid, self.internal_length,
+                fixup_scale, self.activation,
+                c_gpool=self.c_gpool if use_gpool else None,
+                use_rvgl=self.use_rvgl,
+                name=f"NestedBottleneckResBlock_{index}",
+            )(out, mask, mask_sum)
+        out = _ACTS[self.activation](NormMask()(out, mask))
+        return out, mask, mask_sum
+
+"""MuZero with production KataGo trunk/heads and a spatial latent state."""
+
+
+
+
+def normalize_spatial(x):
+    lo = jnp.min(x, axis=(1, 2, 3), keepdims=True)
+    span = jnp.max(x, axis=(1, 2, 3), keepdims=True) - lo
+    return (x - lo) / jnp.maximum(span, 1e-5)
+
+
+def action_planes(action, height, width, num_actions, env_id):
+    """Encode the action definition, without a board or legality oracle."""
+    batch = action.shape[0]
+    if env_id == "connect_four":
+        return jnp.broadcast_to(jax.nn.one_hot(action, width)[:, None, :, None],
+                                (batch, height, width, 1))
+    if env_id == "chess":
+        planes = jax.nn.one_hot(action, num_actions).reshape(batch, height, width, 73)
+        # Inverse of production ChessPolicyHead's final coordinate rotation.
+        return jnp.rot90(planes, k=1, axes=(1, 2))
+    board = jax.nn.one_hot(action, height * width).reshape(batch, height, width, 1)
+    if env_id.startswith("go_"):
+        passing = jnp.broadcast_to((action == height * width)[:, None, None, None], board.shape)
+        return jnp.concatenate([board, passing.astype(board.dtype)], -1)
+    if num_actions != height * width:
+        raise ValueError("Unknown spatial action encoding")
+    return board
+
+
+class MuZeroPrediction(nn.Module):
+    num_actions: int
+    env_id: str
+    width: int
+    depth: int
+    activation: str
+
+    @nn.compact
+    def __call__(self, latent, return_wdl=False):
+        cfg = resolve_preset(f"b{self.depth}c{self.width}nbt")
+        mask = jnp.ones_like(latent[..., :1])
+        mask_sum = jnp.sum(mask, axis=(1, 2))
+        if self.env_id.startswith("go_"):
+            head = GoPolicyHead(cfg["c_p1"], cfg["c_g1"], self.activation)
+        elif self.env_id == "chess":
+            head = ChessPolicyHead(cfg["c_p1"], cfg["c_g1"], self.activation)
+        else:
+            head = GenericPolicyHead(self.num_actions, cfg["c_p1"], self.activation)
+        logits = head(latent, mask, mask_sum)
+        value_logits = ValueHead(cfg["c_v1"], cfg["c_v2"], self.activation)(latent, mask, mask_sum)
+        if return_wdl:
+            return logits, value_from_logits(value_logits), jax.nn.softmax(value_logits, -1)
+        return logits, value_from_logits(value_logits)
+
+
+class SpatialMuZero(nn.Module):
+    num_actions: int
+    env_id: str
+    width: int
+    depth: int
+    activation: str = "mish"
+    use_rvgl: bool = True
+    remat_blocks: bool = False
+
+    def setup(self):
+        cfg = resolve_preset(f"b{self.depth}c{self.width}nbt")
+        trunk = {k: v for k, v in cfg.items() if k in (
+            "c_trunk", "c_mid", "c_gpool", "block_gpool", "internal_length")}
+        trunk_type = RematerializedTrunk if self.remat_blocks else KataGoTrunk
+        self.representation = trunk_type(**trunk, activation=self.activation, use_rvgl=self.use_rvgl)
+        self.dynamics = trunk_type(**trunk, activation=self.activation, use_rvgl=self.use_rvgl)
+        self.prediction = MuZeroPrediction(self.num_actions, self.env_id, self.width, self.depth, self.activation)
+        self.reward = ValueHead(cfg["c_v1"], cfg["c_v2"], self.activation)
+
+    def initial(self, observation):
+        latent, _, _ = self.representation(observation)
+        latent = normalize_spatial(latent)
+        logits, value = self.prediction(latent)
+        return latent, logits, value
+
+    def recurrent(self, latent, action):
+        planes = action_planes(action, latent.shape[1], latent.shape[2], self.num_actions, self.env_id)
+        features, mask, mask_sum = self.dynamics(jnp.concatenate([latent, planes], -1))
+        reward = value_from_logits(self.reward(features, mask, mask_sum))
+        latent = normalize_spatial(features)
+        logits, value = self.prediction(latent)
+        return latent, reward, logits, value
+
+    def initial_with_wdl(self, observation):
+        latent, _, _ = self.representation(observation)
+        latent = normalize_spatial(latent)
+        logits, value, probabilities = self.prediction(latent, return_wdl=True)
+        return latent, logits, value, probabilities
+
+    def __call__(self, observation, action):
+        latent, _, _ = self.initial(observation)
+        return self.recurrent(latent, action)
+
+def make_muzero_model(config, rng, sharding=None):
+    """Build h/g/f using the established game/model configuration names."""
+    network = config.get("muzero_network", "spatial")
+    if network == "vector":
+        model = MuZero(config["game_num_actions"], config["conv_width"], config["conv_depth"])
+    elif network == "spatial":
+        model = SpatialMuZero(
+            config["game_num_actions"], config["env_id"],
+            config["conv_width"], config["conv_depth"],
+            config.get("katago_activation", "mish"), config.get("katago_use_rvgl", True),
+            remat_blocks=config.get("muzero_remat_blocks", False),
+        )
+    else:
+        raise ValueError(f"Unknown MuZero network: {network}")
+    variables = model.init(
+        rng, jnp.zeros((1, *config["game_obs_shape"])),
+        jnp.zeros((1,), dtype=jnp.int32),
+    )
+    if sharding is not None:
+        variables = jax.device_put(variables, sharding)
+    return model, variables

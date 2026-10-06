@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.fixture(scope="module")
 def flat():
-    spec = importlib.util.spec_from_file_location("flat_muzero_test", ROOT / "muzero.py")
+    spec = importlib.util.spec_from_file_location("flat_muzero_test", ROOT / "muzero-singlefile.py")
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
@@ -40,7 +40,7 @@ def assert_tree_equal(left, right):
 
 
 def test_no_package_imports_or_embedded_module_loader():
-    tree = ast.parse((ROOT / "muzero.py").read_text())
+    tree = ast.parse((ROOT / "muzero-singlefile.py").read_text())
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             assert not (node.module or "").startswith("nanoalphazero")
@@ -123,8 +123,8 @@ def test_model_search_loss_and_gradients_match_package(flat, network):
 
 @pytest.mark.parametrize("network,env", [("vector", "ttt"), ("spatial", "hex4")])
 def test_copied_script_trains_and_checkpoint_loads_without_repo(tmp_path, flat, network, env):
-    copied = tmp_path / "muzero.py"
-    copied.write_bytes((ROOT / "muzero.py").read_bytes())
+    copied = tmp_path / "muzero-singlefile.py"
+    copied.write_bytes((ROOT / "muzero-singlefile.py").read_bytes())
     extra = ["--remat-blocks", "--remat-unroll"] if network == "spatial" else []
     # Block even accidental lazy package imports; this also runs outside Git.
     runner = '''import runpy, sys

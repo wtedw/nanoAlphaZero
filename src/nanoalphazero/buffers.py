@@ -465,3 +465,187 @@ def make_selfplay_buffer(config, dummy_selfplay_output, data_sharding=None):
 
     return buffer, selfplay_buffer_state
 
+
+# MuZero components
+
+@chex.dataclass(frozen=True)
+class MuZeroSelfplayOutput(SelfplayOutput):
+    transition_reward: Optional[ArrayLike] = None
+    discount: Optional[ArrayLike] = None
+
+
+@chex.dataclass(frozen=True)
+class MuZeroTrainingSample:
+    observation: ArrayLike
+    action: ArrayLike
+    action_weights: ArrayLike
+    reward: ArrayLike
+    transition_reward: ArrayLike
+    policy_mask: ArrayLike
+    value_mask: ArrayLike
+    reward_mask: ArrayLike
+
+
+@chex.dataclass(frozen=True)
+class MuZeroSelfplayBufferState(CustomTrajectoryBufferState):
+    # Sticky errors stop the host before any invalid data can train the model.
+    overwritten_count: ArrayLike = 0
+    missing_count: ArrayLike = 0
+    truncated_count: ArrayLike = 0
+
+
+def get_dummy_muzero_selfplay_output(config):
+    original = get_dummy_selfplay_output(config)
+    return MuZeroSelfplayOutput(
+        **vars(original), transition_reward=jnp.float32(0), discount=jnp.float32(0)
+    )
+
+
+def get_dummy_muzero_training_sample(config):
+    k = config["muzero_unroll_steps"]
+    return MuZeroTrainingSample(
+        observation=jnp.zeros(config["game_obs_shape"], jnp.float32),
+        action=jnp.zeros((k,), jnp.int32),
+        action_weights=jnp.zeros((k + 1, config["game_num_actions"]), jnp.float32),
+        reward=jnp.zeros((k + 1,), jnp.float32),
+        transition_reward=jnp.zeros((k,), jnp.float32),
+        policy_mask=jnp.zeros((k + 1,), bool),
+        value_mask=jnp.zeros((k + 1,), bool),
+        reward_mask=jnp.zeros((k,), bool),
+    )
+
+
+def gather_muzero_training_samples(experience, starts, unroll_steps):
+    """Gather ordered records, never extending a sequence into another game.
+
+    Starts come from AlphaZero consume, which adds a singleton time axis.
+    Return both samples and a count of missing/overwritten real transitions.
+    """
+    starts = jax.tree.map(lambda x: x[:, 0], starts)
+    capacity = experience.action.shape[1]
+    lanes = jnp.maximum(starts.row_id.astype(jnp.int32) - 1, 0)
+    offsets = jnp.arange(unroll_steps + 1)
+    indices = (starts.global_step_id[:, None] % capacity + offsets) % capacity
+    sequence = jax.tree.map(lambda x: x[lanes[:, None], indices], experience)
+    valid = starts.is_valid_sample
+    remaining = starts.ep_termination_step - starts.ep_step
+    real = valid[:, None] & (offsets <= remaining[:, None])
+    matches = (
+        (sequence.global_step_id == starts.global_step_id[:, None] + offsets)
+        & (sequence.game_id == starts.game_id[:, None])
+        & (sequence.ep_step == starts.ep_step[:, None] + offsets)
+        & (sequence.is_pending_reward_i8 == 0)
+        & sequence.is_from_selfplay
+    )
+    missing = jnp.sum(real & ~matches)
+    complete = valid & jnp.all(~real | matches, axis=1)
+    real = real & complete[:, None]
+    observation = starts.observation
+    if observation is None:
+        observation = combine_observation_vmap(starts.board_bool, starts.board_float)
+    # Terminal tails train absorbing zero rewards/values, with no policy target.
+    random_actions = jax.random.randint(
+        jax.random.key(jnp.max(starts.global_step_id)),
+        (lanes.shape[0], unroll_steps), 0, experience.action_weights.shape[-1],
+    )
+    sample = MuZeroTrainingSample(
+        observation=observation.astype(jnp.float32),
+        action=jnp.where(real[:, :-1], sequence.action[:, :-1], random_actions),
+        action_weights=jnp.where(real[..., None], sequence.action_weights, 0),
+        reward=jnp.where(real, sequence.reward, 0),
+        transition_reward=jnp.where(real[:, :-1], sequence.transition_reward[:, :-1], 0),
+        policy_mask=real,
+        value_mask=jnp.broadcast_to(complete[:, None], real.shape),
+        reward_mask=jnp.broadcast_to(complete[:, None], real[:, :-1].shape),
+    )
+    return sample, missing
+
+
+def make_muzero_selfplay_buffer(config, dummy_selfplay_output, data_sharding=None):
+    """Persistent transitions, completed returns, and AlphaZero consume selection.
+
+    Keep records after consuming a start: overlapping unrolls still use them.
+    Storage is chronological per lane; freshness applies only to sample starts.
+    """
+    original, initial = make_selfplay_buffer(config, dummy_selfplay_output, data_sharding)
+    initial = MuZeroSelfplayBufferState(
+        **vars(initial), overwritten_count=jnp.int32(0),
+        missing_count=jnp.int32(0), truncated_count=jnp.int32(0),
+    )
+    capacity = config["selfplay_buffer_max_len"]
+    k = config["muzero_unroll_steps"]
+
+    def add_backfill(state, output, env_state_terminated, env_state_rewards):
+        old = state.experience
+        index = state.current_index
+        # An old transition may still be needed by a fresh predecessor.
+        predecessors = (index - jnp.arange(k + 1)) % capacity
+        dependent = old.is_valid_sample[:, predecessors] & (
+            old.global_step_id[:, predecessors] + jnp.arange(k + 1)
+            == old.global_step_id[:, index, None]
+        ) & (old.game_id[:, predecessors] == old.game_id[:, index, None])
+        protected = old.is_from_selfplay[:, index] & (
+            (old.is_pending_reward_i8[:, index] != 0) | jnp.any(dependent, axis=1)
+        )
+        updated = original.add(state, output)
+        exp = updated.experience
+        pending = exp.is_from_selfplay & (exp.is_pending_reward_i8 != 0)
+        finished = output.just_terminated[:, 0]
+        completed = pending & finished[:, None]
+        # Detect loss of an episode prefix, independently of overwrite checks.
+        missing_prefix = finished & (jnp.sum(pending, axis=1) != output.ep_step[:, 0] + 1)
+
+        def finish_returns(exp):
+            # Read oldest -> newest across ring wrap, then scan backwards.
+            order = (updated.current_index + jnp.arange(capacity)) % capacity
+            rewards = exp.transition_reward[:, order].T
+            discounts = exp.discount[:, order].T
+
+            def backup(value, row):
+                reward, discount = row
+                value = reward + discount * value
+                return value, value
+
+            _, returns = jax.lax.scan(
+                backup, jnp.zeros(rewards.shape[1], jnp.float32),
+                (rewards, discounts), reverse=True,
+            )
+            returns = jnp.zeros_like(exp.reward).at[:, order].set(returns.T)
+            fresh = (exp.is_fresh_i8 != 0) | (completed & ~exp.is_exploration)
+            return exp.replace(
+                reward=jnp.where(completed, returns, exp.reward),
+                is_pending_reward_i8=jnp.where(completed, 0, exp.is_pending_reward_i8).astype(jnp.int8),
+                is_fresh_i8=fresh.astype(jnp.int8),
+                is_valid_sample=fresh,
+                game_id=jnp.where(completed, output.game_id, exp.game_id),
+                ep_termination_step=jnp.where(completed, output.ep_termination_step, exp.ep_termination_step),
+            )
+
+        exp = jax.lax.cond(jnp.any(finished), finish_returns, lambda x: x, exp)
+        updated = updated.replace(
+            experience=exp, num_valid_consumable=jnp.sum(exp.is_valid_sample),
+            overwritten_count=state.overwritten_count + jnp.sum(protected),
+            missing_count=state.missing_count + jnp.sum(missing_prefix),
+        )
+        return updated, ({"selfplay_buffer/overwritten_count": updated.overwritten_count}, {})
+
+    def consume(state):
+        after, starts, metrics = original.consume(state)
+        # original.consume donates its input; read the returned storage, whose
+        # records are intact (only freshness/eligibility changed).
+        samples, missing = gather_muzero_training_samples(after.experience, starts, k)
+        after = after.replace(missing_count=after.missing_count + missing)
+        return after, jax.tree.map(lambda x: x[:, None], samples), metrics
+
+    def init(example):
+        empty = original.init(example)
+        return MuZeroSelfplayBufferState(
+            **vars(empty), num_valid_consumable=jnp.int32(0),
+            overwritten_count=jnp.int32(0), missing_count=jnp.int32(0),
+            truncated_count=jnp.int32(0),
+        )
+
+    return Buffer(
+        init=init, add=original.add, sample=original.sample,
+        can_sample=original.can_sample, add_backfill=add_backfill, consume=consume,
+    ), initial

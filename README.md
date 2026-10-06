@@ -53,18 +53,36 @@ cd nanoAlphaZero
 uv run train --env ttt
 ```
 
+## MuZero components
+
+[muzero.py](muzero.py) assembles the package components and exposes its
+self-play, buffers, search, learner, and complete runner state. Its cycle is
+visible in the file: advance ongoing games, consume fresh starts into K-step
+replay samples, then train. AlphaZero's existing implementation is unchanged.
+
+```bash
+uv run python muzero.py --help
+uv run python muzero.py --env hex4 --platform tpu --save artifacts/muzero-hex4.safetensors
+```
+
+This is a new, unvalidated training path. Runtime verification is deferred to
+the TPU environment; it has not been run on the development MacBook. See
+[docs/muzero-components.md](docs/muzero-components.md) for buffer contracts and
+the validation handoff. The existing `muzero-train` command still runs the
+historical research implementation.
+
 ## Standalone MuZero research
 
-The research branch also includes [muzero.py](muzero.py), a readable single-file
+The research branch also includes [muzero-singlefile.py](muzero-singlefile.py), a readable single-file
 MuZero implementation. Copy the file and run it with `uv`; no repository package
 installation is required. Start with the four-device CPU smoke preset:
 
 ```bash
-uv run muzero.py train --preset smoke-cpu
+uv run muzero-singlefile.py train --preset smoke-cpu
 ```
 
-All running instructions and defaults live in [muzero.py](muzero.py), also shown
-by `uv run muzero.py --help`. No TOML is required. This experimental
+All running instructions and defaults live in [muzero-singlefile.py](muzero-singlefile.py), also shown
+by `uv run muzero-singlefile.py --help`. No TOML is required. This experimental
 MuZero implementation does not inherit AlphaZero's demonstrated playing strength.
 
 ## Code layout

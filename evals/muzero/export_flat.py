@@ -88,6 +88,9 @@ def replace_once(source, old, new):
 def section_source(module, selected):
     path = SRC / (module.replace(".", "/") + ".py")
     source = path.read_text()
+    # The historical single-file export keeps the original research pipeline.
+    # Production MuZero additions are assembled by root muzero.py instead.
+    source = source.split("# MuZero components\n", 1)[0]
     if selected is not None:
         tree = ast.parse(source)
         # Shared helpers are extracted without pulling in the AlphaZero loop.
@@ -194,9 +197,9 @@ def main():
     output += "\n\n" + license_notice + "\n"
     output += '\n\nif __name__ == "__main__":\n    standalone_main()\n'
     output = re.sub(r"\n{4,}", "\n\n\n", output)
-    compile(output, "muzero.py", "exec")
-    (ROOT / "muzero.py").write_text(output)
-    print(f"Wrote muzero.py ({len(output.splitlines())} lines); no package imports or module loader.")
+    compile(output, "muzero-singlefile.py", "exec")
+    (ROOT / "muzero-singlefile.py").write_text(output)
+    print(f"Wrote muzero-singlefile.py ({len(output.splitlines())} lines); no package imports or module loader.")
 
 
 if __name__ == "__main__":

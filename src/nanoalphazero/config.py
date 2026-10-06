@@ -559,3 +559,34 @@ CONFIG_FACTORIES = {
     "go8": lambda: get_go_config(board_size=8),
     "go9": lambda: get_go_config(board_size=9),
 }
+
+
+# MuZero components
+
+def get_muzero_config(env="hex4", **overrides):
+    """Start from established game defaults; no research caps or renamed keys."""
+    config = CONFIG_FACTORIES[env]()
+    config.update(
+        algorithm="muzero", env=env, seed=0,
+        muzero_network="spatial", muzero_unroll_steps=5, muzero_discount=1.0,
+        muzero_remat_blocks=False, muzero_remat_unroll=False,
+        muzero_warmup_cycles=1, enable_wandb=False,
+    )
+    config.update(overrides)
+    # Completed games may wait through a collection phase before consumption.
+    # More headroom than AlphaZero is needed for overlapping unrolls.
+    if "selfplay_buffer_max_len" not in overrides:
+        config["selfplay_buffer_max_len"] = (
+            4 * config["game_max_steps"] + config["cycle_n_selfplay"]
+            + config["muzero_unroll_steps"]
+        )
+    config["selfplay_buffer_add_batch_size"] = config["selfplay_batch_size"]
+    config["selfplay_buffer_sample_batch_size"] = config["selfplay_batch_size"]
+    config["replay_buffer_add_batch_size"] = config["selfplay_buffer_consume_size"]
+    config["replay_buffer_sample_batch_size"] = config["train_batch_size"]
+    if "replay_buffer_max_len" not in overrides:
+        # Preserve the configured number of replay items; each now holds an unroll.
+        config["replay_buffer_max_len"] = max(
+            1, config["replay_buffer_total_size"] // config["replay_buffer_add_batch_size"]
+        )
+    return config

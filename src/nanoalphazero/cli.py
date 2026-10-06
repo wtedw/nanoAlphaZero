@@ -311,3 +311,30 @@ def bayeselo_main(argv: Sequence[str] | None = None) -> None:
     from nanoalphazero.eval.chess.bayeselo import bayeselo_main as run_bayeselo
 
     run_bayeselo(args.pgn, binary=args.binary, out=args.out)
+
+
+# MuZero components
+
+def parse_muzero_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    """CLI for root muzero.py; leave the established train command unchanged."""
+    from nanoalphazero.config import CONFIG_FACTORIES
+
+    parser = argparse.ArgumentParser(description="Persistent MuZero self-play and training")
+    parser.add_argument("--env", choices=list(CONFIG_FACTORIES), default="hex4")
+    parser.add_argument("--platform", choices=("cpu", "tpu"))
+    parser.add_argument("--save", type=Path, help="Optional full-state safetensors checkpoint")
+    parser.add_argument("--resume", type=Path)
+    parser.add_argument("--muzero-network", choices=("vector", "spatial"))
+    for name in (
+        "seed", "num-iters", "conv-width", "conv-depth", "selfplay-batch-size",
+        "train-batch-size", "cycle-n-selfplay", "cycle-n-train", "muzero-unroll-steps",
+        "muzero-warmup-cycles", "selfplay-buffer-max-len", "selfplay-buffer-consume-size",
+        "replay-buffer-max-len", "mcts-num-root-considered", "mcts-num-survivors",
+        "lr-warmup-steps", "ckpt-period",
+    ):
+        parser.add_argument("--" + name, type=int)
+    for name in ("learning-rate", "weight-decay", "muzero-discount"):
+        parser.add_argument("--" + name, type=float)
+    for name in ("enable-sharding", "enable-wandb", "muzero-remat-blocks", "muzero-remat-unroll"):
+        parser.add_argument("--" + name, action=argparse.BooleanOptionalAction, default=None)
+    return parser.parse_args(argv)

@@ -1,13 +1,13 @@
 """MuZero. Requires uv, Python 3.11+, and Git for the first dependency install.
 
-  uv run muzero.py train --env hex4 --save        # Four-device TPU training
-  uv run muzero.py train --env hex5 --save        # Hex 5, batch 4096
-  uv run muzero.py train --preset smoke-cpu       # Small CPU check
-  uv run muzero.py train --preset smoke-tpu       # Small TPU check
-  uv run muzero.py train --env hex7 --print-config
-  uv run muzero.py eval CHECKPOINT --platform cpu --output /tmp/eval-new
-  uv run muzero.py train --help                  # All training flags
-  uv run muzero.py eval --help                   # All evaluation flags
+  uv run muzero-singlefile.py train --env hex4 --save        # Four-device TPU training
+  uv run muzero-singlefile.py train --env hex5 --save        # Hex 5, batch 4096
+  uv run muzero-singlefile.py train --preset smoke-cpu       # Small CPU check
+  uv run muzero-singlefile.py train --preset smoke-tpu       # Small TPU check
+  uv run muzero-singlefile.py train --env hex7 --print-config
+  uv run muzero-singlefile.py eval CHECKPOINT --platform cpu --output /tmp/eval-new
+  uv run muzero-singlefile.py train --help                  # All training flags
+  uv run muzero-singlefile.py eval --help                   # All evaluation flags
 
 No TOML required. Defaults: Hex 4, TPU, spatial networks, staged replay, seed 0.
 AlphaZero settings are capped at search 8+4, width 256, depth 10, batches 4096.
@@ -48,7 +48,7 @@ STANDALONE_MOHEX_CONFIG = __EMBEDDED_MOHEX_CONFIG__
 
 def standalone_train_parser():
     parser = argparse.ArgumentParser(description="MuZero self-play training; no config file required.",
-                                     epilog="Full running instructions: uv run muzero.py --help")
+                                     epilog="Full running instructions: uv run muzero-singlefile.py --help")
     parser.add_argument("config", type=Path, nargs="?", help="Optional advanced TOML overrides")
     parser.add_argument("--preset", choices=sorted(STANDALONE_PRESETS))
     parser.add_argument("--env", help="Game name (default: hex4)")
@@ -135,8 +135,8 @@ def standalone_snapshot(output, manifest):
     source = Path(__file__)
     snapshot = output / "source-muzero"
     snapshot.mkdir()
-    shutil.copyfile(source, snapshot / "muzero.py")
-    manifest["source_sha256"] = {"muzero.py": hashlib.sha256(source.read_bytes()).hexdigest()}
+    shutil.copyfile(source, snapshot / "muzero-singlefile.py")
+    manifest["source_sha256"] = {"muzero-singlefile.py": hashlib.sha256(source.read_bytes()).hexdigest()}
 
 
 def standalone_mohex_config():

@@ -643,3 +643,39 @@ def make_mcts(config, wenv, model, data_sharding=None):
 
 # =============================================================================
 
+# MuZero components
+
+def make_muzero_mcts(config, wenv, model, data_sharding=None):
+    """Use the unchanged search engine with learned hypothetical transitions."""
+    def recurrent(params, keys, action, latent):
+        latent, reward, logits, value = model.apply(
+            {"params": params}, latent, action, method=model.recurrent
+        )
+        # Built-in games alternate players in hypothetical search.
+        discount = -config.get("muzero_discount", 1.0)
+        return RecurrentFnOutput(
+            reward=reward, discount=jnp.full_like(value, discount),
+            prior_logits=logits, value=value,
+        ), latent
+
+    @functools.partial(jax.jit, static_argnums=(4, 5))
+    def run_mcts(key, state, params, gumbel_scale, batch_size, num_simulations=None):
+        observation = wenv.observe(state, state.current_player)
+        legal = (unpack_bitmask_vmap(state.legal_action_bitmask)
+                 if hasattr(state, "legal_action_bitmask") else state.legal_action_mask)
+        latent, logits, value = model.apply(
+            {"params": params}, observation, method=model.initial
+        )
+        return gumbel_muzero_policy_1sh(
+            params, key,
+            RootFnOutput(prior_logits=logits, value=value, embedding=latent),
+            recurrent,
+            num_root_considered=config["mcts_num_root_considered"],
+            num_survivors=config["mcts_num_survivors"],
+            invalid_actions=~legal, gumbel_scale=gumbel_scale,
+            value_scale=config.get("mcts_value_scale", 1.0),
+            maxvisit_init=config.get("mcts_maxvisit_init", 50.0),
+            rescale_values=config.get("mcts_rescale_values", False),
+        )
+
+    return run_mcts
