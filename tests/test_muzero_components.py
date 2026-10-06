@@ -239,6 +239,7 @@ def test_search_matches_research_adapter(config):
     from nanoalphazero.research.muzero.search import latent_search
 
     env = make_env(config)
+    config = {**config, "game_obs_shape": list(env.obs_shape)}
     model, variables = make_muzero_model(config, jax.random.PRNGKey(3))
     states = env.init(jax.random.split(jax.random.PRNGKey(1), 2))
     key = jax.random.PRNGKey(5)
@@ -274,3 +275,175 @@ def test_error_blocks_optimizer_updates(config, assembly, error):
     following, metrics = algorithm.run_fn(state, jnp.bool_(False))
     assert int(metrics["selfplay_buffer/error_count"]) >= 1
     assert int(following.model_ts.n_updates) == 0
+
+
+def test_sparse_policy_loss_and_gradients_use_full_action_space():
+    from nanoalphazero.training import muzero_policy_kl
+
+    logits = jax.random.normal(jax.random.PRNGKey(1), (2, 3, 4672))
+    indices = jnp.broadcast_to(jnp.arange(128, dtype=jnp.uint16), (2, 3, 128))
+    target = jnp.full((2, 3, 128), 1 / 128).at[:, -1].set(0)
+    dense = jnp.zeros_like(logits).at[:, :, :128].set(target)
+    sparse_result = jax.value_and_grad(lambda x: jnp.sum(muzero_policy_kl(x, target, indices)))(logits)
+    dense_result = jax.value_and_grad(lambda x: jnp.sum(muzero_policy_kl(x, dense)))(logits)
+    assert_trees_equal(sparse_result, dense_result)
+    assert float(sparse_result[1][0, 0, 4000]) > 0
+    np.testing.assert_array_equal(sparse_result[1][:, -1], 0)
+
+
+def test_policy_compression_matches_selected_logits():
+    from nanoalphazero.mcts import compress_muzero_policy
+
+    logits = jax.random.normal(jax.random.PRNGKey(2), (2, 4672))
+    output = PolicyOutput(action=jnp.array([0, 1]), action_weights=jax.nn.softmax(logits),
+                          visit_counts=jnp.zeros_like(logits))
+    compressed, mass = compress_muzero_policy(output, 128)
+    selected_logits, indices = jax.lax.top_k(logits, 128)
+    np.testing.assert_array_equal(compressed.bnk_k_indices, indices)
+    np.testing.assert_allclose(compressed.bnk_action_weights, jax.nn.softmax(selected_logits), rtol=1e-6)
+    assert compressed.bnk_k_indices.dtype == jnp.uint16
+    assert bool(jnp.all((mass > 0) & (mass < 1)))
+    np.testing.assert_array_equal(compressed.action, output.action)
+    np.testing.assert_array_equal(compressed.visit_counts, output.visit_counts)
+
+
+@pytest.fixture
+def chess_config():
+    cfg = get_muzero_config(
+        "chess", enable_sharding=False, selfplay_batch_size=2, train_batch_size=2,
+        selfplay_buffer_consume_size=2, selfplay_buffer_max_len=1024,
+        selfplay_buffer_min_len=1, replay_buffer_max_len=4,
+        conv_width=8, conv_depth=1, muzero_unroll_steps=2,
+        cycle_n_selfplay=512, cycle_n_train=1, lr_warmup_steps=0,
+        mcts_num_root_considered=2, mcts_num_survivors=1,
+        num_exploratory_moves=0, muzero_warmup_cycles=0,
+    )
+    cfg.update(game_obs_shape=[8, 8, 119], game_num_actions=4672)
+    return cfg
+
+
+def test_packed_sparse_sequences_keep_storage_and_full_padding_space(chess_config):
+    from nanoalphazero.buffers import get_dummy_muzero_training_sample
+
+    dummy = get_dummy_muzero_selfplay_output(chess_config)
+    exp = jax.tree.map(lambda x: jnp.broadcast_to(x, (2, 4, *x.shape)), dummy)
+    exp = exp.replace(
+        row_id=jnp.broadcast_to(jnp.array([1, 2], jnp.uint32)[:, None], (2, 4)),
+        global_step_id=jnp.broadcast_to(jnp.arange(4, dtype=jnp.uint32), (2, 4)),
+        game_id=jnp.ones((2, 4), jnp.uint32), ep_step=jnp.zeros((2, 4), jnp.int16),
+        ep_termination_step=jnp.zeros((2, 4), jnp.int16),
+        is_pending_reward_i8=jnp.zeros((2, 4), jnp.int8),
+        is_from_selfplay=jnp.ones((2, 4), bool), is_valid_sample=jnp.ones((2, 4), bool),
+        action_weights=jnp.full((2, 4, 128), 1 / 128),
+        k_indices=jnp.broadcast_to(jnp.arange(128, dtype=jnp.uint16), (2, 4, 128)),
+    )
+    starts = jax.tree.map(lambda x: x[:, :1], exp)
+    sample, missing = gather_muzero_training_samples(exp, starts, 2, 4672)
+    assert int(missing) == 0
+    assert sample.observation is None
+    assert sample.board_bool.shape == (2, 936)
+    assert sample.k_indices.shape == (2, 3, 128)
+    assert bool(jnp.any(sample.action[:, 1] >= 128))
+    assert bool(jnp.all(sample.action < 4672))
+    np.testing.assert_array_equal(sample.policy_mask, [[True, False, False]] * 2)
+    np.testing.assert_array_equal(sample.action_weights[:, 1:], 0)
+    expected = get_dummy_muzero_training_sample(chess_config)
+    assert jax.tree.structure(sample) == jax.tree.structure(expected)
+    with pytest.raises(ValueError, match="full action count"):
+        gather_muzero_training_samples(exp, starts, 2)
+
+
+@pytest.mark.parametrize("sharded", [False, True])
+def test_chess_packed_sparse_cycle_and_checkpoint(chess_config, assembly, tmp_path, sharded):
+    from nanoalphazero.buffers import combine_observation_vmap, muzero_storage_spec
+    from nanoalphazero.training import run_muzero
+    from nanoalphazero.checkpoint import (
+        save_muzero_checkpoint, load_muzero_checkpoint, muzero_checkpoint_payload,
+    )
+
+    if sharded:
+        if jax.device_count() != 4:
+            pytest.skip("Four virtual CPU devices required")
+        chess_config = {**chess_config, "enable_sharding": True}
+        for field in ("selfplay_batch_size", "train_batch_size", "selfplay_buffer_consume_size",
+                      "selfplay_buffer_add_batch_size", "selfplay_buffer_sample_batch_size",
+                      "replay_buffer_add_batch_size", "replay_buffer_sample_batch_size"):
+            chess_config[field] = 4
+    algorithm = assembly.make_muzero(chess_config, jax.random.PRNGKey(0))
+    assert algorithm.buffer_storage["replay"] == muzero_storage_spec(
+        algorithm.runner_state.replay_buffer_state, 4 if sharded else 1
+    )
+    probe = algorithm.compression_probe(
+        algorithm.runner_state.model_ts.params, algorithm.runner_state.selfplay_state.env_state,
+        jax.random.PRNGKey(8),
+    )
+    assert int(probe["compression_probe/n_roots"]) == chess_config["selfplay_batch_size"]
+    np.testing.assert_allclose(probe["compression_probe/retained_mass_mean"], 1, atol=1e-6)
+    assert float(probe["compression_probe/support_overflow_fraction"]) == 0
+    state = run_muzero(algorithm, num_iters=1, checkpoint_path=tmp_path / "host.safetensors")
+    assert int(state.selfplay_buffer_state.overwritten_count) == 0
+    assert int(state.selfplay_buffer_state.missing_count) == 0
+    assert int(state.selfplay_buffer_state.truncated_count) == 0
+    assert int(state.model_ts.n_updates) == 1
+    replay = state.replay_buffer_state.experience
+    assert replay.observation is None
+    assert replay.board_bool.dtype == jnp.uint8
+    assert replay.k_indices.dtype == jnp.uint16
+    assert replay.action_weights.shape[-2:] == (3, 128)
+    if sharded:
+        assert len(replay.board_bool.addressable_shards) == 4
+        assert replay.board_bool.addressable_shards[0].data.shape[0] == 1
+    batch = algorithm.replay_buffer.sample(state.replay_buffer_state, jax.random.PRNGKey(3)).experience
+    batch = jax.tree.map(lambda x: x[:, 0], batch)
+    decoded = batch.replace(observation=combine_observation_vmap(batch.board_bool, batch.board_float),
+                            board_bool=None, board_float=None)
+    objective = jax.jit(jax.value_and_grad(lambda p, b: muzero_loss(algorithm.model, p, b)[0]))
+    packed_result = objective(state.model_ts.params, batch)
+    assert np.isfinite(float(packed_result[0]))
+    assert_trees_equal(packed_result, objective(state.model_ts.params, decoded))
+    for full in (False, True):
+        payload = muzero_checkpoint_payload(state, 1, full)
+        path = tmp_path / f"chess-{full}.safetensors"
+        save_muzero_checkpoint(path, payload, algorithm.config)
+        restored, config = load_muzero_checkpoint(path, payload)
+        assert config == algorithm.config
+        assert_trees_equal(payload, restored)
+        with pytest.raises(ValueError, match="incompatible"):
+            load_muzero_checkpoint(path, muzero_checkpoint_payload(state, 1, not full))
+    assert (tmp_path / "chess-False.safetensors").stat().st_size < (tmp_path / "chess-True.safetensors").stat().st_size
+
+
+def test_compact_resume_restarts_buffers_and_runs_warmup(config, assembly, tmp_path):
+    from nanoalphazero.checkpoint import (
+        save_muzero_checkpoint, muzero_checkpoint_payload,
+    )
+    from nanoalphazero.training import run_muzero
+
+    config = {**config, "muzero_checkpoint_replay": False, "muzero_warmup_cycles": 1}
+    algorithm = assembly.make_muzero(config, jax.random.PRNGKey(0))
+    state, _ = algorithm.run_fn(algorithm.runner_state, jnp.bool_(False))
+    payload = muzero_checkpoint_payload(state, 1, False)
+    path = tmp_path / "compact.safetensors"
+    save_muzero_checkpoint(path, payload, algorithm.config)
+    fresh = assembly.make_muzero(config, jax.random.PRNGKey(0))
+    restored = run_muzero(fresh, num_iters=1, resume=path)
+    assert int(restored.model_ts.n_updates) == int(state.model_ts.n_updates)
+    assert int(restored.selfplay_state.step_count) == config["cycle_n_selfplay"]
+    assert int(restored.selfplay_buffer_state.overwritten_count) == 0
+    assert bool(fresh.replay_buffer.can_sample(restored.replay_buffer_state))
+    assert_trees_equal(restored.model_ts, payload["model_ts"])
+
+
+def test_chess_storage_estimates_and_defaults(chess_config):
+    from nanoalphazero.buffers import estimate_muzero_storage
+
+    defaults = get_muzero_config("chess")
+    assert defaults["exp_bnk_action_weights"]
+    assert defaults["mcts_num_k_actions"] == 128
+    assert defaults["muzero_remat_blocks"] and defaults["muzero_remat_unroll"]
+    assert not defaults["muzero_checkpoint_replay"]
+    assert defaults["replay_buffer_total_size"] == 4096000
+    packed = estimate_muzero_storage(chess_config)
+    dense_policy = estimate_muzero_storage({**chess_config, "exp_bnk_action_weights": False})
+    assert packed["replay"]["bytes"] < dense_policy["replay"]["bytes"] / 10
+    assert packed["selfplay"]["bytes"] < dense_policy["selfplay"]["bytes"] / 5

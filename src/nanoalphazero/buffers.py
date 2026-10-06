@@ -468,6 +468,31 @@ def make_selfplay_buffer(config, dummy_selfplay_output, data_sharding=None):
 
 # MuZero components
 
+def muzero_storage_spec(tree, device_count=1):
+    """Logical bytes and per-device bytes for leading-axis sharded buffers."""
+    import numpy as np
+    leaves = jax.tree.leaves(tree)
+    return {
+        "bytes": sum(x.size * np.dtype(x.dtype).itemsize for x in leaves),
+        "bytes_per_device": sum(
+            x.size * np.dtype(x.dtype).itemsize // (device_count if x.ndim else 1)
+            for x in leaves
+        ),
+    }
+
+
+def estimate_muzero_storage(config, device_count=1):
+    """Trace buffer initialization without allocating persistent storage."""
+    shapes = {}
+    for name, constructor, dummy in (
+        ("selfplay", make_muzero_selfplay_buffer, get_dummy_muzero_selfplay_output),
+        ("replay", make_replay_buffer, get_dummy_muzero_training_sample),
+    ):
+        shape = jax.eval_shape(lambda: constructor(config, dummy(config))[1])
+        shapes[name] = muzero_storage_spec(shape, device_count)
+    return shapes
+
+
 @chex.dataclass(frozen=True)
 class MuZeroSelfplayOutput(SelfplayOutput):
     transition_reward: Optional[ArrayLike] = None
@@ -484,6 +509,9 @@ class MuZeroTrainingSample:
     policy_mask: ArrayLike
     value_mask: ArrayLike
     reward_mask: ArrayLike
+    board_bool: Optional[ArrayLike] = None
+    board_float: Optional[ArrayLike] = None
+    k_indices: Optional[ArrayLike] = None
 
 
 @chex.dataclass(frozen=True)
@@ -496,6 +524,8 @@ class MuZeroSelfplayBufferState(CustomTrajectoryBufferState):
 
 def get_dummy_muzero_selfplay_output(config):
     original = get_dummy_selfplay_output(config)
+    if original.k_indices is not None and config["game_num_actions"] <= 65536:
+        original = original.replace(k_indices=original.k_indices.astype(jnp.uint16))
     return MuZeroSelfplayOutput(
         **vars(original), transition_reward=jnp.float32(0), discount=jnp.float32(0)
     )
@@ -503,10 +533,13 @@ def get_dummy_muzero_selfplay_output(config):
 
 def get_dummy_muzero_training_sample(config):
     k = config["muzero_unroll_steps"]
+    record = get_dummy_muzero_selfplay_output(config)
     return MuZeroTrainingSample(
-        observation=jnp.zeros(config["game_obs_shape"], jnp.float32),
+        observation=None if record.observation is None else record.observation.astype(jnp.float32),
+        board_bool=record.board_bool, board_float=record.board_float,
+        k_indices=None if record.k_indices is None else jnp.broadcast_to(record.k_indices, (k + 1, *record.k_indices.shape)),
         action=jnp.zeros((k,), jnp.int32),
-        action_weights=jnp.zeros((k + 1, config["game_num_actions"]), jnp.float32),
+        action_weights=jnp.zeros((k + 1, record.action_weights.shape[-1]), jnp.float32),
         reward=jnp.zeros((k + 1,), jnp.float32),
         transition_reward=jnp.zeros((k,), jnp.float32),
         policy_mask=jnp.zeros((k + 1,), bool),
@@ -515,7 +548,7 @@ def get_dummy_muzero_training_sample(config):
     )
 
 
-def gather_muzero_training_samples(experience, starts, unroll_steps):
+def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions=None):
     """Gather ordered records, never extending a sequence into another game.
 
     Starts come from AlphaZero consume, which adds a singleton time axis.
@@ -526,34 +559,40 @@ def gather_muzero_training_samples(experience, starts, unroll_steps):
     lanes = jnp.maximum(starts.row_id.astype(jnp.int32) - 1, 0)
     offsets = jnp.arange(unroll_steps + 1)
     indices = (starts.global_step_id[:, None] % capacity + offsets) % capacity
-    sequence = jax.tree.map(lambda x: x[lanes[:, None], indices], experience)
+    # Root observations come from starts. Only gather the sequence fields used
+    # below, avoiding K+1 copies of packed boards and legality masks.
+    def gather(name):
+        return getattr(experience, name)[lanes[:, None], indices]
     valid = starts.is_valid_sample
     remaining = starts.ep_termination_step - starts.ep_step
     real = valid[:, None] & (offsets <= remaining[:, None])
     matches = (
-        (sequence.global_step_id == starts.global_step_id[:, None] + offsets)
-        & (sequence.game_id == starts.game_id[:, None])
-        & (sequence.ep_step == starts.ep_step[:, None] + offsets)
-        & (sequence.is_pending_reward_i8 == 0)
-        & sequence.is_from_selfplay
+        (gather("global_step_id") == starts.global_step_id[:, None] + offsets)
+        & (gather("game_id") == starts.game_id[:, None])
+        & (gather("ep_step") == starts.ep_step[:, None] + offsets)
+        & (gather("is_pending_reward_i8") == 0)
+        & gather("is_from_selfplay")
     )
     missing = jnp.sum(real & ~matches)
     complete = valid & jnp.all(~real | matches, axis=1)
     real = real & complete[:, None]
-    observation = starts.observation
-    if observation is None:
-        observation = combine_observation_vmap(starts.board_bool, starts.board_float)
+    if num_actions is None:
+        if experience.k_indices is not None:
+            raise ValueError("Sparse MuZero sequences require the full action count")
+        num_actions = experience.action_weights.shape[-1]
     # Terminal tails train absorbing zero rewards/values, with no policy target.
     random_actions = jax.random.randint(
         jax.random.key(jnp.max(starts.global_step_id)),
-        (lanes.shape[0], unroll_steps), 0, experience.action_weights.shape[-1],
+        (lanes.shape[0], unroll_steps), 0, num_actions,
     )
     sample = MuZeroTrainingSample(
-        observation=observation.astype(jnp.float32),
-        action=jnp.where(real[:, :-1], sequence.action[:, :-1], random_actions),
-        action_weights=jnp.where(real[..., None], sequence.action_weights, 0),
-        reward=jnp.where(real, sequence.reward, 0),
-        transition_reward=jnp.where(real[:, :-1], sequence.transition_reward[:, :-1], 0),
+        observation=None if starts.observation is None else starts.observation.astype(jnp.float32),
+        board_bool=starts.board_bool, board_float=starts.board_float,
+        k_indices=None if experience.k_indices is None else jnp.where(real[..., None], gather("k_indices"), 0),
+        action=jnp.where(real[:, :-1], gather("action")[:, :-1], random_actions),
+        action_weights=jnp.where(real[..., None], gather("action_weights"), 0),
+        reward=jnp.where(real, gather("reward"), 0),
+        transition_reward=jnp.where(real[:, :-1], gather("transition_reward")[:, :-1], 0),
         policy_mask=real,
         value_mask=jnp.broadcast_to(complete[:, None], real.shape),
         reward_mask=jnp.broadcast_to(complete[:, None], real[:, :-1].shape),
@@ -633,7 +672,9 @@ def make_muzero_selfplay_buffer(config, dummy_selfplay_output, data_sharding=Non
         after, starts, metrics = original.consume(state)
         # original.consume donates its input; read the returned storage, whose
         # records are intact (only freshness/eligibility changed).
-        samples, missing = gather_muzero_training_samples(after.experience, starts, k)
+        samples, missing = gather_muzero_training_samples(
+            after.experience, starts, k, config["game_num_actions"]
+        )
         after = after.replace(missing_count=after.missing_count + missing)
         return after, jax.tree.map(lambda x: x[:, None], samples), metrics
 

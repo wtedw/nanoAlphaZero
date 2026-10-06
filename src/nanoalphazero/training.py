@@ -1058,7 +1058,11 @@ def unroll_muzero_predictions(model, params, batch, remat=False):
 
     if remat:
         initial, recurrent = jax.checkpoint(initial), jax.checkpoint(recurrent)
-    latent, logits, value = initial(params, batch.observation)
+    observation = batch.observation
+    if observation is None:
+        from nanoalphazero.buffers import combine_observation_vmap
+        observation = combine_observation_vmap(batch.board_bool, batch.board_float)
+    latent, logits, value = initial(params, observation)
     policies, values, rewards = [logits], [value], []
     for step in range(batch.action.shape[1]):
         latent, reward, logits, value = recurrent(
@@ -1071,19 +1075,23 @@ def unroll_muzero_predictions(model, params, batch, remat=False):
             jnp.stack(rewards, axis=1))
 
 
+def muzero_policy_kl(logits, target, indices=None):
+    """Normalize over every action before selecting sparse target support."""
+    target = jax.lax.stop_gradient(target)
+    log_probs = jax.nn.log_softmax(logits, axis=-1)
+    if indices is not None:
+        log_probs = jnp.take_along_axis(log_probs, indices.astype(jnp.int32), axis=-1)
+    return -jnp.sum(target * log_probs + jax.scipy.special.entr(target), axis=-1)
+
+
 def muzero_loss(model, params, batch, remat=False):
     """Same KL + scalar value/reward MSE objective as the research implementation."""
-    import optax
-
     logits, values, rewards = unroll_muzero_predictions(model, params, batch, remat)
 
     def mean_masked(values, mask):
         return jnp.sum(jnp.where(mask, values, 0)) / jnp.maximum(jnp.sum(mask), 1)
 
-    target = jax.lax.stop_gradient(batch.action_weights)
-    kl = optax.softmax_cross_entropy(logits, target) - jnp.sum(
-        jax.scipy.special.entr(target), axis=-1
-    )
+    kl = muzero_policy_kl(logits, batch.action_weights, batch.k_indices)
     loss_pi = mean_masked(kl, batch.policy_mask)
     loss_v = mean_masked((values - batch.reward) ** 2, batch.value_mask)
     loss_r = mean_masked((rewards - batch.transition_reward) ** 2, batch.reward_mask)
@@ -1138,18 +1146,26 @@ def make_muzero_train(config, model, model_state, data_sharding=None):
 def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None):
     """Host loop; assembly and the collect/drain/train cycle stay in root muzero.py."""
     import json
-    from nanoalphazero.checkpoint import save_muzero_checkpoint, load_muzero_checkpoint
+    from nanoalphazero.checkpoint import (
+        save_muzero_checkpoint, load_muzero_checkpoint, muzero_checkpoint_payload,
+    )
 
     config = algorithm.config
     state = algorithm.runner_state
     start_cycle = 0
+    include_replay = config.get("muzero_checkpoint_replay", True)
     if resume is not None:
         payload, saved_config = load_muzero_checkpoint(
-            resume, {"runner_state": state, "cycle": jnp.int32(0)}
+            resume, muzero_checkpoint_payload(state, 0, include_replay)
         )
         if saved_config != config:
             raise ValueError("MuZero resume requires identical resolved configuration")
-        state, start_cycle = payload["runner_state"], int(payload["cycle"])
+        start_cycle = int(payload["cycle"])
+        if include_replay:
+            state = payload["runner_state"]
+        else:
+            state = state._replace(model_ts=payload["model_ts"], rng=payload["rng"])
+            print("Compact checkpoint restored; restarting games and warming up empty buffers", flush=True)
         if algorithm.data_sharding is not None:
             # Restore the original placement, including replicated scalar counters.
             placement = jax.tree.map(lambda x: x.sharding, algorithm.runner_state)
@@ -1166,30 +1182,59 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None):
             raise RuntimeError("Nonfinite MuZero training metrics")
 
     run = None
+    # Compile the entire persistent cycle before spending time on warmup.
+    # Warmup is a dynamic boolean, so the same executable also covers training.
+    import time
+    print("Compiling MuZero cycle", flush=True)
+    started = time.monotonic()
+    run_cycle = algorithm.run_fn.lower(state, jnp.bool_(True)).compile()
+    analysis = run_cycle.memory_analysis()
+    compiled_memory = {name: getattr(analysis, name, 0) for name in (
+        "argument_size_in_bytes", "output_size_in_bytes", "alias_size_in_bytes", "temp_size_in_bytes",
+    )}
+    print(json.dumps({"compile_seconds": time.monotonic() - started,
+                      "compiled_memory": compiled_memory}), flush=True)
     if config.get("enable_wandb", False):
         import wandb
         run = wandb.init(project="nanoAlphaZero-muzero", config=config)
     try:
-        if resume is None:
+        if resume is None or not include_replay:
             for _ in range(config.get("muzero_warmup_cycles", 1)):
-                state, metrics = algorithm.run_fn(state, jnp.bool_(True))
+                state, metrics = run_cycle(state, jnp.bool_(True))
                 check(jax.device_get(metrics))
         cycles = config["num_iters"] if num_iters is None else num_iters
         cycle = start_cycle
         for cycle in range(start_cycle + 1, cycles + 1):
-            state, metrics = algorithm.run_fn(state, jnp.bool_(False))
+            state, metrics = run_cycle(state, jnp.bool_(False))
             metrics = {name: float(value) for name, value in jax.device_get(metrics).items()}
+            period = config.get("muzero_diagnostic_period", 50)
+            if period and (cycle == start_cycle + 1 or cycle % period == 0):
+                if algorithm.compression_probe is not None:
+                    # Inspection has an independent key and never advances training RNG.
+                    probe = algorithm.compression_probe(
+                        state.model_ts.params, state.selfplay_state.env_state,
+                        jax.random.fold_in(state.rng, cycle),
+                    )
+                    metrics.update({name: float(value) for name, value in jax.device_get(probe).items()})
+                devices = (list(algorithm.data_sharding.mesh.devices.flat)
+                           if algorithm.data_sharding is not None else [jax.devices()[0]])
+                memory = [device.memory_stats() or {} for device in devices]
+                for name in ("bytes_in_use", "peak_bytes_in_use", "bytes_limit"):
+                    if all(name in stats for stats in memory):
+                        metrics[f"memory/{name}_max"] = max(stats[name] for stats in memory)
             check(metrics)
             print(json.dumps({"cycle": cycle, **metrics}), flush=True)
             if run is not None:
                 run.log(metrics, step=cycle)
-            if checkpoint_path and config.get("ckpt_period") and cycle % config["ckpt_period"] == 0:
+            if checkpoint_path and (cycle == start_cycle + 1 or (
+                config.get("ckpt_period") and cycle % config["ckpt_period"] == 0
+            )):
                 save_muzero_checkpoint(
-                    checkpoint_path, {"runner_state": state, "cycle": jnp.int32(cycle)}, config
+                    checkpoint_path, muzero_checkpoint_payload(state, cycle, include_replay), config
                 )
         if checkpoint_path:
             save_muzero_checkpoint(
-                checkpoint_path, {"runner_state": state, "cycle": jnp.int32(cycle)}, config
+                checkpoint_path, muzero_checkpoint_payload(state, cycle, include_replay), config
             )
     finally:
         if run is not None:

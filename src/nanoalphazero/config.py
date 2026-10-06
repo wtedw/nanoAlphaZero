@@ -569,10 +569,19 @@ def get_muzero_config(env="hex4", **overrides):
     config.update(
         algorithm="muzero", env=env, seed=0,
         muzero_network="spatial", muzero_unroll_steps=5, muzero_discount=1.0,
-        muzero_remat_blocks=False, muzero_remat_unroll=False,
+        muzero_remat_blocks=env == "chess", muzero_remat_unroll=env == "chess",
+        muzero_checkpoint_replay=env != "chess",
+        muzero_memory_fraction=0.75,
+        muzero_diagnostic_period=50,
         muzero_warmup_cycles=1, enable_wandb=False,
     )
+    if env == "chess":
+        config.update(replay_buffer_total_size=4096000, ckpt_period=50)
     config.update(overrides)
+    if env == "chess" and "muzero_warmup_cycles" not in overrides:
+        config["muzero_warmup_cycles"] = (
+            config["game_max_steps"] + config["cycle_n_selfplay"] - 1
+        ) // config["cycle_n_selfplay"]
     # Completed games may wait through a collection phase before consumption.
     # More headroom than AlphaZero is needed for overlapping unrolls.
     if "selfplay_buffer_max_len" not in overrides:

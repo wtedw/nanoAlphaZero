@@ -645,6 +645,22 @@ def make_mcts(config, wenv, model, data_sharding=None):
 
 # MuZero components
 
+def compress_muzero_policy(output, num_actions):
+    """Compress the dense search target without the legacy BNK one-hot gather.
+
+    Selecting and renormalizing the top probabilities gives the same target
+    as softmax of the selected search logits. Search/action selection stays
+    unchanged. The returned mass measures truncation of the original target.
+    """
+    weights, indices = jax.lax.top_k(output.action_weights, num_actions)
+    mass = jnp.sum(weights, axis=-1, keepdims=True)
+    index_dtype = jnp.uint16 if output.action_weights.shape[-1] <= 65536 else jnp.int32
+    return output.replace(
+        bnk_k_indices=indices.astype(index_dtype),
+        bnk_action_weights=weights / jnp.maximum(mass, jnp.finfo(weights.dtype).tiny),
+    ), mass[..., 0]
+
+
 def make_muzero_mcts(config, wenv, model, data_sharding=None):
     """Use the unchanged search engine with learned hypothetical transitions."""
     def recurrent(params, keys, action, latent):
@@ -662,11 +678,11 @@ def make_muzero_mcts(config, wenv, model, data_sharding=None):
     def run_mcts(key, state, params, gumbel_scale, batch_size, num_simulations=None):
         observation = wenv.observe(state, state.current_player)
         legal = (unpack_bitmask_vmap(state.legal_action_bitmask)
-                 if hasattr(state, "legal_action_bitmask") else state.legal_action_mask)
+                 if getattr(state, "legal_action_bitmask", None) is not None else state.legal_action_mask)
         latent, logits, value = model.apply(
             {"params": params}, observation, method=model.initial
         )
-        return gumbel_muzero_policy_1sh(
+        output = gumbel_muzero_policy_1sh(
             params, key,
             RootFnOutput(prior_logits=logits, value=value, embedding=latent),
             recurrent,
@@ -677,5 +693,38 @@ def make_muzero_mcts(config, wenv, model, data_sharding=None):
             maxvisit_init=config.get("mcts_maxvisit_init", 50.0),
             rescale_values=config.get("mcts_rescale_values", False),
         )
+        if config.get("exp_bnk_action_weights", False):
+            output, _ = compress_muzero_policy(output, config["mcts_num_k_actions"])
+        return output
 
     return run_mcts
+
+
+def make_muzero_compression_probe(config, wenv, model):
+    """Inspect at most 32 current roots without retaining dense episode targets."""
+    search = make_muzero_mcts(config, wenv, model)
+    count = min(32, config["selfplay_batch_size"])
+
+    @jax.jit
+    def probe(params, states, key):
+        states = jax.tree.map(lambda x: x[:count], states)
+        output = search(key, states, params, 0.0, count)
+        mass = jnp.sum(jnp.take_along_axis(
+            output.action_weights, output.bnk_k_indices.astype(jnp.int32), axis=-1,
+        ), axis=-1)
+        if getattr(states, "legal_action_bitmask", None) is not None:
+            legal_count = jnp.sum(jax.lax.population_count(states.legal_action_bitmask), axis=-1)
+        else:
+            legal_count = jnp.sum(states.legal_action_mask, axis=-1)
+        live = ~(states.terminated | states.truncated)
+        n = jnp.sum(live)
+        return {
+            "compression_probe/n_roots": n,
+            "compression_probe/retained_mass_mean": jnp.sum(jnp.where(live, mass, 0)) / jnp.maximum(n, 1),
+            "compression_probe/retained_mass_min": jnp.where(n > 0, jnp.min(jnp.where(live, mass, 1)), 0),
+            "compression_probe/support_overflow_fraction": jnp.sum(
+                live & (legal_count > config["mcts_num_k_actions"])
+            ) / jnp.maximum(n, 1),
+        }
+
+    return probe

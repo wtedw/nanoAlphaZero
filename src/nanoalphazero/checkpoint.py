@@ -169,6 +169,14 @@ def load_checkpoint(path: str):
 
 # MuZero components
 
+def muzero_checkpoint_payload(state, cycle, include_replay=True):
+    """Compact snapshots restart games/buffers; full snapshots continue exactly."""
+    import jax.numpy as jnp
+    if include_replay:
+        return {"runner_state": state, "cycle": jnp.int32(cycle)}
+    return {"model_ts": state.model_ts, "rng": state.rng, "cycle": jnp.int32(cycle)}
+
+
 def save_muzero_checkpoint(path, state, config):
     """Save persistent game/buffer state as well as parameters and optimizer.
 
@@ -194,7 +202,8 @@ def save_muzero_checkpoint(path, state, config):
                 value = jax.random.key_data(value)
             tensors[name] = np.array(jax.device_get(value), copy=True, order="C")
         save_safetensors_file(tensors, temporary, metadata={
-            "format": "nanoalphazero.muzero.persistent.v1",
+            "format": ("nanoalphazero.muzero.persistent.v1" if "runner_state" in state
+                       else "nanoalphazero.muzero.compact.v1"),
             "paths": json.dumps(paths), "key_impls": json.dumps(key_impls),
             "config": json.dumps(config, sort_keys=True, allow_nan=False),
         })
@@ -206,10 +215,12 @@ def save_muzero_checkpoint(path, state, config):
 
 def load_muzero_checkpoint(path, template):
     expected, tree = jax.tree_util.tree_flatten_with_path(template)
+    expected_format = ("nanoalphazero.muzero.persistent.v1" if "runner_state" in template
+                       else "nanoalphazero.muzero.compact.v1")
     with safe_open(str(path), framework="flax") as reader:
         meta = reader.metadata()
-        if meta.get("format") != "nanoalphazero.muzero.persistent.v1":
-            raise ValueError("Expected a persistent MuZero checkpoint; research snapshots are incompatible")
+        if meta.get("format") != expected_format:
+            raise ValueError(f"Expected {expected_format}; checkpoint mode or pipeline is incompatible")
         if json.loads(meta["paths"]) != [jax.tree_util.keystr(keys) for keys, _ in expected]:
             raise ValueError("MuZero checkpoint state structure does not match the template")
         if set(reader.keys()) != {str(i) for i in range(len(expected))}:

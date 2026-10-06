@@ -43,10 +43,10 @@ def make_muzero(config, rng, data_sharding=None):
     import jax.numpy as jnp
     from nanoalphazero.buffers import (
         get_dummy_muzero_selfplay_output, get_dummy_muzero_training_sample,
-        make_muzero_selfplay_buffer, make_replay_buffer,
+        make_muzero_selfplay_buffer, make_replay_buffer, estimate_muzero_storage,
     )
     from nanoalphazero.core import make_env, RunnerState, DATA_PARALLEL_SHARDING
-    from nanoalphazero.mcts import make_muzero_mcts
+    from nanoalphazero.mcts import make_muzero_mcts, make_muzero_compression_probe
     from nanoalphazero.model import make_muzero_model
     from nanoalphazero.training import make_muzero_train
 
@@ -61,8 +61,11 @@ def make_muzero(config, rng, data_sharding=None):
             raise ValueError(f"{name} must be positive")
     if not 0 < config["muzero_discount"] <= 1:
         raise ValueError("muzero_discount must be in (0, 1]")
-    if config.get("exp_bnk_action_weights", False):
-        raise ValueError("MuZero currently stores full action_weights")
+    if not 0 < config.get("muzero_memory_fraction", 0.75) <= 1:
+        raise ValueError("muzero_memory_fraction must be in (0, 1]")
+    for name in ("exp_bnk_action_weights", "muzero_checkpoint_replay"):
+        if not isinstance(config.get(name, False), bool):
+            raise ValueError(f"{name} must be boolean")
     if config["selfplay_buffer_max_len"] <= config["muzero_unroll_steps"]:
         raise ValueError("Self-play storage must hold at least K+1 positions")
     if config["selfplay_buffer_consume_size"] > config["selfplay_batch_size"] * config["selfplay_buffer_max_len"]:
@@ -78,6 +81,8 @@ def make_muzero(config, rng, data_sharding=None):
             raise ValueError(f"{prefix}_min_len must fit within its capacity")
     if config.get("muzero_warmup_cycles", 1) < 0 or config["num_iters"] < 0:
         raise ValueError("Warmup cycles and num_iters cannot be negative")
+    if config.get("muzero_diagnostic_period", 50) < 0:
+        raise ValueError("muzero_diagnostic_period cannot be negative")
 
     if config.get("enable_sharding", False):
         data_sharding = data_sharding or DATA_PARALLEL_SHARDING
@@ -92,11 +97,29 @@ def make_muzero(config, rng, data_sharding=None):
 
     env = make_env(config)
     config.update(game_obs_shape=list(env.obs_shape), game_num_actions=env.num_actions)
+    if config.get("exp_bnk_action_weights", False):
+        top_k = config["mcts_num_k_actions"]
+        if type(top_k) is not int or not 1 <= top_k <= env.num_actions:
+            raise ValueError("mcts_num_k_actions must be an integer within the action space")
     if not 1 <= config["mcts_num_survivors"] <= config["mcts_num_root_considered"] <= env.num_actions:
         raise ValueError("Search requires 1 <= survivors <= roots <= action count")
     # Legacy uint32 keys serialize directly to safetensors.
     rng, model_rng = jax.random.split(jax.random.key_data(rng))
     model, model_state = make_muzero_model(config, model_rng, replicated)
+    import json
+    devices = list(data_sharding.mesh.devices.flat) if data_sharding is not None else [jax.devices()[0]]
+    storage = estimate_muzero_storage(config, len(devices))
+    print(json.dumps({"buffer_storage": storage}), flush=True)
+    per_device = sum(spec["bytes_per_device"] for spec in storage.values())
+    for device in devices:
+        stats = device.memory_stats() or {}
+        limit = stats.get("bytes_limit")
+        if limit is not None and per_device + stats.get("bytes_in_use", 0) > config.get("muzero_memory_fraction", 0.75) * limit:
+            raise ValueError(
+                f"MuZero buffers require {per_device / 2**30:.2f} GiB/device and exceed "
+                "the persistent-memory budget. Reduce replay/self-play capacity; "
+                "replay items each contain a full unroll. Temporary arrays are additional."
+            )
     run_mcts_fn = make_muzero_mcts(config, env, model, data_sharding)
     selfplay_fn, selfplay_state = make_muzero_selfplay(config, env, run_mcts_fn, data_sharding)
     selfplay_buffer, selfplay_buffer_state = make_muzero_selfplay_buffer(
@@ -182,6 +205,9 @@ def make_muzero(config, rng, data_sharding=None):
         config=config, env=env, model=model, run_fn=run_fn, runner_state=runner_state,
         run_mcts_fn=run_mcts_fn, selfplay_fn=selfplay_fn, selfplay_buffer=selfplay_buffer,
         replay_buffer=replay_buffer, train_fn=train_fn, data_sharding=data_sharding,
+        buffer_storage=storage,
+        compression_probe=(make_muzero_compression_probe(config, env, model)
+                           if config.get("exp_bnk_action_weights", False) else None),
     )
 
 
