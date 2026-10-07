@@ -1,6 +1,6 @@
 # MuZero component assembly
 
-Root `muzero.py` is the readable assembly. `muzero-singlefile.py` is the
+Root `muzero.py` is the readable training entry point. `muzero-singlefile.py` is the
 historical standalone research snapshot, renamed without changing its logic.
 The two paths have different collection semantics. Do not compare results as
 if renaming alone produced the new algorithm.
@@ -17,12 +17,12 @@ definitions remain unchanged; `core.py` remains unchanged in its entirety.
 
 | Location | MuZero responsibility |
 | --- | --- |
-| `muzero.py` | Assemble components; show the self-play/drain/train cycle; wrap existing self-play |
-| `config.py` | `get_muzero_config`, based on established game defaults |
+| `muzero.py` | Self-play adapter, latent unroll and loss, optimizer updates, compiled cycle, host loop |
+| `config.py` | Game defaults and MuZero configuration constraints |
 | `model.py` | Representation, dynamics, prediction, optional rematerialization |
 | `mcts.py` | Learned recurrent callback to the existing search engine |
-| `buffers.py` | Extended records, completed returns, sequence gathering |
-| `training.py` | Unrolled loss, optimizer factory, host loop |
+| `buffers.py` | Extended records, completed returns, sequence gathering, storage budget |
+| `eval/hex/training.py` | Shared Hex match evaluator and MuZero evaluation adapter |
 | `checkpoint.py` | Full persistent-state snapshots |
 | `cli.py` | Root script arguments; existing entry points unchanged |
 

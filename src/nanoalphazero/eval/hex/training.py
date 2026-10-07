@@ -138,3 +138,67 @@ class HexTrainingEvaluator:
             flush=True,
         )
         return training_metrics(summary)
+
+
+class MuZeroHexEvaluator:
+    """Read-only MoHex matches; evaluation never changes training RNG or replay."""
+
+    def __init__(self, algorithm, pool, period, output):
+        import hashlib
+        from nanoalphazero.mcts import make_muzero_policy
+
+        self.algorithm = algorithm
+        self.period = period
+        self.output = Path(output)
+        self.output.mkdir(parents=True, exist_ok=False)
+        self.streak = 0
+        self.searches = {"search": algorithm.run_mcts_fn,
+                         "policy": make_muzero_policy(algorithm.env, algorithm.model)}
+        self.evaluators = {
+            mode: HexTrainingEvaluator(1, pool, self.output / mode, algorithm.config["boardsize"])
+            for mode in self.searches
+        }
+        manifest = {
+            "config": algorithm.config, "period": period,
+            "engine": str(pool.executable), "engine_config": pool.config.read_text(),
+            "engine_sha256": hashlib.sha256(pool.executable.read_bytes()).hexdigest(),
+            "criterion": "All known-winning openings in both modes; zero unscored games",
+            "scope": "Opening-suite coverage, not proof of perfect play",
+        }
+        (self.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+
+    def run(self, cycle, state, *, force=False):
+        from nanoalphazero.checkpoint import save_muzero_checkpoint, muzero_checkpoint_payload
+
+        if not force and cycle % self.period:
+            return {}
+        metrics, results = {}, {}
+        for mode, search in self.searches.items():
+            print(f"MUZERO_MOHEX_BEGIN cycle={cycle} mode={mode}", flush=True)
+            scores = self.evaluators[mode].run_if_due(
+                cycle, search, self.algorithm.env, self.algorithm.config, state.model_ts.params,
+                train_step=int(state.model_ts.n_updates),
+            )
+            results[mode] = {key.removeprefix("hex_eval/"): value for key, value in scores.items()}
+            metrics.update({f"mohex/{mode}/{key}": value for key, value in results[mode].items()})
+        success = all(
+            row["perfect_opening_total"] > 0
+            and row["perfect_opening_wins"] == row["perfect_opening_total"]
+            and row["unscored"] == 0
+            for row in results.values()
+        )
+        self.streak = self.streak + 1 if success else 0
+        result = {"cycle": cycle, "updates": int(state.model_ts.n_updates),
+                  "modes": results, "both_modes_passed": success,
+                  "consecutive_passes": self.streak}
+        with (self.output / "scores.jsonl").open("a") as stream:
+            stream.write(json.dumps(result) + "\n")
+        print("MUZERO_MOHEX_RESULT " + json.dumps(result), flush=True)
+        # Retain the exact evaluated parameters/optimizer without multi-GB buffers.
+        save_muzero_checkpoint(
+            self.output / f"cycle-{cycle:06d}.safetensors",
+            muzero_checkpoint_payload(state, cycle, False),
+            {**self.algorithm.config, "muzero_checkpoint_replay": False},
+        )
+        return {**metrics, "mohex/both_modes_passed": int(success),
+                "mohex/consecutive_passes": self.streak}

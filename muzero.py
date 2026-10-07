@@ -1,15 +1,22 @@
 """Build MuZero from the nanoalphazero components.
 
 The cycle is visible here: advance persistent games, consume fresh starts as
-K-step training samples, then train from replay. Return calculation, sequence
-indexing, terminal masks, and differentiable unrolling live in the components.
+K-step training samples, then train from replay. The learning objective and host
+loop are visible here too. Buffer indexing,
+model layers, search internals, and checkpoint serialization live in components.
 
 Run with ``uv run python muzero.py --env hex4``. Use --help for configuration.
 The historical portable export is muzero-singlefile.py.
 """
 
+import json
+import os
+import time
 from functools import partial
 from types import SimpleNamespace
+
+# Keep JAX and device-initializing component imports inside functions so the CLI
+# can select its backend before any accelerator is initialized.
 
 
 def make_muzero_selfplay(config, wenv, run_mcts_fn, data_sharding=None):
@@ -37,53 +44,126 @@ def make_muzero_selfplay(config, wenv, run_mcts_fn, data_sharding=None):
     return selfplay_fn, state
 
 
+def unroll_muzero_predictions(model, params, batch, remat=False):
+    """Run h once and g/f K times; policy/value include the root prediction."""
+    import jax
+    import jax.numpy as jnp
+    from nanoalphazero.model import scale_gradient
+
+    def initial(params, observation):
+        return model.apply({"params": params}, observation, method=model.initial)
+
+    def recurrent(params, latent, action):
+        return model.apply({"params": params}, latent, action, method=model.recurrent)
+
+    if remat:
+        initial, recurrent = jax.checkpoint(initial), jax.checkpoint(recurrent)
+    observation = batch.observation
+    if observation is None:
+        from nanoalphazero.buffers import combine_observation_vmap
+        observation = combine_observation_vmap(batch.board_bool, batch.board_float)
+    latent, logits, value = initial(params, observation)
+    policies, values, rewards = [logits], [value], []
+    for step in range(batch.action.shape[1]):
+        latent, reward, logits, value = recurrent(
+            params, scale_gradient(latent, 0.5), batch.action[:, step]
+        )
+        policies.append(logits)
+        values.append(value)
+        rewards.append(reward)
+    return (jnp.stack(policies, axis=1), jnp.stack(values, axis=1),
+            jnp.stack(rewards, axis=1))
+
+
+def muzero_policy_kl(logits, target, indices=None):
+    """Normalize over every action before selecting sparse target support."""
+    import jax
+    import jax.numpy as jnp
+
+    target = jax.lax.stop_gradient(target)
+    log_probs = jax.nn.log_softmax(logits, axis=-1)
+    if indices is not None:
+        log_probs = jnp.take_along_axis(log_probs, indices.astype(jnp.int32), axis=-1)
+    return -jnp.sum(target * log_probs + jax.scipy.special.entr(target), axis=-1)
+
+
+def muzero_loss(model, params, batch, remat=False):
+    """Same KL + scalar value/reward MSE objective as the research implementation."""
+    import jax.numpy as jnp
+
+    logits, values, rewards = unroll_muzero_predictions(model, params, batch, remat)
+
+    def mean_masked(values, mask):
+        return jnp.sum(jnp.where(mask, values, 0)) / jnp.maximum(jnp.sum(mask), 1)
+
+    kl = muzero_policy_kl(logits, batch.action_weights, batch.k_indices)
+    loss_pi = mean_masked(kl, batch.policy_mask)
+    loss_v = mean_masked((values - batch.reward) ** 2, batch.value_mask)
+    loss_r = mean_masked((rewards - batch.transition_reward) ** 2, batch.reward_mask)
+    return loss_pi + loss_v + loss_r, dict(loss_pi=loss_pi, loss_v=loss_v, loss_r=loss_r)
+
+
+def make_muzero_train(config, model, model_state, data_sharding=None):
+    """Expose the established train_fn(model_ts, batch, is_warmup) interface."""
+    import jax
+    import jax.numpy as jnp
+    import optax
+    from flax.traverse_util import flatten_dict, unflatten_dict
+    from nanoalphazero.core import CustomTrainState
+
+    rate = config["learning_rate"]
+    warmup = config.get("lr_warmup_steps", 0)
+    if warmup:
+        rate = optax.join_schedules(
+            [optax.linear_schedule(1e-6, rate, warmup), optax.constant_schedule(rate)],
+            [warmup],
+        )
+    mask = None
+    if config.get("weight_decay_kernels_only", False):
+        mask = unflatten_dict({
+            path: path[-1] in ("kernel", "kernel_3x3", "kernel_1x1")
+            for path in flatten_dict(model_state["params"])
+        })
+    tx = optax.chain(
+        optax.clip_by_global_norm(config.get("max_grad_norm", 1.0)),
+        optax.adamw(rate, weight_decay=config.get("weight_decay", 1e-4), mask=mask),
+    )
+    model_ts = CustomTrainState.create(
+        apply_fn=model.apply, params=model_state["params"], tx=tx,
+        key=jax.random.PRNGKey(0), n_updates=jnp.int32(0),
+    )
+    # TrainState.create uses a Python step; make the initial carry match JIT output.
+    model_ts = model_ts.replace(step=jnp.int32(0))
+    if data_sharding is not None:
+        replicated = jax.sharding.NamedSharding(data_sharding.mesh, jax.sharding.PartitionSpec())
+        model_ts = jax.device_put(model_ts, replicated)
+
+    def train_fn(state, batch, is_warmup):
+        def objective(params):
+            return muzero_loss(model, params, batch, config.get("muzero_remat_unroll", False))
+
+        (loss, metrics), grads = jax.value_and_grad(objective, has_aux=True)(state.params)
+        updated = state.apply_gradients(grads=grads).replace(n_updates=state.n_updates + 1)
+        updated = jax.lax.cond(is_warmup, lambda: state, lambda: updated)
+        return updated, (loss, metrics)
+
+    return train_fn, model_ts
+
+
 def make_muzero(config, rng, data_sharding=None):
     """Assemble MuZero; expose each component for inspection and independent use."""
     import jax
     import jax.numpy as jnp
     from nanoalphazero.buffers import (
         get_dummy_muzero_selfplay_output, get_dummy_muzero_training_sample,
-        make_muzero_selfplay_buffer, make_replay_buffer, estimate_muzero_storage,
+        make_muzero_selfplay_buffer, make_replay_buffer, check_muzero_storage_budget,
     )
+    from nanoalphazero.config import validate_muzero_config
     from nanoalphazero.core import make_env, RunnerState, DATA_PARALLEL_SHARDING
     from nanoalphazero.mcts import make_muzero_mcts, make_muzero_compression_probe
     from nanoalphazero.model import make_muzero_model
-    from nanoalphazero.training import make_muzero_train
 
     config = dict(config)
-    positive = (
-        "selfplay_batch_size", "train_batch_size", "selfplay_buffer_consume_size",
-        "selfplay_buffer_max_len", "replay_buffer_max_len", "cycle_n_selfplay",
-        "cycle_n_train", "muzero_unroll_steps",
-    )
-    for name in positive:
-        if config[name] < 1:
-            raise ValueError(f"{name} must be positive")
-    if not 0 < config["muzero_discount"] <= 1:
-        raise ValueError("muzero_discount must be in (0, 1]")
-    if not 0 < config.get("muzero_memory_fraction", 0.75) <= 1:
-        raise ValueError("muzero_memory_fraction must be in (0, 1]")
-    for name in ("exp_bnk_action_weights", "muzero_checkpoint_replay"):
-        if not isinstance(config.get(name, False), bool):
-            raise ValueError(f"{name} must be boolean")
-    if config["selfplay_buffer_max_len"] <= config["muzero_unroll_steps"]:
-        raise ValueError("Self-play storage must hold at least K+1 positions")
-    if config["selfplay_buffer_consume_size"] > config["selfplay_batch_size"] * config["selfplay_buffer_max_len"]:
-        raise ValueError("consume_size exceeds self-play storage")
-    if config["selfplay_buffer_add_batch_size"] != config["selfplay_batch_size"]:
-        raise ValueError("Self-play buffer lane count must match selfplay_batch_size")
-    if config["replay_buffer_add_batch_size"] != config["selfplay_buffer_consume_size"]:
-        raise ValueError("Replay insertion batch must match selfplay_buffer_consume_size")
-    if config["replay_buffer_sample_batch_size"] != config["train_batch_size"]:
-        raise ValueError("Replay sample batch must match train_batch_size")
-    for prefix in ("selfplay_buffer", "replay_buffer"):
-        if not 1 <= config[f"{prefix}_min_len"] <= config[f"{prefix}_max_len"]:
-            raise ValueError(f"{prefix}_min_len must fit within its capacity")
-    if config.get("replay_buffer_warmup_steps", 100) < 0 or config["num_iters"] < 0:
-        raise ValueError("Replay warmup steps and num_iters cannot be negative")
-    if config.get("muzero_diagnostic_period", 50) < 0:
-        raise ValueError("muzero_diagnostic_period cannot be negative")
-
     if config.get("enable_sharding", False):
         data_sharding = data_sharding or DATA_PARALLEL_SHARDING
     else:
@@ -91,35 +171,15 @@ def make_muzero(config, rng, data_sharding=None):
     replicated = None
     if data_sharding is not None:
         replicated = jax.sharding.NamedSharding(data_sharding.mesh, jax.sharding.PartitionSpec())
-        for name in ("selfplay_batch_size", "train_batch_size", "selfplay_buffer_consume_size"):
-            if config[name] % data_sharding.mesh.size:
-                raise ValueError(f"{name} must be divisible by the device count")
 
     env = make_env(config)
     config.update(game_obs_shape=list(env.obs_shape), game_num_actions=env.num_actions)
-    if config.get("exp_bnk_action_weights", False):
-        top_k = config["mcts_num_k_actions"]
-        if type(top_k) is not int or not 1 <= top_k <= env.num_actions:
-            raise ValueError("mcts_num_k_actions must be an integer within the action space")
-    if not 1 <= config["mcts_num_survivors"] <= config["mcts_num_root_considered"] <= env.num_actions:
-        raise ValueError("Search requires 1 <= survivors <= roots <= action count")
+    validate_muzero_config(config, env.num_actions, data_sharding.mesh.size if data_sharding else 1)
     # Legacy uint32 keys serialize directly to safetensors.
     rng, model_rng = jax.random.split(jax.random.key_data(rng))
     model, model_state = make_muzero_model(config, model_rng, replicated)
-    import json
     devices = list(data_sharding.mesh.devices.flat) if data_sharding is not None else [jax.devices()[0]]
-    storage = estimate_muzero_storage(config, len(devices))
-    print(json.dumps({"buffer_storage": storage}), flush=True)
-    per_device = sum(spec["bytes_per_device"] for spec in storage.values())
-    for device in devices:
-        stats = device.memory_stats() or {}
-        limit = stats.get("bytes_limit")
-        if limit is not None and per_device + stats.get("bytes_in_use", 0) > config.get("muzero_memory_fraction", 0.75) * limit:
-            raise ValueError(
-                f"MuZero buffers require {per_device / 2**30:.2f} GiB/device and exceed "
-                "the persistent-memory budget. Reduce replay/self-play capacity; "
-                "replay items each contain a full unroll. Temporary arrays are additional."
-            )
+    storage = check_muzero_storage_budget(config, devices)
     run_mcts_fn = make_muzero_mcts(config, env, model, data_sharding)
     selfplay_fn, selfplay_state = make_muzero_selfplay(config, env, run_mcts_fn, data_sharding)
     selfplay_buffer, selfplay_buffer_state = make_muzero_selfplay_buffer(
@@ -211,13 +271,129 @@ def make_muzero(config, rng, data_sharding=None):
     )
 
 
+def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None, evaluator=None):
+    """Compile once, warm up replay, then run and monitor persistent cycles."""
+    import jax
+    import jax.numpy as jnp
+    import numpy as np
+    from nanoalphazero.checkpoint import (
+        save_muzero_checkpoint, load_muzero_checkpoint, muzero_checkpoint_payload,
+    )
+
+    config = algorithm.config
+    state = algorithm.runner_state
+    start_cycle = 0
+    include_replay = config.get("muzero_checkpoint_replay", True)
+    if resume is not None:
+        payload, saved_config = load_muzero_checkpoint(
+            resume, muzero_checkpoint_payload(state, 0, include_replay)
+        )
+        if saved_config != config:
+            raise ValueError("MuZero resume requires identical resolved configuration")
+        start_cycle = int(payload["cycle"])
+        if include_replay:
+            state = payload["runner_state"]
+        else:
+            state = state._replace(model_ts=payload["model_ts"], rng=payload["rng"])
+            print("Compact checkpoint restored; restarting games and warming up empty buffers", flush=True)
+        if algorithm.data_sharding is not None:
+            # Restore the original placement, including replicated scalar counters.
+            placement = jax.tree.map(lambda x: x.sharding, algorithm.runner_state)
+            state = jax.device_put(state, placement)
+
+    def check(metrics):
+        if int(metrics["selfplay_buffer/error_count"]):
+            raise RuntimeError(
+                "MuZero self-play buffer lost required transitions or encountered "
+                "unsupported truncation. No optimizer update was applied in this cycle. "
+                "Inspect buffer counters and increase selfplay_buffer_max_len if needed. "
+                f"Counters: { {name: int(value) for name, value in metrics.items() if name.startswith('selfplay_buffer/')} }"
+            )
+        if not all(np.isfinite(value) for value in metrics.values()):
+            raise RuntimeError("Nonfinite MuZero training metrics")
+
+    run = None
+    # Compile the entire persistent cycle before spending time on warmup.
+    # Warmup is a dynamic boolean, so the same executable also covers training.
+    print("Compiling MuZero cycle", flush=True)
+    started = time.monotonic()
+    run_cycle = algorithm.run_fn.lower(state, jnp.bool_(True)).compile()
+    analysis = run_cycle.memory_analysis()
+    compiled_memory = {name: getattr(analysis, name, 0) for name in (
+        "argument_size_in_bytes", "output_size_in_bytes", "alias_size_in_bytes", "temp_size_in_bytes",
+    )}
+    print(json.dumps({"compile_seconds": time.monotonic() - started,
+                      "compiled_memory": compiled_memory}), flush=True)
+    if config.get("enable_wandb", False):
+        import wandb
+        run = wandb.init(project="nanoAlphaZero-muzero", config=config)
+    try:
+        if evaluator is not None:
+            evaluator.run(start_cycle, state, force=True)
+        if resume is None or not include_replay:
+            num_warmup_cycles = (
+                config.get("replay_buffer_warmup_steps", 100) // config["cycle_n_selfplay"]
+            )
+            for warmup in range(num_warmup_cycles):
+                started = time.monotonic()
+                state, metrics = run_cycle(state, jnp.bool_(True))
+                check(jax.device_get(metrics))
+                print(json.dumps({"warmup_cycle": warmup + 1,
+                                  "timing/cycle_seconds": time.monotonic() - started}), flush=True)
+        # Match AlphaZero's host-loop budget, including its step counter on resume.
+        budget = config["num_iters"] if num_iters is None else num_iters
+        n_cycles = max(0, (budget - int(state.model_ts.step)) // config["cycle_n_selfplay"])
+        cycles = start_cycle + n_cycles
+        cycle = start_cycle
+        for cycle in range(start_cycle + 1, cycles + 1):
+            started = time.monotonic()
+            state, metrics = run_cycle(state, jnp.bool_(False))
+            metrics = {name: float(value) for name, value in jax.device_get(metrics).items()}
+            # device_get synchronizes execution; exclude diagnostics and disk I/O.
+            metrics["timing/cycle_seconds"] = time.monotonic() - started
+            period = config.get("muzero_diagnostic_period", 50)
+            if period and (cycle == start_cycle + 1 or cycle % period == 0):
+                if algorithm.compression_probe is not None:
+                    # Inspection has an independent key and never advances training RNG.
+                    probe = algorithm.compression_probe(
+                        state.model_ts.params, state.selfplay_state.env_state,
+                        jax.random.fold_in(state.rng, cycle),
+                    )
+                    metrics.update({name: float(value) for name, value in jax.device_get(probe).items()})
+                devices = (list(algorithm.data_sharding.mesh.devices.flat)
+                           if algorithm.data_sharding is not None else [jax.devices()[0]])
+                memory = [device.memory_stats() or {} for device in devices]
+                for name in ("bytes_in_use", "peak_bytes_in_use", "bytes_limit"):
+                    if all(name in stats for stats in memory):
+                        metrics[f"memory/{name}_max"] = max(stats[name] for stats in memory)
+            check(metrics)
+            if evaluator is not None:
+                metrics.update(evaluator.run(cycle, state, force=cycle == cycles))
+            print(json.dumps({"cycle": cycle, **metrics}), flush=True)
+            if run is not None:
+                run.log(metrics, step=cycle)
+            if checkpoint_path and (cycle == start_cycle + 1 or (
+                config.get("ckpt_period") and cycle % config["ckpt_period"] == 0
+            )):
+                save_muzero_checkpoint(
+                    checkpoint_path, muzero_checkpoint_payload(state, cycle, include_replay), config
+                )
+        if checkpoint_path:
+            save_muzero_checkpoint(
+                checkpoint_path, muzero_checkpoint_payload(state, cycle, include_replay), config
+            )
+    finally:
+        if run is not None:
+            run.finish()
+    return state
+
+
 def main(argv=None):
     from nanoalphazero.cli import parse_muzero_args
     from nanoalphazero.config import get_muzero_config
 
     args = parse_muzero_args(argv)
     # Backend selection precedes imports of core.py, which creates its device mesh.
-    import os
     if args.platform:
         os.environ["JAX_PLATFORMS"] = args.platform
     overrides = {name: value for name, value in vars(args).items()
@@ -232,7 +408,7 @@ def main(argv=None):
             size = config["boardsize"]
             pool = MoHexPool(args.hex_eval_engine_path, args.hex_eval_engine_config, size, size * size)
         import jax
-        from nanoalphazero.training import run_muzero, MuZeroHexEvaluator
+        from nanoalphazero.eval.hex.training import MuZeroHexEvaluator
         algorithm = make_muzero(config, jax.random.PRNGKey(config["seed"]))
         evaluator = (MuZeroHexEvaluator(algorithm, pool, args.hex_eval_period, args.hex_eval_output)
                      if pool is not None else None)

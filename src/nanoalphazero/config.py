@@ -600,3 +600,45 @@ def get_muzero_config(env="hex4", **overrides):
             1, config["replay_buffer_total_size"] // config["replay_buffer_add_batch_size"]
         )
     return config
+
+
+def validate_muzero_config(config, num_actions, device_count=1):
+    """Check configuration constraints before allocating persistent state."""
+    positive = (
+        "selfplay_batch_size", "train_batch_size", "selfplay_buffer_consume_size",
+        "selfplay_buffer_max_len", "replay_buffer_max_len", "cycle_n_selfplay",
+        "cycle_n_train", "muzero_unroll_steps",
+    )
+    for name in positive:
+        if config[name] < 1:
+            raise ValueError(f"{name} must be positive")
+    if not 0 < config["muzero_discount"] <= 1:
+        raise ValueError("muzero_discount must be in (0, 1]")
+    if not 0 < config.get("muzero_memory_fraction", 0.75) <= 1:
+        raise ValueError("muzero_memory_fraction must be in (0, 1]")
+    if config["selfplay_buffer_max_len"] <= config["muzero_unroll_steps"]:
+        raise ValueError("Self-play storage must hold at least K+1 positions")
+    if config["selfplay_buffer_consume_size"] > config["selfplay_batch_size"] * config["selfplay_buffer_max_len"]:
+        raise ValueError("consume_size exceeds self-play storage")
+    if config["selfplay_buffer_add_batch_size"] != config["selfplay_batch_size"]:
+        raise ValueError("Self-play buffer lane count must match selfplay_batch_size")
+    if config["replay_buffer_add_batch_size"] != config["selfplay_buffer_consume_size"]:
+        raise ValueError("Replay insertion batch must match selfplay_buffer_consume_size")
+    if config["replay_buffer_sample_batch_size"] != config["train_batch_size"]:
+        raise ValueError("Replay sample batch must match train_batch_size")
+    for prefix in ("selfplay_buffer", "replay_buffer"):
+        if not 1 <= config[f"{prefix}_min_len"] <= config[f"{prefix}_max_len"]:
+            raise ValueError(f"{prefix}_min_len must fit within its capacity")
+    if config.get("replay_buffer_warmup_steps", 100) < 0 or config["num_iters"] < 0:
+        raise ValueError("Replay warmup steps and num_iters cannot be negative")
+    if config.get("muzero_diagnostic_period", 50) < 0:
+        raise ValueError("muzero_diagnostic_period cannot be negative")
+    if config.get("exp_bnk_action_weights", False):
+        top_k = config["mcts_num_k_actions"]
+        if type(top_k) is not int or not 1 <= top_k <= num_actions:
+            raise ValueError("mcts_num_k_actions must be an integer within the action space")
+    if not 1 <= config["mcts_num_survivors"] <= config["mcts_num_root_considered"] <= num_actions:
+        raise ValueError("Search requires 1 <= survivors <= roots <= action count")
+    for name in ("selfplay_batch_size", "train_batch_size", "selfplay_buffer_consume_size"):
+        if config[name] % device_count:
+            raise ValueError(f"{name} must be divisible by the device count")

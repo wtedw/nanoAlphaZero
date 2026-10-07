@@ -24,7 +24,6 @@ from nanoalphazero.config import get_muzero_config
 from nanoalphazero.core import make_env, make_selfplay
 from nanoalphazero.mcts import PolicyOutput, make_muzero_mcts
 from nanoalphazero.model import make_muzero_model
-from nanoalphazero.training import muzero_loss
 
 
 @pytest.fixture
@@ -58,6 +57,31 @@ def assert_trees_equal(left, right):
         np.testing.assert_allclose(actual, expected, atol=1e-6, rtol=1e-6)
 
 
+def test_root_cli_selects_backend_before_algorithm_imports():
+    import os
+    import subprocess
+    import sys
+
+    script = """
+import sys
+import muzero
+assert 'jax' not in sys.modules
+def assemble(config, rng):
+    import jax
+    assert jax.default_backend() == 'cpu'
+    return object()
+muzero.make_muzero = assemble
+muzero.run_muzero = lambda *args, **kwargs: None
+muzero.main(['--platform', 'cpu'])
+"""
+    # A bad inherited backend must be overridden before JAX initializes.
+    subprocess.run(
+        [sys.executable, "-c", script], check=True,
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "JAX_PLATFORMS": "invalid_backend"},
+    )
+
+
 def test_muzero_policy_masks_occupied_actions(config, assembly):
     from nanoalphazero.mcts import make_muzero_policy
 
@@ -81,7 +105,7 @@ def test_muzero_policy_masks_occupied_actions(config, assembly):
 def test_muzero_mohex_cadence_and_success(config, assembly, tmp_path, monkeypatch):
     import json
     from types import SimpleNamespace
-    from nanoalphazero.training import MuZeroHexEvaluator
+    from nanoalphazero.eval.hex.training import MuZeroHexEvaluator
     from nanoalphazero.eval.hex.training import HexTrainingEvaluator
     import nanoalphazero.checkpoint as checkpoint
 
@@ -314,7 +338,7 @@ def test_selfplay_wrapper_preserves_original_actions_and_state(config, assembly,
 
 
 @pytest.mark.parametrize("network", ["vector", "spatial"])
-def test_model_loss_and_gradients_match_research(config, network):
+def test_model_loss_and_gradients_match_research(config, network, assembly):
     from nanoalphazero.research.muzero.model import build_model
     from nanoalphazero.research.muzero.learning import loss
 
@@ -333,7 +357,7 @@ def test_model_loss_and_gradients_match_research(config, network):
     old_batch = dict(observation=batch.observation, action=batch.action,
                      policy=batch.action_weights, value=batch.reward, reward=batch.transition_reward,
                      policy_mask=batch.policy_mask, value_mask=batch.value_mask, reward_mask=batch.reward_mask)
-    actual = jax.value_and_grad(lambda p: muzero_loss(model, p, batch)[0])(variables["params"])
+    actual = jax.value_and_grad(lambda p: assembly.muzero_loss(model, p, batch)[0])(variables["params"])
     expected = jax.value_and_grad(lambda p: loss(original, p, old_batch)[0])(variables["params"])
     assert_trees_equal(actual, expected)
 
@@ -374,7 +398,7 @@ def test_hex_defaults_match_alphazero_budget_and_warmup():
 
 
 def test_host_uses_alphazero_step_budgets(config, assembly, tmp_path):
-    from nanoalphazero.training import run_muzero
+    run_muzero = assembly.run_muzero
 
     cfg = {**config, "num_iters": 25, "replay_buffer_warmup_steps": 25,
            "cycle_n_train": 3, "muzero_diagnostic_period": 0,
@@ -476,8 +500,8 @@ def test_error_blocks_optimizer_updates(config, assembly, error):
     assert int(following.model_ts.n_updates) == 0
 
 
-def test_sparse_policy_loss_and_gradients_use_full_action_space():
-    from nanoalphazero.training import muzero_policy_kl
+def test_sparse_policy_loss_and_gradients_use_full_action_space(assembly):
+    muzero_policy_kl = assembly.muzero_policy_kl
 
     logits = jax.random.normal(jax.random.PRNGKey(1), (2, 3, 4672))
     indices = jnp.broadcast_to(jnp.arange(128, dtype=jnp.uint16), (2, 3, 128))
@@ -555,7 +579,7 @@ def test_packed_sparse_sequences_keep_storage_and_full_padding_space(chess_confi
 @pytest.mark.parametrize("sharded", [False, True])
 def test_chess_packed_sparse_cycle_and_checkpoint(chess_config, assembly, tmp_path, sharded):
     from nanoalphazero.buffers import combine_observation_vmap, muzero_storage_spec
-    from nanoalphazero.training import run_muzero
+    run_muzero = assembly.run_muzero
     from nanoalphazero.checkpoint import (
         save_muzero_checkpoint, load_muzero_checkpoint, muzero_checkpoint_payload,
     )
@@ -596,7 +620,7 @@ def test_chess_packed_sparse_cycle_and_checkpoint(chess_config, assembly, tmp_pa
     batch = jax.tree.map(lambda x: x[:, 0], batch)
     decoded = batch.replace(observation=combine_observation_vmap(batch.board_bool, batch.board_float),
                             board_bool=None, board_float=None)
-    objective = jax.jit(jax.value_and_grad(lambda p, b: muzero_loss(algorithm.model, p, b)[0]))
+    objective = jax.jit(jax.value_and_grad(lambda p, b: assembly.muzero_loss(algorithm.model, p, b)[0]))
     packed_result = objective(state.model_ts.params, batch)
     assert np.isfinite(float(packed_result[0]))
     assert_trees_equal(packed_result, objective(state.model_ts.params, decoded))
@@ -616,7 +640,7 @@ def test_compact_resume_restarts_buffers_and_runs_warmup(config, assembly, tmp_p
     from nanoalphazero.checkpoint import (
         save_muzero_checkpoint, muzero_checkpoint_payload,
     )
-    from nanoalphazero.training import run_muzero
+    run_muzero = assembly.run_muzero
 
     config = {**config, "muzero_checkpoint_replay": False, "replay_buffer_warmup_steps": 10}
     algorithm = assembly.make_muzero(config, jax.random.PRNGKey(0))

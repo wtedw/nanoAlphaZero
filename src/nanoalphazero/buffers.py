@@ -692,3 +692,22 @@ def make_muzero_selfplay_buffer(config, dummy_selfplay_output, data_sharding=Non
         init=init, add=original.add, sample=original.sample,
         can_sample=original.can_sample, add_backfill=add_backfill, consume=consume,
     ), initial
+
+
+def check_muzero_storage_budget(config, devices):
+    """Report persistent buffer storage and reject allocations above the budget."""
+    import json
+
+    storage = estimate_muzero_storage(config, len(devices))
+    print(json.dumps({"buffer_storage": storage}), flush=True)
+    per_device = sum(spec["bytes_per_device"] for spec in storage.values())
+    for device in devices:
+        stats = device.memory_stats() or {}
+        limit = stats.get("bytes_limit")
+        if limit is not None and per_device + stats.get("bytes_in_use", 0) > config.get("muzero_memory_fraction", 0.75) * limit:
+            raise ValueError(
+                f"MuZero buffers require {per_device / 2**30:.2f} GiB/device and exceed "
+                "the persistent-memory budget. Reduce replay/self-play capacity; "
+                "replay items each contain a full unroll. Temporary arrays are additional."
+            )
+    return storage
