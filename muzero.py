@@ -45,7 +45,7 @@ def make_muzero_selfplay(config, wenv, run_mcts_fn, data_sharding=None):
     return selfplay_fn, state
 
 
-def unroll_muzero_predictions(model, params, batch, remat=False):
+def unroll_muzero_predictions(model, params, batch, remat=False, *, return_latents=False):
     """Run h once and g/f K times; policy/value include the root prediction."""
     import jax
     import jax.numpy as jnp
@@ -65,6 +65,7 @@ def unroll_muzero_predictions(model, params, batch, remat=False):
         observation = combine_observation_vmap(batch.board_bool, batch.board_float)
     latent, logits, value = initial(params, observation)
     policies, values, rewards = [logits], [value], []
+    latents = []
     for step in range(batch.action.shape[1]):
         latent, reward, logits, value = recurrent(
             params, scale_gradient(latent, 0.5), batch.action[:, step]
@@ -72,8 +73,11 @@ def unroll_muzero_predictions(model, params, batch, remat=False):
         policies.append(logits)
         values.append(value)
         rewards.append(reward)
-    return (jnp.stack(policies, axis=1), jnp.stack(values, axis=1),
-            jnp.stack(rewards, axis=1))
+        if return_latents:
+            latents.append(latent)
+    predictions = (jnp.stack(policies, axis=1), jnp.stack(values, axis=1),
+                   jnp.stack(rewards, axis=1))
+    return (*predictions, jnp.stack(latents, axis=1)) if return_latents else predictions
 
 
 def muzero_policy_kl(logits, target, indices=None):
@@ -88,11 +92,61 @@ def muzero_policy_kl(logits, target, indices=None):
     return -jnp.sum(target * log_probs + jax.scipy.special.entr(target), axis=-1)
 
 
-def muzero_loss(model, params, batch, remat=False):
-    """Same KL + scalar value/reward MSE objective as the research implementation."""
+def masked_consistency_loss(prediction, target, mask):
+    """EfficientZero-style negative cosine similarity, with a stop-gradient target."""
+    import jax
     import jax.numpy as jnp
 
-    logits, values, rewards = unroll_muzero_predictions(model, params, batch, remat)
+    def normalize(x):
+        return x * jax.lax.rsqrt(jnp.maximum(jnp.sum(x * x, axis=-1, keepdims=True), 1e-10))
+
+    target = jax.lax.stop_gradient(target)
+    losses = -jnp.sum(normalize(prediction) * normalize(target), axis=-1)
+    return jnp.sum(jnp.where(mask, losses, 0)) / jnp.maximum(jnp.sum(mask), 1)
+
+
+def muzero_consistency_loss(model, params, batch, predicted_latents, remat=False):
+    """Match each imagined next state to its real observation; exclude reset tails."""
+    import jax
+    import jax.numpy as jnp
+
+    def flatten_time(x):
+        return x.reshape((-1, *x.shape[2:]))
+
+    observation = batch.consistency_observation
+    if observation is None:
+        from nanoalphazero.buffers import combine_observation_vmap
+        observation = combine_observation_vmap(
+            flatten_time(batch.consistency_board_bool),
+            flatten_time(batch.consistency_board_float),
+        )
+    else:
+        observation = flatten_time(observation).astype(jnp.float32)
+
+    def target_projection(params, observation):
+        latent = model.apply({"params": params}, observation, method=model.encode)
+        return model.apply({"params": params}, latent, method=model.project)
+
+    if remat:
+        target_projection = jax.checkpoint(target_projection)
+    target = jax.lax.stop_gradient(target_projection(params, observation))
+    prediction = model.apply(
+        {"params": params}, flatten_time(predicted_latents), predict=True, method=model.project,
+    )
+    # A recorded final action has no stored terminal next observation. Its
+    # following slot belongs to the next game and must never become a target.
+    mask = batch.policy_mask[:, 1:].reshape(-1)
+    return masked_consistency_loss(prediction, target, mask)
+
+
+def muzero_loss(model, params, batch, remat=False, *, self_consistency_weight=0.0):
+    """Policy KL + value/reward MSE, with optional temporal consistency."""
+    import jax.numpy as jnp
+
+    predictions = unroll_muzero_predictions(
+        model, params, batch, remat, return_latents=self_consistency_weight > 0,
+    )
+    logits, values, rewards = predictions[:3]
 
     def mean_masked(values, mask):
         return jnp.sum(jnp.where(mask, values, 0)) / jnp.maximum(jnp.sum(mask), 1)
@@ -101,7 +155,14 @@ def muzero_loss(model, params, batch, remat=False):
     loss_pi = mean_masked(kl, batch.policy_mask)
     loss_v = mean_masked((values - batch.reward) ** 2, batch.value_mask)
     loss_r = mean_masked((rewards - batch.transition_reward) ** 2, batch.reward_mask)
-    return loss_pi + loss_v + loss_r, dict(loss_pi=loss_pi, loss_v=loss_v, loss_r=loss_r)
+    total = loss_pi + loss_v + loss_r
+    metrics = dict(loss_pi=loss_pi, loss_v=loss_v, loss_r=loss_r)
+    if self_consistency_weight > 0:
+        consistency = muzero_consistency_loss(model, params, batch, predictions[3], remat)
+        total += self_consistency_weight * consistency
+        metrics.update(loss_consistency=consistency,
+                       **{"consistency/n_valid": jnp.sum(batch.policy_mask[:, 1:]).astype(jnp.float32)})
+    return total, metrics
 
 
 def make_muzero_train(config, model, model_state, data_sharding=None):
@@ -141,7 +202,11 @@ def make_muzero_train(config, model, model_state, data_sharding=None):
 
     def train_fn(state, batch, is_warmup):
         def objective(params):
-            return muzero_loss(model, params, batch, config.get("muzero_remat_unroll", False))
+            return muzero_loss(
+                model, params, batch, config.get("muzero_remat_unroll", False),
+                self_consistency_weight=(config.get("self_consistency_weight", 1.0)
+                                         if config.get("exp_self_consistency", False) else 0.0),
+            )
 
         (loss, metrics), grads = jax.value_and_grad(objective, has_aux=True)(state.params)
         updated = state.apply_gradients(grads=grads).replace(n_updates=state.n_updates + 1)
@@ -249,6 +314,9 @@ def make_muzero(config, rng, data_sharding=None):
 
         ready = replay_buffer.can_sample(state.replay_buffer_state) & (errors == 0) & ~jnp.asarray(is_warmup)
         empty_metrics = {name: jnp.float32(0) for name in ("total_loss", "loss_pi", "loss_v", "loss_r")}
+        if config.get("exp_self_consistency", False):
+            empty_metrics.update(loss_consistency=jnp.float32(0),
+                                 **{"consistency/n_valid": jnp.float32(0)})
         state, metrics = jax.lax.cond(ready, train_cycle, lambda s: (s, empty_metrics), state)
         return state, {
             **metrics, "drain/n_slices": n_slices,

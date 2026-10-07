@@ -357,6 +357,11 @@ class MuZeroArgs:
     cycle_n_selfplay: int | None = None
     cycle_n_train: int | None = None
     muzero_unroll_steps: int | None = None
+    # Experimental EfficientZero-style temporal consistency objective.
+    exp_self_consistency: bool | None = None
+    self_consistency_weight: float | None = None
+    # Include exploratory positions as training starts for all enabled losses.
+    exp_train_on_exploration: bool | None = None
     selfplay_buffer_max_len: int | None = None
     selfplay_buffer_consume_size: int | None = None
     replay_buffer_max_len: int | None = None

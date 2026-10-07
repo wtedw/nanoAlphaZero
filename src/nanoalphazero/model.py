@@ -726,6 +726,24 @@ def normalize_muzero_latent(x):
 
 
 
+class MuZeroConsistencyHead(nn.Module):
+    """Shared projector plus online-only predictor; no running batch statistics."""
+    width: int
+
+    def setup(self):
+        self.projector = nn.Sequential([
+            nn.Dense(self.width), nn.LayerNorm(), nn.relu,
+            nn.Dense(self.width), nn.LayerNorm(),
+        ])
+        self.predictor = nn.Sequential([
+            nn.Dense(self.width), nn.LayerNorm(), nn.relu, nn.Dense(self.width),
+        ])
+
+    def __call__(self, latent, predict=False):
+        projected = self.projector(latent.reshape((latent.shape[0], -1)))
+        return self.predictor(projected) if predict else projected
+
+
 class MuZeroTower(nn.Module):
     width: int
     depth: int
@@ -743,6 +761,7 @@ class MuZero(nn.Module):
     num_actions: int
     width: int = 128
     depth: int = 2
+    self_consistency: bool = False
 
     def setup(self):
         self.representation = MuZeroTower(self.width, self.depth)
@@ -751,14 +770,22 @@ class MuZero(nn.Module):
         self.policy = nn.Dense(self.num_actions)
         self.value = nn.Dense(1)
         self.reward = nn.Dense(1)
+        if self.self_consistency:
+            self.consistency_head = MuZeroConsistencyHead(self.width)
 
     def predict(self, latent):
         features = self.prediction(latent)
         return self.policy(features), jnp.tanh(self.value(features)[..., 0])
 
-    def initial(self, observation):
+    def encode(self, observation):
         flat = observation.astype(jnp.float32).reshape((observation.shape[0], -1))
-        latent = normalize_muzero_latent(self.representation(flat))
+        return normalize_muzero_latent(self.representation(flat))
+
+    def project(self, latent, predict=False):
+        return self.consistency_head(latent, predict=predict)
+
+    def initial(self, observation):
+        latent = self.encode(observation)
         logits, value = self.predict(latent)
         return latent, logits, value
 
@@ -772,7 +799,10 @@ class MuZero(nn.Module):
 
     def __call__(self, observation, action):
         latent, _, _ = self.initial(observation)
-        return self.recurrent(latent, action)
+        result = self.recurrent(latent, action)
+        if self.self_consistency:
+            self.project(result[0], predict=True)
+        return result
 
 """Memory adapter composing the production trunk's unchanged building blocks."""
 
@@ -876,6 +906,7 @@ class SpatialMuZero(nn.Module):
     activation: str = "mish"
     use_rvgl: bool = True
     remat_blocks: bool = False
+    self_consistency: bool = False
 
     def setup(self):
         cfg = resolve_preset(f"b{self.depth}c{self.width}nbt")
@@ -886,10 +917,18 @@ class SpatialMuZero(nn.Module):
         self.dynamics = trunk_type(**trunk, activation=self.activation, use_rvgl=self.use_rvgl)
         self.prediction = MuZeroPrediction(self.num_actions, self.env_id, self.width, self.depth, self.activation)
         self.reward = ValueHead(cfg["c_v1"], cfg["c_v2"], self.activation)
+        if self.self_consistency:
+            self.consistency_head = MuZeroConsistencyHead(self.width)
+
+    def encode(self, observation):
+        latent, _, _ = self.representation(observation)
+        return normalize_spatial(latent)
+
+    def project(self, latent, predict=False):
+        return self.consistency_head(latent, predict=predict)
 
     def initial(self, observation):
-        latent, _, _ = self.representation(observation)
-        latent = normalize_spatial(latent)
+        latent = self.encode(observation)
         logits, value = self.prediction(latent)
         return latent, logits, value
 
@@ -909,19 +948,24 @@ class SpatialMuZero(nn.Module):
 
     def __call__(self, observation, action):
         latent, _, _ = self.initial(observation)
-        return self.recurrent(latent, action)
+        result = self.recurrent(latent, action)
+        if self.self_consistency:
+            self.project(result[0], predict=True)
+        return result
 
 def make_muzero_model(config, rng, sharding=None):
     """Build h/g/f using the established game/model configuration names."""
     network = config.get("muzero_network", "spatial")
     if network == "vector":
-        model = MuZero(config["game_num_actions"], config["conv_width"], config["conv_depth"])
+        model = MuZero(config["game_num_actions"], config["conv_width"], config["conv_depth"],
+                       self_consistency=config.get("exp_self_consistency", False))
     elif network == "spatial":
         model = SpatialMuZero(
             config["game_num_actions"], config["env_id"],
             config["conv_width"], config["conv_depth"],
             config.get("katago_activation", "mish"), config.get("katago_use_rvgl", True),
             remat_blocks=config.get("muzero_remat_blocks", False),
+            self_consistency=config.get("exp_self_consistency", False),
         )
     else:
         raise ValueError(f"Unknown MuZero network: {network}")

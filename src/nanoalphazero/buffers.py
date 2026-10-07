@@ -512,6 +512,10 @@ class MuZeroTrainingSample:
     board_bool: Optional[ArrayLike] = None
     board_float: Optional[ArrayLike] = None
     k_indices: Optional[ArrayLike] = None
+    # Optional K future observations, retained only for self-consistency.
+    consistency_observation: Optional[ArrayLike] = None
+    consistency_board_bool: Optional[ArrayLike] = None
+    consistency_board_float: Optional[ArrayLike] = None
 
 
 @chex.dataclass(frozen=True)
@@ -534,6 +538,13 @@ def get_dummy_muzero_selfplay_output(config):
 def get_dummy_muzero_training_sample(config):
     k = config["muzero_unroll_steps"]
     record = get_dummy_muzero_selfplay_output(config)
+
+    def future(name):
+        value = getattr(record, name)
+        if not config.get("exp_self_consistency", False) or value is None:
+            return None
+        return jnp.zeros((k, *value.shape), value.dtype)
+
     return MuZeroTrainingSample(
         observation=None if record.observation is None else record.observation.astype(jnp.float32),
         board_bool=record.board_bool, board_float=record.board_float,
@@ -545,10 +556,14 @@ def get_dummy_muzero_training_sample(config):
         policy_mask=jnp.zeros((k + 1,), bool),
         value_mask=jnp.zeros((k + 1,), bool),
         reward_mask=jnp.zeros((k,), bool),
+        consistency_observation=future("observation"),
+        consistency_board_bool=future("board_bool"),
+        consistency_board_float=future("board_float"),
     )
 
 
-def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions=None):
+def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions=None,
+                                  *, self_consistency=False):
     """Gather ordered records, never extending a sequence into another game.
 
     Starts come from AlphaZero consume, which adds a singleton time axis.
@@ -561,8 +576,8 @@ def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions
     indices = (starts.global_step_id[:, None] % capacity + offsets) % capacity
     # Root observations come from starts. Only gather the sequence fields used
     # below, avoiding K+1 copies of packed boards and legality masks.
-    def gather(name, count=unroll_steps + 1):
-        return getattr(experience, name)[lanes[:, None], indices[:, :count]]
+    def gather(name, count=unroll_steps + 1, offset=0):
+        return getattr(experience, name)[lanes[:, None], indices[:, offset:offset + count]]
     valid = starts.is_valid_sample
     remaining = starts.ep_termination_step - starts.ep_step
     real = valid[:, None] & (offsets <= remaining[:, None])
@@ -585,6 +600,15 @@ def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions
         jax.random.key(jnp.max(starts.global_step_id)),
         (lanes.shape[0], unroll_steps), 0, num_actions,
     )
+
+    def future(name):
+        if not self_consistency or getattr(experience, name) is None:
+            return None
+        # Gather exactly K columns, preserving the TPU gather/slice workaround.
+        values = gather(name, unroll_steps, offset=1)
+        mask = real[:, 1:].reshape((*real[:, 1:].shape, *((1,) * (values.ndim - 2))))
+        return jnp.where(mask, values, jnp.zeros((), values.dtype))
+
     sample = MuZeroTrainingSample(
         observation=None if starts.observation is None else starts.observation.astype(jnp.float32),
         board_bool=starts.board_bool, board_float=starts.board_float,
@@ -598,6 +622,9 @@ def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions
         policy_mask=real,
         value_mask=jnp.broadcast_to(complete[:, None], real.shape),
         reward_mask=jnp.broadcast_to(complete[:, None], real[:, :-1].shape),
+        consistency_observation=future("observation"),
+        consistency_board_bool=future("board_bool"),
+        consistency_board_float=future("board_float"),
     )
     return sample, missing
 
@@ -652,7 +679,8 @@ def make_muzero_selfplay_buffer(config, dummy_selfplay_output, data_sharding=Non
                 (rewards, discounts), reverse=True,
             )
             returns = jnp.zeros_like(exp.reward).at[:, order].set(returns.T)
-            fresh = (exp.is_fresh_i8 != 0) | (completed & ~exp.is_exploration)
+            eligible = ~exp.is_exploration | config.get("exp_train_on_exploration", False)
+            fresh = (exp.is_fresh_i8 != 0) | (completed & eligible)
             return exp.replace(
                 reward=jnp.where(completed, returns, exp.reward),
                 is_pending_reward_i8=jnp.where(completed, 0, exp.is_pending_reward_i8).astype(jnp.int8),
@@ -675,7 +703,8 @@ def make_muzero_selfplay_buffer(config, dummy_selfplay_output, data_sharding=Non
         # original.consume donates its input; read the returned storage, whose
         # records are intact (only freshness/eligibility changed).
         samples, missing = gather_muzero_training_samples(
-            after.experience, starts, k, config["game_num_actions"]
+            after.experience, starts, k, config["game_num_actions"],
+            self_consistency=config.get("exp_self_consistency", False),
         )
         after = after.replace(missing_count=after.missing_count + missing)
         return after, jax.tree.map(lambda x: x[:, None], samples), metrics

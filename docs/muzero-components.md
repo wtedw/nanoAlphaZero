@@ -75,6 +75,50 @@ policy KL, scalar value MSE, immediate reward MSE, and recurrent gradient scale
 are reused across unroll steps. Search uses root legality and learned internal
 transitions, with the research implementation's alternating-player assumption.
 
+### Experimental self-consistency
+
+`--exp-self-consistency` adds an EfficientZero-style temporal consistency loss.
+It is off by default. `--self-consistency-weight` sets its coefficient (default
+1.0 when enabled). This is only the auxiliary consistency objective, not a full
+EfficientZero V2 implementation; search and the policy/value/reward losses stay
+the same.
+
+At unroll step k, the model compares a predicted latent with the representation
+of the real observation at t+k. Both pass through a shared projection MLP; only
+the predicted branch passes through an additional prediction MLP. The target
+projection is stop-gradient. The loss is mean negative cosine similarity over
+valid future observations, added to the existing objective with the configured
+weight. `loss_consistency` approaches -1 as vectors align, so total loss can
+become negative. `consistency/n_valid` reports the number of contributing pairs
+per training batch, averaged over the cycle's updates.
+
+This follows the [EfficientZero V2 consistency objective](https://github.com/Shengjiewang-Jason/EfficientZeroV2/blob/main/ez/agents/base.py)
+with compact, model-width MLPs and LayerNorm instead of the reference's BatchNorm.
+It introduces no running normalization state or target-network update. The
+coefficient and valid-pair averaging follow this runner's loss scaling rather
+than reproducing the reference experiment's hyperparameters.
+
+Enabled replay samples additionally retain K future observations. Chess stays
+packed until training; dense observations retain their self-play storage dtype.
+The existing chronology checks and policy masks exclude reset/absorbing tails
+and cross-game targets. Terminal next observations are not stored by this runner,
+so consistency is not applied to the transition ending a game. Storage estimates
+include the added observations. Disabled runs retain their original parameter
+and replay tensor layouts. Enabled checkpoints require the same feature flag
+and coefficient on resume; this experiment is intended for a fresh run.
+
+For example, add `--exp-self-consistency --self-consistency-weight 1.0` to the
+existing Hex5 command. No additional evaluation or logging backend is required;
+both Trackio and W&B receive the new scalar metrics through the usual host loop.
+
+`--exp-train-on-exploration` additionally makes completed exploratory positions
+eligible as replay starts. All existing policy, value, reward, and (if enabled)
+self-consistency losses apply to them with the normal terminal masks. This flag
+does not change action selection or create a separate dynamics-only objective.
+It is off by default and independent of `--exp-self-consistency`. Policy targets
+remain search distributions; value targets remain completed self-play returns,
+including any exploratory moves. Positions still wait for game completion.
+
 Both dense and compressed BNK targets are supported. The MuZero search adapter
 selects and renormalizes top-K probabilities from the existing dense search
 output, avoiding its legacy BNK one-hot gather without changing the AlphaZero
@@ -105,8 +149,9 @@ modify games, replay, or optimizer state. Historical episode/replay histograms
 are not copied because they describe the old episodic collector.
 
 Chess observations stay packed through self-play, consumption, and replay.
-Only sampled training roots decode. Unroll gathering reads required transition
-fields directly and never decodes an entire replay buffer. Terminal padding
+Only sampled training roots (and future targets when self-consistency is enabled)
+decode. Unroll gathering reads required transition fields directly and never
+decodes an entire replay buffer. Terminal padding
 actions use the full action space, independently of target compression width.
 Data-parallel placement uses existing buffer initialization and the device mesh;
 TPU performance and compiled placement still need runtime verification.

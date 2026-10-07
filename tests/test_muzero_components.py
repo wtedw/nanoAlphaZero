@@ -292,15 +292,37 @@ def test_overwrite_of_pending_game_is_reported(config):
     assert int(state.overwritten_count) == 2
 
 
-def test_exploration_is_stored_but_never_selected_as_start(config):
+@pytest.mark.parametrize("enabled", [False, True])
+def test_exploration_training_is_opt_in(config, enabled):
+    from nanoalphazero.cli import parse_muzero_args
+
+    assert parse_muzero_args([]).exp_train_on_exploration is None
+    assert parse_muzero_args(["--exp-train-on-exploration"]).exp_train_on_exploration is True
+    assert parse_muzero_args(["--no-exp-train-on-exploration"]).exp_train_on_exploration is False
+    config = {**config, "exp_train_on_exploration": enabled, "exp_self_consistency": True,
+              "selfplay_buffer_consume_size": 6 if enabled else 4}
     buffer, state = make_buffer(config)
     for t in range(3):
         state = append(buffer, state, transition(config, t, t, exploration=t == 0,
                                                  terminal=t == 2, reward=float(t == 2)))
-    assert int(state.num_valid_consumable) == 4
-    np.testing.assert_array_equal(state.experience.is_valid_sample[:, :3], [[False, True, True]] * 2)
-    # Retain the actual action even though its start is excluded.
+        if t < 2:
+            assert int(state.num_valid_consumable) == 0
+    assert int(state.num_valid_consumable) == (6 if enabled else 4)
+    np.testing.assert_array_equal(state.experience.is_valid_sample[:, :3], [[enabled, True, True]] * 2)
+    # Exploration changes eligibility, never the action or completed return.
     np.testing.assert_array_equal(state.experience.action[:, :3], [[0, 1, 2]] * 2)
+    np.testing.assert_array_equal(state.experience.reward[:, :3], [[1, -1, 1]] * 2)
+    state, samples, _ = jax.jit(buffer.consume)(state)
+    assert int(state.num_valid_consumable) == 0
+    assert int(state.missing_count) == 0
+    assert bool(jnp.all(samples.value_mask))
+    assert bool(jnp.all(samples.reward_mask))
+    assert samples.consistency_observation is not None
+    # Only the enabled run selects the two exploratory step-zero starts. Their
+    # full three-position policy targets and two future consistency pairs stay valid.
+    root_lengths = jnp.sum(samples.policy_mask[:, 0], axis=1)
+    assert int(jnp.sum(root_lengths == 3)) == (2 if enabled else 0)
+    assert int(jnp.sum(samples.policy_mask[:, 0, 1:])) == (6 if enabled else 2)
 
 
 @pytest.mark.parametrize("exploration_moves", [0, 4])

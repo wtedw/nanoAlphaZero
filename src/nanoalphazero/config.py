@@ -577,6 +577,9 @@ def get_muzero_config(env="hex4", **overrides):
     if env == "chess":
         config.update(replay_buffer_total_size=4096000, ckpt_period=50)
     config.update(overrides)
+    # Keep disabled configs/checkpoints unchanged; only the experiment adds keys.
+    if config.get("exp_self_consistency", False):
+        config.setdefault("self_consistency_weight", 1.0)
     # Completed games may wait through a collection phase before consumption.
     # More headroom than AlphaZero is needed for overlapping unrolls.
     if "selfplay_buffer_max_len" not in overrides:
@@ -632,6 +635,11 @@ def validate_muzero_config(config, num_actions, device_count=1):
         raise ValueError("Replay warmup steps and num_iters cannot be negative")
     if config.get("diagnostic_period", 50) < 0:
         raise ValueError("diagnostic_period cannot be negative")
+    if config.get("exp_self_consistency", False):
+        import math
+        weight = config.get("self_consistency_weight", 1.0)
+        if not math.isfinite(weight) or weight <= 0:
+            raise ValueError("self_consistency_weight must be finite and positive")
     if config.get("exp_bnk_action_weights", False):
         top_k = config["mcts_num_k_actions"]
         if type(top_k) is not int or not 1 <= top_k <= num_actions:
