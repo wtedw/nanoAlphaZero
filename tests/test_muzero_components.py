@@ -188,19 +188,56 @@ def test_consume_matches_alphazero_selection_and_retains_overlapping_records(con
     assert int(actual_after.num_valid_consumable) == 8
 
 
-def test_terminal_padding_never_uses_next_game(config):
+@pytest.mark.parametrize("unroll_steps", [3, 5, 7])
+def test_terminal_padding_never_uses_next_game(config, unroll_steps):
     buffer, state = make_buffer(config)
     state = append(buffer, state, transition(config, 0, 0))
     state = append(buffer, state, transition(config, 1, 1, terminal=True, reward=1, game_id=7))
     state = append(buffer, state, transition(config, 2, 0))
     starts = jax.tree.map(lambda x: x[:, 1:2], state.experience)
-    samples, missing = gather_muzero_training_samples(state.experience, starts, 3)
+    samples, missing = gather_muzero_training_samples(state.experience, starts, unroll_steps)
     assert int(missing) == 0
-    np.testing.assert_array_equal(samples.policy_mask, [[True, False, False, False]] * 2)
-    np.testing.assert_array_equal(samples.reward, [[1, 0, 0, 0]] * 2)
-    np.testing.assert_array_equal(samples.transition_reward, [[1, 0, 0]] * 2)
+    np.testing.assert_array_equal(samples.policy_mask, [[True] + [False] * unroll_steps] * 2)
+    np.testing.assert_array_equal(samples.reward, [[1] + [0] * unroll_steps] * 2)
+    np.testing.assert_array_equal(samples.transition_reward, [[1] + [0] * (unroll_steps - 1)] * 2)
     assert bool(jnp.all(samples.value_mask))
     assert bool(jnp.all(samples.reward_mask))
+
+
+def test_five_step_cross_device_gather(config):
+    """TPU regression: gather K transitions without slicing a K+1 collective."""
+    from functools import partial
+
+    if jax.device_count() != 4:
+        pytest.skip("Requires four devices")
+    batch, capacity = 1024, 8
+    dummy = get_dummy_muzero_selfplay_output(config)
+    exp = jax.tree.map(lambda x: jnp.broadcast_to(x, (batch, capacity, *x.shape)), dummy)
+    steps = jnp.broadcast_to(jnp.arange(capacity), (batch, capacity))
+    rewards = jnp.arange(batch * capacity, dtype=jnp.float32).reshape(batch, capacity)
+    exp = exp.replace(
+        row_id=jnp.broadcast_to(jnp.arange(1, batch + 1, dtype=jnp.uint32)[:, None], steps.shape),
+        global_step_id=steps.astype(jnp.uint32), ep_step=steps.astype(jnp.int16),
+        ep_termination_step=jnp.full(steps.shape, capacity - 1, jnp.int16),
+        game_id=jnp.ones(steps.shape, jnp.uint32),
+        is_valid_sample=jnp.ones(steps.shape, bool),
+        is_from_selfplay=jnp.ones(steps.shape, bool),
+        is_pending_reward_i8=jnp.zeros(steps.shape, jnp.int8),
+        action=steps, reward=rewards, transition_reward=rewards,
+    )
+    # Every output device requests lanes stored on a different input device.
+    starts = jax.tree.map(lambda x: x[::-1, :1], exp)
+    mesh = jax.sharding.Mesh(np.array(jax.devices()), ("data",))
+    sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec("data"))
+    replicated = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
+    gather = jax.jit(partial(gather_muzero_training_samples, unroll_steps=5),
+                     in_shardings=(sharding, sharding), out_shardings=(sharding, replicated))
+    sample, missing = gather(jax.device_put(exp, sharding), jax.device_put(starts, sharding))
+    assert int(missing) == 0
+    np.testing.assert_array_equal(sample.transition_reward, np.asarray(rewards)[::-1, :5])
+    np.testing.assert_array_equal(sample.reward, np.asarray(rewards)[::-1, :6])
+    np.testing.assert_array_equal(sample.action, np.asarray(steps)[:, :5])
+    assert len(sample.transition_reward.addressable_shards) == 4
 
 
 def test_ring_wrap_and_consumed_starts_keep_chronology(config):

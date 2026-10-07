@@ -175,9 +175,17 @@ The Hex4 target is all four known winning openings (actions 3, 6, 9, 12) in both
 modes with zero unscored games. Consecutive successes are counted; three passes
 match the historical opening-suite gate. This does not prove perfect play at
 every position. Compact snapshots restart games and replay on resume.
-The three-step unroll compiled on the TPU validation machine; the default
-five-step unroll at batch 1,024 hit an XLA all-reduce-scatter shape error before
-training. That compiler failure remains unresolved.
+The recorded Hex strength runs used three-step unrolls. The five-step TPU
+compiler failure was subsequently isolated to a cross-device gather of K+1
+columns followed by slicing to K. XLA's all-reduce-scatter rewrite incorrectly
+retained the extra column. Transition fields now gather exactly K columns;
+state targets still gather K+1. This preserves sample semantics and avoids the
+faulty compiler rewrite. The previously failing Hex4 batch-1,024 configuration
+compiled and completed 100 optimizer updates at K=5 with zero buffer errors.
+The strength results above have not been repeated at K=5.
+The standalone [compiler reproducer](../scripts/repro_tpu_gather_slice.py)
+pins the affected JAX/libtpu versions and includes an equivalent passing variant
+and a four-device CPU control.
 
 The original MacBook refactor received static checks only. The chess port adds
 CPU regression coverage below. Original AlphaZero sections and all of `core.py`

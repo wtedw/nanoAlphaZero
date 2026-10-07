@@ -561,8 +561,8 @@ def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions
     indices = (starts.global_step_id[:, None] % capacity + offsets) % capacity
     # Root observations come from starts. Only gather the sequence fields used
     # below, avoiding K+1 copies of packed boards and legality masks.
-    def gather(name):
-        return getattr(experience, name)[lanes[:, None], indices]
+    def gather(name, count=unroll_steps + 1):
+        return getattr(experience, name)[lanes[:, None], indices[:, :count]]
     valid = starts.is_valid_sample
     remaining = starts.ep_termination_step - starts.ep_step
     real = valid[:, None] & (offsets <= remaining[:, None])
@@ -589,10 +589,12 @@ def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions
         observation=None if starts.observation is None else starts.observation.astype(jnp.float32),
         board_bool=starts.board_bool, board_float=starts.board_float,
         k_indices=None if experience.k_indices is None else jnp.where(real[..., None], gather("k_indices"), 0),
-        action=jnp.where(real[:, :-1], gather("action")[:, :-1], random_actions),
+        action=jnp.where(real[:, :-1], gather("action", unroll_steps), random_actions),
         action_weights=jnp.where(real[..., None], gather("action_weights"), 0),
         reward=jnp.where(real, gather("reward"), 0),
-        transition_reward=jnp.where(real[:, :-1], gather("transition_reward")[:, :-1], 0),
+        # Gather K transitions directly. Gathering K+1 then slicing the result
+        # triggers an invalid TPU all-reduce-scatter rewrite at K=5.
+        transition_reward=jnp.where(real[:, :-1], gather("transition_reward", unroll_steps), 0),
         policy_mask=real,
         value_mask=jnp.broadcast_to(complete[:, None], real.shape),
         reward_mask=jnp.broadcast_to(complete[:, None], real[:, :-1].shape),
