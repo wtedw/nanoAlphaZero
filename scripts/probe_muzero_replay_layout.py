@@ -28,7 +28,7 @@ The following are compiler-reported TEMPORARY allocations, not storage estimates
   masks:                   pred[1024,512,5 or 6], 2.5/3 MiB -> 64 MiB each
 The root board_float allocation was already unpadded (128 MiB).
 
-Hypotheses requiring TPU measurement:
+Candidate layouts:
   features: flatten each stored sample field, e.g. (5,8,8,2) -> (640,).
     Flashbax gathers flat features; only the sampled batch is reshaped for loss.
     This also folds K into the BNK and packed-observation feature axes.
@@ -39,7 +39,16 @@ Hypotheses requiring TPU measurement:
 
 Both variants retain every bit, dtype, item, RNG decision, and time index.
 Logical storage bytes are unchanged. Checkpoint layouts would change, so these
-remain isolated experiments until TPU results and migration handling are ready.
+remain isolated experiments pending production integration/migration handling.
+
+TPU comparison on 2026-10-07: both candidates executed 40 optimizer updates
+with finite losses and zero buffer errors at the failing baseline's dimensions.
+XLA's padded temporary payload fell from 21.69 GiB (9.62 GiB unpadded) to
+10.01 GiB (9.74 GiB unpadded) for features and 6.96 GiB (6.96 GiB unpadded)
+for matrix. Matrix also had higher initialization allocation peaks, so do not
+infer overall peak memory solely from its lower execution reservation.
+These two-cycle synthetic-replay probes did not exercise completed-game drain
+or long-run wraparound. Results: evals/muzero/replay-layout-padding-20261007.json.
 See https://docs.cloud.google.com/tpu/docs/performance-guide for TPU tiling.
 """
 

@@ -1,0 +1,139 @@
+{
+  "date": "2026-10-07",
+  "probe_commit": "81716d8",
+  "script": "scripts/probe_muzero_replay_layout.py",
+  "software": {
+    "jax": "0.8.1",
+    "libtpu": "0.0.30"
+  },
+  "hardware": {
+    "device_kind": "TPU v4",
+    "devices": 4,
+    "bytes_limit_per_device": 33014413312
+  },
+  "configuration": {
+    "env": "chess",
+    "conv_depth": 10,
+    "conv_width": 256,
+    "selfplay_batch_size": 4096,
+    "train_batch_size": 4096,
+    "selfplay_buffer_consume_size": 4096,
+    "selfplay_buffer_max_len": 552,
+    "replay_buffer_max_len": 512,
+    "muzero_unroll_steps": 5,
+    "cycle_n_selfplay": 20,
+    "cycle_n_train": 20,
+    "mcts_num_root_considered": 8,
+    "mcts_num_survivors": 4,
+    "mcts_num_k_actions": 128,
+    "exp_bnk_action_weights": true,
+    "exp_self_consistency": true,
+    "self_consistency_weight": 1.0,
+    "exp_train_on_exploration": false,
+    "muzero_remat_blocks": true,
+    "muzero_remat_unroll": true
+  },
+  "protocol": {
+    "command_template": "uv run --extra trackio python scripts/probe_muzero_replay_layout.py --platform tpu --layout LAYOUT --mode cycle --batch 4096 --capacity 512 --depth 10 --width 256",
+    "processes": "One fresh process per variant, no concurrent TPU process",
+    "baseline_provenance": "Earlier equivalent full-cycle capacity probe at the same configuration, before the layout adapter was added",
+    "replay": "One synthetic valid insertion, to exercise backward passes without waiting for game completion",
+    "selfplay": "Real chess self-play, 40 steps per lane",
+    "cycles_per_successful_variant": 2,
+    "checkpointing_and_trackers": false
+  },
+  "results": {
+    "baseline": {
+      "status": "compile_oom",
+      "error": "Used 37.58G of 30.75G hbm. Exceeded hbm capacity by 6.84G.",
+      "driver_report_gib_rounded": {
+        "total_including_reserved": 38.84,
+        "program": 30.19,
+        "arguments": 7.40,
+        "hlo_temp": 30.17,
+        "unpadded_temp_payload": 9.62,
+        "padded_temp_payload": 21.69,
+        "temp_fragmentation": 8.48
+      },
+      "largest_padded_fields_gib_rounded": {
+        "consistency_board_float": {"logical": 0.625, "allocated": 10.0},
+        "consistency_board_bool": {"logical": 2.29, "allocated": 4.0},
+        "action_weights": {"logical": 1.5, "allocated": 2.0},
+        "k_indices": {"logical": 0.75, "allocated": 1.0},
+        "board_bool": {"logical": 0.45703125, "allocated": 0.5}
+      }
+    },
+    "features": {
+      "status": "passed",
+      "compile_seconds": 219.3864088729024,
+      "cycle_seconds": [11.242233031895012, 10.937784948851913],
+      "optimizer_updates": 40,
+      "buffer_errors": 0,
+      "finite_metrics": true,
+      "total_losses": [3.596790075302124, 3.433239698410034],
+      "compiled_memory_bytes": {
+        "argument_size_in_bytes": 7942338048,
+        "output_size_in_bytes": 7942350848,
+        "alias_size_in_bytes": 7942337536,
+        "temp_size_in_bytes": 23474759680
+      },
+      "driver_report_gib_rounded": {
+        "total_including_reserved": 24.84,
+        "program": 16.19,
+        "hlo_temp": 15.94,
+        "unpadded_temp_payload": 9.74,
+        "padded_temp_payload": 10.01,
+        "temp_fragmentation": 5.93
+      },
+      "runtime_max_across_devices_bytes": {
+        "live_after_cycle": 8251475456,
+        "reserved_after_cycle": 17117003776,
+        "peak_live": 8251494400
+      }
+    },
+    "matrix": {
+      "status": "passed",
+      "compile_seconds": 217.9412756669335,
+      "cycle_seconds": [11.59803482471034, 11.290567210875452],
+      "optimizer_updates": 40,
+      "buffer_errors": 0,
+      "finite_metrics": true,
+      "total_losses": [3.596790075302124, 3.433239698410034],
+      "compiled_memory_bytes": {
+        "argument_size_in_bytes": 7942338048,
+        "output_size_in_bytes": 7942350848,
+        "alias_size_in_bytes": 7942337536,
+        "temp_size_in_bytes": 20336620032
+      },
+      "driver_report_gib_rounded": {
+        "total_including_reserved": 21.86,
+        "program": 13.21,
+        "hlo_temp": 12.95,
+        "unpadded_temp_payload": 6.96,
+        "padded_temp_payload": 6.96,
+        "temp_fragmentation": 5.99
+      },
+      "runtime_max_across_devices_bytes": {
+        "live_after_cycle": 8254552576,
+        "reserved_after_cycle": 13912195072,
+        "peak_live": 14034344448
+      }
+    }
+  },
+  "cpu_checks": {
+    "layout_tests_passed": 11,
+    "prerequisite_tests_passed": 13,
+    "full_cycle_variants_passed": ["features", "matrix"],
+    "updates_per_full_cycle_variant": 20,
+    "coverage": ["storage bits and dtypes", "unchanged logical byte count", "sampling with identical RNG keys", "circular wrap", "four-device placement", "identical loss and gradients", "refuse occupied TPU"]
+  },
+  "limitations": [
+    "Production MuZero still uses its original layout; only the probe substitutes the replay factory.",
+    "Full-checkpoint layout migration is not implemented for either candidate.",
+    "The measured TPU cycles did not reach completed-game drain; long-run buffer wrap was tested on CPU, not in these TPU cycles.",
+    "Synthetic replay losses are not evidence of learning or strength.",
+    "Two cycles are insufficient for a throughput comparison or memory-growth assessment.",
+    "CompiledMemoryStats, driver HBM reports, and allocator live/reserved counters describe different accounting; they should not be substituted for one another or summed indiscriminately.",
+    "Matrix's lower execution reservation comes with a higher initialization live-allocation peak."
+  ]
+}
