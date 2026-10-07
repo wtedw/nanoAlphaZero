@@ -316,7 +316,7 @@ def bayeselo_main(argv: Sequence[str] | None = None) -> None:
 # MuZero components
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Annotated, Literal
 
 import tyro
 
@@ -367,13 +367,17 @@ class MuZeroArgs:
     mcts_num_k_actions: int | None = None
     selfplay_buffer_min_len: int | None = None
     replay_buffer_total_size: int | None = None
-    muzero_diagnostic_period: int | None = None
+    diagnostic_period: int | None = None
     learning_rate: float | None = None
     weight_decay: float | None = None
     muzero_discount: float | None = None
     muzero_memory_fraction: float | None = None
     enable_sharding: bool | None = None
     enable_wandb: bool | None = None
+    # Root muzero.py only. Trackio takes precedence over W&B when both are enabled.
+    enable_trackio: Annotated[
+        bool | None, tyro.conf.arg(aliases=["--enabled-trackio"])
+    ] = None
     muzero_remat_blocks: bool | None = None
     muzero_remat_unroll: bool | None = None
     exp_bnk_action_weights: bool | None = None

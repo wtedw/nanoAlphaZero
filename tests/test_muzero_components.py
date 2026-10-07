@@ -401,7 +401,7 @@ def test_host_uses_alphazero_step_budgets(config, assembly, tmp_path):
     run_muzero = assembly.run_muzero
 
     cfg = {**config, "num_iters": 25, "replay_buffer_warmup_steps": 25,
-           "cycle_n_train": 3, "muzero_diagnostic_period": 0,
+           "cycle_n_train": 3, "diagnostic_period": 0,
            "selfplay_buffer_max_len": 64}
     algorithm = assembly.make_muzero(cfg, jax.random.PRNGKey(0))
     path = tmp_path / "budget.safetensors"

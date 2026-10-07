@@ -572,7 +572,6 @@ def get_muzero_config(env="hex4", **overrides):
         muzero_remat_blocks=env == "chess", muzero_remat_unroll=env == "chess",
         muzero_checkpoint_replay=env != "chess",
         muzero_memory_fraction=0.75,
-        muzero_diagnostic_period=50,
         enable_wandb=False,
     )
     if env == "chess":
@@ -631,8 +630,8 @@ def validate_muzero_config(config, num_actions, device_count=1):
             raise ValueError(f"{prefix}_min_len must fit within its capacity")
     if config.get("replay_buffer_warmup_steps", 100) < 0 or config["num_iters"] < 0:
         raise ValueError("Replay warmup steps and num_iters cannot be negative")
-    if config.get("muzero_diagnostic_period", 50) < 0:
-        raise ValueError("muzero_diagnostic_period cannot be negative")
+    if config.get("diagnostic_period", 50) < 0:
+        raise ValueError("diagnostic_period cannot be negative")
     if config.get("exp_bnk_action_weights", False):
         top_k = config["mcts_num_k_actions"]
         if type(top_k) is not int or not 1 <= top_k <= num_actions:

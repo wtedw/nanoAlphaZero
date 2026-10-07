@@ -23,6 +23,7 @@ definitions remain unchanged; `core.py` remains unchanged in its entirety.
 | `mcts.py` | Learned recurrent callback to the existing search engine |
 | `buffers.py` | Extended records, completed returns, sequence gathering, storage budget |
 | `eval/hex/training.py` | Shared Hex match evaluator and MuZero evaluation adapter |
+| `eval/muzero.py` | Fixed-opening head diagnostics and tracker chart adapters |
 | `checkpoint.py` | Full persistent-state snapshots |
 | `cli.py` | Root script arguments; existing entry points unchanged |
 
@@ -81,11 +82,27 @@ search function. Chess uses 128 weights and uint16 action indices per target.
 KL normalizes predictions over all 4,672 actions before gathering stored target
 indices. Compression can truncate target mass; it is not identical to retaining
 the dense target. `compress_muzero_policy` also returns retained probability mass
-for independent inspection. Every 50 cycles (and the first cycle), a separate
+for independent inspection. Every 50 cycles (and the first and final cycles), a separate
 probe logs retained mass and support overflow for up to 32 current roots. These
 are snapshot diagnostics, not full-collection averages. Probe keys do not advance
-the training RNG; `--muzero-diagnostic-period 0` disables the probe and memory
+the training RNG; `--diagnostic-period 0` disables the probe and memory
 telemetry.
+
+At the same interval, Hex runs inspect every possible first move, using both
+the actual next-board observation and the learned latent transition. The host
+logs opening policy entropy, logit summaries, real/latent value agreement,
+predicted reward error, and value error against solved opening outcomes. Values
+after Black's opening are from White's perspective. These are model-head
+diagnostics, not MoHex match results or a proof of playing strength.
+
+With Trackio or W&B enabled, the same probe also logs interactive Plotly opening
+logit and real/latent value heatmaps, top/bottom move highlights, numeric tables
+including reply logits and legality, and head-output histograms. Trackio uses
+HTML figures; W&B uses Plotly objects. Without a tracker, scalars still appear in
+JSON logs and no chart files are written. `--diagnostic-period 0` disables
+all these probes. The fixed opening suite does not advance training RNG or
+modify games, replay, or optimizer state. Historical episode/replay histograms
+are not copied because they describe the old episodic collector.
 
 Chess observations stay packed through self-play, consumption, and replay.
 Only sampled training roots decode. Unroll gathering reads required transition

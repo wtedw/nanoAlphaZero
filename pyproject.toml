@@ -25,6 +25,9 @@ dependencies = [
     "tyro>=1.0.16",
 ]
 
+[project.optional-dependencies]
+trackio = ["trackio>=0.19,<1"]
+
 [project.scripts]
 train = "nanoalphazero.cli:train_main"
 eval = "nanoalphazero.cli:eval_main"

@@ -6,6 +6,7 @@ loop are visible here too. Buffer indexing,
 model layers, search internals, and checkpoint serialization live in components.
 
 Run with ``uv run python muzero.py --env hex4``. Use --help for configuration.
+For Trackio, use ``uv run --extra trackio python muzero.py --enabled-trackio``.
 The historical portable export is muzero-singlefile.py.
 """
 
@@ -324,10 +325,22 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None, 
     )}
     print(json.dumps({"compile_seconds": time.monotonic() - started,
                       "compiled_memory": compiled_memory}), flush=True)
-    if config.get("enable_wandb", False):
+    if config.get("enable_trackio", False):
+        try:
+            import trackio
+        except ModuleNotFoundError as exc:
+            if exc.name != "trackio":
+                raise
+            raise RuntimeError(
+                "Trackio logging requires the optional dependency: "
+                "uv run --extra trackio python muzero.py --enabled-trackio"
+            ) from exc
+        run = trackio.init(project="nanoAlphaZero-muzero", config=config)
+    elif config.get("enable_wandb", False):
         import wandb
         run = wandb.init(project="nanoAlphaZero-muzero", config=config)
     try:
+        head_probe = None
         if evaluator is not None:
             evaluator.run(start_cycle, state, force=True)
         if resume is None or not include_replay:
@@ -351,8 +364,18 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None, 
             metrics = {name: float(value) for name, value in jax.device_get(metrics).items()}
             # device_get synchronizes execution; exclude diagnostics and disk I/O.
             metrics["timing/cycle_seconds"] = time.monotonic() - started
-            period = config.get("muzero_diagnostic_period", 50)
-            if period and (cycle == start_cycle + 1 or cycle % period == 0):
+            diagnostic_logs = {}
+            period = config.get("diagnostic_period", 50)
+            if period and (cycle == start_cycle + 1 or cycle % period == 0 or cycle == cycles):
+                if config.get("env_id", "").startswith("hex"):
+                    from nanoalphazero.eval.muzero import make_muzero_head_probe, head_diagnostic_logs
+                    if head_probe is None:
+                        head_probe = make_muzero_head_probe(algorithm.model, algorithm.env, config)
+                    head_metrics, tables, histograms = head_probe(state.model_ts.params)
+                    metrics.update(head_metrics)
+                    if run is not None:
+                        backend = "trackio" if config.get("enable_trackio", False) else "wandb"
+                        diagnostic_logs = head_diagnostic_logs(tables, histograms, backend)
                 if algorithm.compression_probe is not None:
                     # Inspection has an independent key and never advances training RNG.
                     probe = algorithm.compression_probe(
@@ -371,7 +394,7 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None, 
                 metrics.update(evaluator.run(cycle, state, force=cycle == cycles))
             print(json.dumps({"cycle": cycle, **metrics}), flush=True)
             if run is not None:
-                run.log(metrics, step=cycle)
+                run.log({**metrics, **diagnostic_logs}, step=cycle)
             if checkpoint_path and (cycle == start_cycle + 1 or (
                 config.get("ckpt_period") and cycle % config["ckpt_period"] == 0
             )):
