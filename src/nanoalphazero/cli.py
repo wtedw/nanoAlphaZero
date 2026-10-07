@@ -315,29 +315,80 @@ def bayeselo_main(argv: Sequence[str] | None = None) -> None:
 
 # MuZero components
 
-def parse_muzero_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """CLI for root muzero.py; leave the established train command unchanged."""
-    from nanoalphazero.config import CONFIG_FACTORIES
+from dataclasses import dataclass
+from typing import Literal
 
-    parser = argparse.ArgumentParser(description="Persistent MuZero self-play and training")
-    parser.add_argument("--env", choices=list(CONFIG_FACTORIES), default="hex4")
-    parser.add_argument("--platform", choices=("cpu", "tpu"))
-    parser.add_argument("--save", type=Path, help="Optional safetensors checkpoint; chess defaults to compact")
-    parser.add_argument("--resume", type=Path)
-    parser.add_argument("--muzero-network", choices=("vector", "spatial"))
-    for name in (
-        "seed", "num-iters", "conv-width", "conv-depth", "selfplay-batch-size",
-        "train-batch-size", "cycle-n-selfplay", "cycle-n-train", "muzero-unroll-steps",
-        "muzero-warmup-cycles", "selfplay-buffer-max-len", "selfplay-buffer-consume-size",
-        "replay-buffer-max-len", "mcts-num-root-considered", "mcts-num-survivors",
-        "lr-warmup-steps", "ckpt-period", "mcts-num-k-actions",
-        "selfplay-buffer-min-len", "replay-buffer-total-size",
-        "muzero-diagnostic-period",
+import tyro
+
+from nanoalphazero.config import CONFIG_FACTORIES
+
+
+MuZeroEnv = Literal[tuple(CONFIG_FACTORIES)]
+
+
+@dataclass
+class MuZeroArgs:
+    """Persistent MuZero. Omitted overrides inherit the selected game's defaults."""
+
+    env: MuZeroEnv = "hex4"
+    platform: Literal["cpu", "tpu"] | None = None
+
+    # Optional safetensors checkpoint; chess defaults to compact.
+    save: Path | None = None
+
+    resume: Path | None = None
+    muzero_network: Literal["vector", "spatial"] | None = None
+    hex_eval_period: int = 0
+    hex_eval_engine_path: str | None = None
+    hex_eval_engine_config: str = "default"
+    hex_eval_output: Path | None = None
+
+    # AlphaZero step budget, divided by cycle_n_selfplay into full cycles.
+    num_iters: int | None = None
+
+    # Self-play steps per lane for buffer warmup, rounded down to full cycles.
+    replay_buffer_warmup_steps: int | None = None
+
+    seed: int | None = None
+    conv_width: int | None = None
+    conv_depth: int | None = None
+    selfplay_batch_size: int | None = None
+    train_batch_size: int | None = None
+    cycle_n_selfplay: int | None = None
+    cycle_n_train: int | None = None
+    muzero_unroll_steps: int | None = None
+    selfplay_buffer_max_len: int | None = None
+    selfplay_buffer_consume_size: int | None = None
+    replay_buffer_max_len: int | None = None
+    mcts_num_root_considered: int | None = None
+    mcts_num_survivors: int | None = None
+    lr_warmup_steps: int | None = None
+    ckpt_period: int | None = None
+    mcts_num_k_actions: int | None = None
+    selfplay_buffer_min_len: int | None = None
+    replay_buffer_total_size: int | None = None
+    muzero_diagnostic_period: int | None = None
+    learning_rate: float | None = None
+    weight_decay: float | None = None
+    muzero_discount: float | None = None
+    muzero_memory_fraction: float | None = None
+    enable_sharding: bool | None = None
+    enable_wandb: bool | None = None
+    muzero_remat_blocks: bool | None = None
+    muzero_remat_unroll: bool | None = None
+    exp_bnk_action_weights: bool | None = None
+    muzero_checkpoint_replay: bool | None = None
+
+
+def parse_muzero_args(argv: Sequence[str] | None = None) -> MuZeroArgs:
+    """Tyro owns MuZero CLI types and flags; AlphaZero keeps its existing parser."""
+    args = tyro.cli(MuZeroArgs, args=argv, config=(tyro.conf.DisallowNone,))
+    if args.hex_eval_period < 0:
+        raise ValueError("--hex-eval-period cannot be negative")
+    if args.hex_eval_period and (
+        not args.env.startswith("hex") or not args.hex_eval_engine_path or not args.hex_eval_output
     ):
-        parser.add_argument("--" + name, type=int)
-    for name in ("learning-rate", "weight-decay", "muzero-discount", "muzero-memory-fraction"):
-        parser.add_argument("--" + name, type=float)
-    for name in ("enable-sharding", "enable-wandb", "muzero-remat-blocks", "muzero-remat-unroll",
-                 "exp-bnk-action-weights", "muzero-checkpoint-replay"):
-        parser.add_argument("--" + name, action=argparse.BooleanOptionalAction, default=None)
-    return parser.parse_args(argv)
+        raise ValueError("Hex evaluation requires a Hex environment, --hex-eval-engine-path and --hex-eval-output")
+    if args.hex_eval_period and args.hex_eval_output.exists():
+        raise ValueError("--hex-eval-output must be a new directory")
+    return args

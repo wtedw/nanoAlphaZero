@@ -573,15 +573,11 @@ def get_muzero_config(env="hex4", **overrides):
         muzero_checkpoint_replay=env != "chess",
         muzero_memory_fraction=0.75,
         muzero_diagnostic_period=50,
-        muzero_warmup_cycles=1, enable_wandb=False,
+        enable_wandb=False,
     )
     if env == "chess":
         config.update(replay_buffer_total_size=4096000, ckpt_period=50)
     config.update(overrides)
-    if env == "chess" and "muzero_warmup_cycles" not in overrides:
-        config["muzero_warmup_cycles"] = (
-            config["game_max_steps"] + config["cycle_n_selfplay"] - 1
-        ) // config["cycle_n_selfplay"]
     # Completed games may wait through a collection phase before consumption.
     # More headroom than AlphaZero is needed for overlapping unrolls.
     if "selfplay_buffer_max_len" not in overrides:
@@ -589,6 +585,11 @@ def get_muzero_config(env="hex4", **overrides):
             4 * config["game_max_steps"] + config["cycle_n_selfplay"]
             + config["muzero_unroll_steps"]
         )
+        if env.startswith("hex"):
+            # Random fresh-start selection can leave a small remainder across
+            # several cycles. The shorter Hex5 ring failed the runtime guard;
+            # 512 slots passed the bounded TPU runs. Keep the guard active.
+            config["selfplay_buffer_max_len"] = max(512, config["selfplay_buffer_max_len"])
     config["selfplay_buffer_add_batch_size"] = config["selfplay_batch_size"]
     config["selfplay_buffer_sample_batch_size"] = config["selfplay_batch_size"]
     config["replay_buffer_add_batch_size"] = config["selfplay_buffer_consume_size"]

@@ -5,6 +5,11 @@ historical standalone research snapshot, renamed without changing its logic.
 The two paths have different collection semantics. Do not compare results as
 if renaming alone produced the new algorithm.
 
+Root MuZero uses Tyro to parse the typed `MuZeroArgs` dataclass. Omitted options
+inherit the selected game's defaults; boolean overrides retain `--flag` and
+`--no-flag` syntax. AlphaZero's CLI remains unchanged. Run
+`uv run python muzero.py --help` for the generated options and types.
+
 ## Components
 
 New definitions are appended to existing package files. Original AlphaZero
@@ -94,12 +99,33 @@ Established game defaults apply. Replay capacity counts sequence items, so its
 memory cost is higher than AlphaZero's position replay. Size it deliberately
 before a full run. `selfplay_buffer_max_len` defaults to extra headroom for
 completed games waiting until the cycle drain. Chess defaults to 4,096,000
-replay items, block/unroll rematerialization, and enough warmup cycles to advance
-one game horizon. These are capacity settings, not a claim that every TPU fits.
+replay items and block/unroll rematerialization. Warmup uses the inherited
+AlphaZero replay-warmup setting. These settings do not imply that every TPU fits.
 Before allocating buffers the assembly reports their logical and per-device
 bytes and checks the combined persistent requirement against available device
 statistics (75% budget by default). The host compiles and reports cycle memory
 before warmup. Temporary arrays and optimizer storage require additional room.
+
+MuZero search honors AlphaZero's root-temperature option. `--num-iters` now has
+AlphaZero's meaning for both defaults and explicit overrides: a fresh run executes
+`num_iters // cycle_n_selfplay` training cycles (Hex5: 34,000 / 20 = 1,700).
+Buffer warmup uses `replay_buffer_warmup_steps // cycle_n_selfplay` cycles, with
+frozen optimizer and LR counters. `--replay-buffer-warmup-steps` overrides that
+step budget; there is no MuZero-specific warmup option. Both divisions round
+down, exactly as AlphaZero does. Evaluation and checkpoint periods remain cycles.
+On resume, the host also follows AlphaZero's existing calculation:
+`(num_iters - model_ts.step) // cycle_n_selfplay` additional cycles. The saved
+model step counts optimizer updates; this inherited formula is not equivalent
+to subtracting completed self-play steps when N and M differ.
+Earlier MuZero runs used cycle-valued `num_iters` and `muzero_warmup_cycles`;
+their configs do not satisfy the current strict resume-config check. Historical
+artifacts are preserved; convert old command budgets explicitly before new runs.
+MuZero still learns latent transitions and rewards and trains unroll samples,
+so matching these settings does not make it identical to AlphaZero.
+Hex self-play storage has a 512-slot minimum by default: the shorter Hex5 ring
+hit the buffer safety guard in runtime testing. Random selection may retain a
+fresh remainder across cycles; this capacity is empirically validated, not a
+guarantee against overflow. Explicit capacity overrides and error checks remain.
 
 Full checkpoints use `nanoalphazero.muzero.persistent.v1` and include environment
 state, both buffers, optimizer, model parameters, RNG, and cycle number. They
@@ -128,6 +154,30 @@ those sources; this change preserves that snapshot's behavior rather than
 silently refreshing it. Running the exporter explicitly refreshes the snapshot.
 
 ## Validation handoff
+
+For periodic Hex4 strength checks during persistent training, use root MuZero's
+MoHex adapter (the engine pool starts before JAX initializes):
+
+```bash
+uv run python muzero.py --env hex4 --platform tpu --num-iters 5000 \
+  --replay-buffer-warmup-steps 20 --muzero-unroll-steps 3 --no-enable-wandb \
+  --no-muzero-checkpoint-replay --ckpt-period 50 \
+  --hex-eval-period 50 --hex-eval-engine-path /path/to/mohex \
+  --hex-eval-output artifacts/hex4-NEW/mohex \
+  --save artifacts/hex4-NEW/latest.safetensors
+```
+
+The evaluation directory must be new. Baseline, scheduled, and final evaluations
+play all 16 openings against MoHex in both greedy-policy and learned-search
+modes, with independent evaluation RNGs. `MUZERO_MOHEX_RESULT` prints the scores;
+`scores.jsonl` retains them alongside raw games and compact evaluated checkpoints.
+The Hex4 target is all four known winning openings (actions 3, 6, 9, 12) in both
+modes with zero unscored games. Consecutive successes are counted; three passes
+match the historical opening-suite gate. This does not prove perfect play at
+every position. Compact snapshots restart games and replay on resume.
+The three-step unroll compiled on the TPU validation machine; the default
+five-step unroll at batch 1,024 hit an XLA all-reduce-scatter shape error before
+training. That compiler failure remains unresolved.
 
 The original MacBook refactor received static checks only. The chess port adds
 CPU regression coverage below. Original AlphaZero sections and all of `core.py`

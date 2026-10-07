@@ -1143,7 +1143,7 @@ def make_muzero_train(config, model, model_state, data_sharding=None):
     return train_fn, model_ts
 
 
-def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None):
+def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None, evaluator=None):
     """Host loop; assembly and the collect/drain/train cycle stay in root muzero.py."""
     import json
     from nanoalphazero.checkpoint import (
@@ -1176,7 +1176,8 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None):
             raise RuntimeError(
                 "MuZero self-play buffer lost required transitions or encountered "
                 "unsupported truncation. No optimizer update was applied in this cycle. "
-                "Inspect buffer counters and increase selfplay_buffer_max_len if needed."
+                "Inspect buffer counters and increase selfplay_buffer_max_len if needed. "
+                f"Counters: { {name: int(value) for name, value in metrics.items() if name.startswith('selfplay_buffer/')} }"
             )
         if not all(np.isfinite(value) for value in metrics.values()):
             raise RuntimeError("Nonfinite MuZero training metrics")
@@ -1198,15 +1199,29 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None):
         import wandb
         run = wandb.init(project="nanoAlphaZero-muzero", config=config)
     try:
+        if evaluator is not None:
+            evaluator.run(start_cycle, state, force=True)
         if resume is None or not include_replay:
-            for _ in range(config.get("muzero_warmup_cycles", 1)):
+            num_warmup_cycles = (
+                config.get("replay_buffer_warmup_steps", 100) // config["cycle_n_selfplay"]
+            )
+            for warmup in range(num_warmup_cycles):
+                started = time.monotonic()
                 state, metrics = run_cycle(state, jnp.bool_(True))
                 check(jax.device_get(metrics))
-        cycles = config["num_iters"] if num_iters is None else num_iters
+                print(json.dumps({"warmup_cycle": warmup + 1,
+                                  "timing/cycle_seconds": time.monotonic() - started}), flush=True)
+        # Match AlphaZero's host-loop budget, including its step counter on resume.
+        budget = config["num_iters"] if num_iters is None else num_iters
+        n_cycles = max(0, (budget - int(state.model_ts.step)) // config["cycle_n_selfplay"])
+        cycles = start_cycle + n_cycles
         cycle = start_cycle
         for cycle in range(start_cycle + 1, cycles + 1):
+            started = time.monotonic()
             state, metrics = run_cycle(state, jnp.bool_(False))
             metrics = {name: float(value) for name, value in jax.device_get(metrics).items()}
+            # device_get synchronizes execution; exclude diagnostics and disk I/O.
+            metrics["timing/cycle_seconds"] = time.monotonic() - started
             period = config.get("muzero_diagnostic_period", 50)
             if period and (cycle == start_cycle + 1 or cycle % period == 0):
                 if algorithm.compression_probe is not None:
@@ -1223,6 +1238,8 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None):
                     if all(name in stats for stats in memory):
                         metrics[f"memory/{name}_max"] = max(stats[name] for stats in memory)
             check(metrics)
+            if evaluator is not None:
+                metrics.update(evaluator.run(cycle, state, force=cycle == cycles))
             print(json.dumps({"cycle": cycle, **metrics}), flush=True)
             if run is not None:
                 run.log(metrics, step=cycle)
@@ -1240,3 +1257,71 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None):
         if run is not None:
             run.finish()
     return state
+
+
+class MuZeroHexEvaluator:
+    """Read-only MoHex matches; evaluation never changes training RNG or replay."""
+
+    def __init__(self, algorithm, pool, period, output):
+        import hashlib
+        import json
+        from pathlib import Path
+        from nanoalphazero.eval.hex.training import HexTrainingEvaluator
+        from nanoalphazero.mcts import make_muzero_policy
+
+        self.algorithm = algorithm
+        self.period = period
+        self.output = Path(output)
+        self.output.mkdir(parents=True, exist_ok=False)
+        self.streak = 0
+        self.searches = {"search": algorithm.run_mcts_fn,
+                         "policy": make_muzero_policy(algorithm.env, algorithm.model)}
+        self.evaluators = {
+            mode: HexTrainingEvaluator(1, pool, self.output / mode, algorithm.config["boardsize"])
+            for mode in self.searches
+        }
+        manifest = {
+            "config": algorithm.config, "period": period,
+            "engine": str(pool.executable), "engine_config": pool.config.read_text(),
+            "engine_sha256": hashlib.sha256(pool.executable.read_bytes()).hexdigest(),
+            "criterion": "All known-winning openings in both modes; zero unscored games",
+            "scope": "Opening-suite coverage, not proof of perfect play",
+        }
+        (self.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+
+    def run(self, cycle, state, *, force=False):
+        import json
+        from nanoalphazero.checkpoint import save_muzero_checkpoint, muzero_checkpoint_payload
+
+        if not force and cycle % self.period:
+            return {}
+        metrics, results = {}, {}
+        for mode, search in self.searches.items():
+            print(f"MUZERO_MOHEX_BEGIN cycle={cycle} mode={mode}", flush=True)
+            scores = self.evaluators[mode].run_if_due(
+                cycle, search, self.algorithm.env, self.algorithm.config, state.model_ts.params,
+                train_step=int(state.model_ts.n_updates),
+            )
+            results[mode] = {key.removeprefix("hex_eval/"): value for key, value in scores.items()}
+            metrics.update({f"mohex/{mode}/{key}": value for key, value in results[mode].items()})
+        success = all(
+            row["perfect_opening_total"] > 0
+            and row["perfect_opening_wins"] == row["perfect_opening_total"]
+            and row["unscored"] == 0
+            for row in results.values()
+        )
+        self.streak = self.streak + 1 if success else 0
+        result = {"cycle": cycle, "updates": int(state.model_ts.n_updates),
+                  "modes": results, "both_modes_passed": success,
+                  "consecutive_passes": self.streak}
+        with (self.output / "scores.jsonl").open("a") as stream:
+            stream.write(json.dumps(result) + "\n")
+        print("MUZERO_MOHEX_RESULT " + json.dumps(result), flush=True)
+        # Retain the exact evaluated parameters/optimizer without multi-GB buffers.
+        save_muzero_checkpoint(
+            self.output / f"cycle-{cycle:06d}.safetensors",
+            muzero_checkpoint_payload(state, cycle, False),
+            {**self.algorithm.config, "muzero_checkpoint_replay": False},
+        )
+        return {**metrics, "mohex/both_modes_passed": int(success),
+                "mohex/consecutive_passes": self.streak}

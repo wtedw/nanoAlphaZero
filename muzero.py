@@ -79,8 +79,8 @@ def make_muzero(config, rng, data_sharding=None):
     for prefix in ("selfplay_buffer", "replay_buffer"):
         if not 1 <= config[f"{prefix}_min_len"] <= config[f"{prefix}_max_len"]:
             raise ValueError(f"{prefix}_min_len must fit within its capacity")
-    if config.get("muzero_warmup_cycles", 1) < 0 or config["num_iters"] < 0:
-        raise ValueError("Warmup cycles and num_iters cannot be negative")
+    if config.get("replay_buffer_warmup_steps", 100) < 0 or config["num_iters"] < 0:
+        raise ValueError("Replay warmup steps and num_iters cannot be negative")
     if config.get("muzero_diagnostic_period", 50) < 0:
         raise ValueError("muzero_diagnostic_period cannot be negative")
 
@@ -220,14 +220,26 @@ def main(argv=None):
     import os
     if args.platform:
         os.environ["JAX_PLATFORMS"] = args.platform
-    import jax
-    from nanoalphazero.training import run_muzero
-
     overrides = {name: value for name, value in vars(args).items()
-                 if value is not None and name not in ("env", "save", "resume", "platform")}
+                 if value is not None and name not in ("env", "save", "resume", "platform")
+                 and not name.startswith("hex_eval_")}
     config = get_muzero_config(args.env, **overrides)
-    algorithm = make_muzero(config, jax.random.PRNGKey(config["seed"]))
-    run_muzero(algorithm, checkpoint_path=args.save, resume=args.resume)
+    pool = None
+    try:
+        # Start subprocess engines before JAX/libtpu owns accelerator resources.
+        if args.hex_eval_period:
+            from nanoalphazero.eval.hex.engine import MoHexPool
+            size = config["boardsize"]
+            pool = MoHexPool(args.hex_eval_engine_path, args.hex_eval_engine_config, size, size * size)
+        import jax
+        from nanoalphazero.training import run_muzero, MuZeroHexEvaluator
+        algorithm = make_muzero(config, jax.random.PRNGKey(config["seed"]))
+        evaluator = (MuZeroHexEvaluator(algorithm, pool, args.hex_eval_period, args.hex_eval_output)
+                     if pool is not None else None)
+        run_muzero(algorithm, checkpoint_path=args.save, resume=args.resume, evaluator=evaluator)
+    finally:
+        if pool is not None:
+            pool.close()
 
 
 if __name__ == "__main__":

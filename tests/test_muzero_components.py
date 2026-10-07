@@ -36,7 +36,7 @@ def config():
         muzero_network="vector", muzero_unroll_steps=3,
         cycle_n_selfplay=10, cycle_n_train=1, lr_warmup_steps=0,
         mcts_num_root_considered=2, mcts_num_survivors=1,
-        num_exploratory_moves=0,
+        num_exploratory_moves=0, replay_buffer_warmup_steps=10,
     )
     cfg.update(game_obs_shape=[3, 3, 2], game_num_actions=9)
     return cfg
@@ -56,6 +56,63 @@ def assert_trees_equal(left, right):
     assert len(a) == len(b)
     for actual, expected in zip(a, b, strict=True):
         np.testing.assert_allclose(actual, expected, atol=1e-6, rtol=1e-6)
+
+
+def test_muzero_policy_masks_occupied_actions(config, assembly):
+    from nanoalphazero.mcts import make_muzero_policy
+
+    algorithm = assembly.make_muzero(config, jax.random.PRNGKey(19))
+    state = algorithm.runner_state.selfplay_state.env_state
+    state = algorithm.env.step(state, jnp.zeros((2,), dtype=jnp.int32))
+    params = algorithm.runner_state.model_ts.params
+    observation = algorithm.env.observe(state, state.current_player)
+    _, logits, _ = algorithm.model.apply(
+        {"params": params}, observation, method=algorithm.model.initial,
+    )
+    expected = jnp.argmax(jnp.where(state.legal_action_mask, logits, -jnp.inf), axis=-1)
+    output = make_muzero_policy(algorithm.env, algorithm.model)(
+        jax.random.PRNGKey(42), state, params, 0.0, 2,
+    )
+    np.testing.assert_array_equal(output.action, expected)
+    np.testing.assert_array_equal(output.action_weights[:, 0], 0)
+    np.testing.assert_allclose(output.action_weights.sum(axis=-1), 1, atol=1e-6)
+
+
+def test_muzero_mohex_cadence_and_success(config, assembly, tmp_path, monkeypatch):
+    import json
+    from types import SimpleNamespace
+    from nanoalphazero.training import MuZeroHexEvaluator
+    from nanoalphazero.eval.hex.training import HexTrainingEvaluator
+    import nanoalphazero.checkpoint as checkpoint
+
+    algorithm = assembly.make_muzero(config, jax.random.PRNGKey(7))
+    engine = tmp_path / "engine"
+    engine.write_text("fake engine")
+    pool = SimpleNamespace(executable=engine, config=engine)
+    wins = [4]
+    calls, saved = [], []
+
+    def evaluate(self, cycle, *args, **kwargs):
+        calls.append(cycle)
+        return {"hex_eval/perfect_opening_total": 4,
+                "hex_eval/perfect_opening_wins": wins[0], "hex_eval/unscored": 0}
+
+    monkeypatch.setattr(HexTrainingEvaluator, "run_if_due", evaluate)
+    monkeypatch.setattr(checkpoint, "save_muzero_checkpoint",
+                        lambda *args: saved.append(args))
+    evaluator = MuZeroHexEvaluator(algorithm, pool, 5, tmp_path / "results")
+    state = algorithm.runner_state
+    assert evaluator.run(1, state) == {}
+    assert not calls
+    assert evaluator.run(5, state)["mohex/consecutive_passes"] == 1
+    assert evaluator.run(10, state)["mohex/consecutive_passes"] == 2
+    wins[0] = 3
+    assert evaluator.run(12, state, force=True)["mohex/consecutive_passes"] == 0
+    assert calls == [5, 5, 10, 10, 12, 12]
+    assert len(saved) == 3
+    assert all(row[2]["muzero_checkpoint_replay"] is False for row in saved)
+    rows = [json.loads(line) for line in (tmp_path / "results/scores.jsonl").read_text().splitlines()]
+    assert [row["both_modes_passed"] for row in rows] == [True, True, False]
 
 
 def transition(config, t, step, *, terminal=False, reward=0.0,
@@ -185,7 +242,9 @@ def test_exploration_is_stored_but_never_selected_as_start(config):
     np.testing.assert_array_equal(state.experience.action[:, :3], [[0, 1, 2]] * 2)
 
 
-def test_selfplay_wrapper_preserves_original_actions_and_state(config, assembly):
+@pytest.mark.parametrize("exploration_moves", [0, 4])
+def test_selfplay_wrapper_preserves_original_actions_and_state(config, assembly, exploration_moves):
+    config = {**config, "num_exploratory_moves": exploration_moves}
     env = make_env(config)
 
     def search(key, state, params, scale, batch_size):
@@ -197,6 +256,8 @@ def test_selfplay_wrapper_preserves_original_actions_and_state(config, assembly)
     original, original_state = make_selfplay(config, env, search)
     wrapped, wrapped_state = assembly.make_muzero_selfplay(config, env, search)
     terminations = 0
+    exploration_count = 0
+    independent_resets = 0
     for t in range(24):
         key = jax.random.PRNGKey(t)
         original_state, expected, _ = original(key, original_state, None)
@@ -206,8 +267,13 @@ def test_selfplay_wrapper_preserves_original_actions_and_state(config, assembly)
         for field, value in vars(expected).items():
             assert_trees_equal(value, getattr(actual, field))
         terminations += int(jnp.sum(actual.just_terminated))
+        exploration_count += int(jnp.sum(actual.is_exploration))
+        independent_resets += int(jnp.any(actual.just_terminated) & ~jnp.all(actual.just_terminated))
     assert terminations > config["selfplay_batch_size"]
     assert int(wrapped_state.step_count) == 24
+    if exploration_moves:
+        assert exploration_count > 0
+        assert independent_resets > 0
 
 
 @pytest.mark.parametrize("network", ["vector", "spatial"])
@@ -235,18 +301,94 @@ def test_model_loss_and_gradients_match_research(config, network):
     assert_trees_equal(actual, expected)
 
 
-def test_search_matches_research_adapter(config):
+@pytest.mark.parametrize("temperature", [1.0, 1.3])
+def test_search_matches_research_adapter(config, temperature):
     from nanoalphazero.research.muzero.search import latent_search
 
     env = make_env(config)
-    config = {**config, "game_obs_shape": list(env.obs_shape)}
+    config = {**config, "game_obs_shape": list(env.obs_shape),
+              "exp_use_root_temperature": True, "exp_root_temperature": temperature}
     model, variables = make_muzero_model(config, jax.random.PRNGKey(3))
     states = env.init(jax.random.split(jax.random.PRNGKey(1), 2))
     key = jax.random.PRNGKey(5)
     actual = make_muzero_mcts(config, env, model)(key, states, variables["params"], 1.0, 2)
     expected = latent_search(model, variables["params"], env.observe(states, states.current_player),
-                             states.legal_action_mask, key, roots=2, survivors=1)
+                             states.legal_action_mask, key, roots=2, survivors=1,
+                             root_temperature=temperature)
     assert_trees_equal(actual, expected)
+
+
+def test_hex_defaults_match_alphazero_budget_and_warmup():
+    from nanoalphazero.config import CONFIG_FACTORIES
+
+    for env in ("hex4", "hex5", "hex6"):
+        original = CONFIG_FACTORIES[env]()
+        actual = get_muzero_config(env)
+        assert actual["num_iters"] == original["num_iters"]
+        assert actual["selfplay_buffer_max_len"] >= 512
+        assert actual["replay_buffer_warmup_steps"] == original["replay_buffer_warmup_steps"]
+        assert "muzero_warmup_cycles" not in actual
+        for key in ("learning_rate", "lr_warmup_steps", "conv_width", "conv_depth",
+                    "train_batch_size", "selfplay_batch_size", "exp_root_temperature"):
+            assert actual[key] == original[key]
+    explicit = get_muzero_config("hex5", num_iters=17, replay_buffer_warmup_steps=40)
+    assert explicit["num_iters"] == 17
+    assert explicit["replay_buffer_warmup_steps"] == 40
+
+
+def test_host_uses_alphazero_step_budgets(config, assembly, tmp_path):
+    from nanoalphazero.training import run_muzero
+
+    cfg = {**config, "num_iters": 25, "replay_buffer_warmup_steps": 25,
+           "cycle_n_train": 3, "muzero_diagnostic_period": 0,
+           "selfplay_buffer_max_len": 64}
+    algorithm = assembly.make_muzero(cfg, jax.random.PRNGKey(0))
+    path = tmp_path / "budget.safetensors"
+    state = run_muzero(algorithm, checkpoint_path=path)
+    # Floor both budgets to complete N=10 self-play cycles, like AlphaZero.
+    # Two warmup cycles collect without updating; two training cycles update M=3.
+    assert int(state.selfplay_state.step_count) == 40
+    assert int(state.model_ts.n_updates) == 6
+    assert int(state.model_ts.step) == 6
+    fresh = assembly.make_muzero(cfg, jax.random.PRNGKey(0))
+    restored = run_muzero(fresh, resume=path)
+    # Preserve AlphaZero's existing resume formula even when N != M:
+    # (25 - 6 optimizer steps) // 10 = one more cycle, without repeating warmup.
+    assert int(restored.selfplay_state.step_count) == 50
+    assert int(restored.model_ts.n_updates) == 9
+
+
+def test_cli_uses_alphazero_warmup_option():
+    from nanoalphazero.cli import parse_muzero_args
+
+    args = parse_muzero_args(["--num-iters", "5000", "--replay-buffer-warmup-steps", "20"])
+    assert args.num_iters == 5000
+    assert args.replay_buffer_warmup_steps == 20
+    with pytest.raises(SystemExit):
+        parse_muzero_args(["--muzero-warmup-cycles", "2"])
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_muzero_root_temperature_matches_alphazero(config, monkeypatch, enabled):
+    from types import SimpleNamespace
+    import nanoalphazero.mcts as mcts
+
+    env = make_env(config)
+    states = env.init(jax.random.split(jax.random.PRNGKey(1), 2))
+    states = env.step(states, jnp.zeros(2, dtype=jnp.int32))
+    logits = jnp.broadcast_to(jnp.arange(9, dtype=jnp.float32), (2, 9))
+    model = SimpleNamespace(initial=None, apply=lambda *a, **kw: (logits, logits, jnp.zeros(2)))
+
+    def capture(params, key, root, recurrent, **kwargs):
+        return PolicyOutput(action=jnp.argmax(root.prior_logits, axis=-1),
+                            action_weights=root.prior_logits)
+
+    monkeypatch.setattr(mcts, "gumbel_muzero_policy_1sh", capture)
+    cfg = {**config, "exp_use_root_temperature": enabled, "exp_root_temperature": 1.3}
+    output = make_muzero_mcts(cfg, env, model)(jax.random.PRNGKey(3), states, {}, 0.0, 2)
+    expected = (jnp.where(states.legal_action_mask, logits / 1.3, jnp.finfo(logits.dtype).min)
+                if enabled else logits)
+    np.testing.assert_allclose(output.action_weights, expected)
 
 
 def test_cycle_and_checkpoint_continuation(config, assembly, tmp_path):
@@ -265,6 +407,26 @@ def test_cycle_and_checkpoint_continuation(config, assembly, tmp_path):
     continued, _ = algorithm.run_fn(state, jnp.bool_(False))
     restored, _ = algorithm.run_fn(loaded["runner_state"], jnp.bool_(False))
     assert_trees_equal(continued, restored)
+
+
+def test_games_continue_across_short_cycles(config, assembly):
+    config = {**config, "cycle_n_selfplay": 3, "num_exploratory_moves": 4}
+    algorithm = assembly.make_muzero(config, jax.random.PRNGKey(0))
+    state, metrics = algorithm.run_fn(algorithm.runner_state, jnp.bool_(True))
+    # Tic-tac-toe cannot terminate in three plies. No new game may replace it.
+    np.testing.assert_array_equal(state.selfplay_state.ep_step, 3)
+    assert int(state.selfplay_state.step_count) == 3
+    assert int(state.model_ts.n_updates) == 0
+    expected_games = jax.tree.map(lambda x: jnp.array(x, copy=True), state.selfplay_state)
+    key = jnp.array(state.rng, copy=True)
+    for _ in range(3):
+        key, move_key = jax.random.split(key)
+        expected_games, _, _ = algorithm.selfplay_fn(move_key, expected_games, state.model_ts.params)
+    state, metrics = algorithm.run_fn(state, jnp.bool_(True))
+    assert_trees_equal(state.selfplay_state, expected_games)
+    np.testing.assert_array_equal(state.rng, key)
+    assert int(state.selfplay_state.step_count) == 6
+    assert int(metrics["selfplay_buffer/error_count"]) == 0
 
 
 @pytest.mark.parametrize("error", ["overwritten_count", "missing_count", "truncated_count"])
@@ -316,7 +478,7 @@ def chess_config():
         conv_width=8, conv_depth=1, muzero_unroll_steps=2,
         cycle_n_selfplay=512, cycle_n_train=1, lr_warmup_steps=0,
         mcts_num_root_considered=2, mcts_num_survivors=1,
-        num_exploratory_moves=0, muzero_warmup_cycles=0,
+        num_exploratory_moves=0, replay_buffer_warmup_steps=0,
     )
     cfg.update(game_obs_shape=[8, 8, 119], game_num_actions=4672)
     return cfg
@@ -380,7 +542,7 @@ def test_chess_packed_sparse_cycle_and_checkpoint(chess_config, assembly, tmp_pa
     assert int(probe["compression_probe/n_roots"]) == chess_config["selfplay_batch_size"]
     np.testing.assert_allclose(probe["compression_probe/retained_mass_mean"], 1, atol=1e-6)
     assert float(probe["compression_probe/support_overflow_fraction"]) == 0
-    state = run_muzero(algorithm, num_iters=1, checkpoint_path=tmp_path / "host.safetensors")
+    state = run_muzero(algorithm, num_iters=512, checkpoint_path=tmp_path / "host.safetensors")
     assert int(state.selfplay_buffer_state.overwritten_count) == 0
     assert int(state.selfplay_buffer_state.missing_count) == 0
     assert int(state.selfplay_buffer_state.truncated_count) == 0
@@ -419,7 +581,7 @@ def test_compact_resume_restarts_buffers_and_runs_warmup(config, assembly, tmp_p
     )
     from nanoalphazero.training import run_muzero
 
-    config = {**config, "muzero_checkpoint_replay": False, "muzero_warmup_cycles": 1}
+    config = {**config, "muzero_checkpoint_replay": False, "replay_buffer_warmup_steps": 10}
     algorithm = assembly.make_muzero(config, jax.random.PRNGKey(0))
     state, _ = algorithm.run_fn(algorithm.runner_state, jnp.bool_(False))
     payload = muzero_checkpoint_payload(state, 1, False)

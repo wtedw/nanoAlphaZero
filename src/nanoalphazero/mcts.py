@@ -682,6 +682,11 @@ def make_muzero_mcts(config, wenv, model, data_sharding=None):
         latent, logits, value = model.apply(
             {"params": params}, observation, method=model.initial
         )
+        if config.get("exp_use_root_temperature", False):
+            logits = jnp.where(
+                legal, logits / config.get("exp_root_temperature", 1.3),
+                jnp.finfo(logits.dtype).min,
+            )
         output = gumbel_muzero_policy_1sh(
             params, key,
             RootFnOutput(prior_logits=logits, value=value, embedding=latent),
@@ -728,3 +733,18 @@ def make_muzero_compression_probe(config, wenv, model):
         }
 
     return probe
+
+
+def make_muzero_policy(wenv, model):
+    """Greedy legal policy for evaluation, using the same MuZero parameters."""
+    @functools.partial(jax.jit, static_argnums=(4, 5))
+    def policy(key, state, params, gumbel_scale, batch_size, num_simulations=None):
+        observation = wenv.observe(state, state.current_player)
+        _, logits, _ = model.apply({"params": params}, observation, method=model.initial)
+        legal = (unpack_bitmask_vmap(state.legal_action_bitmask)
+                 if getattr(state, "legal_action_bitmask", None) is not None else state.legal_action_mask)
+        logits = jnp.where(legal, logits, -jnp.inf)
+        return PolicyOutput(action=jnp.argmax(logits, axis=-1),
+                            action_weights=jax.nn.softmax(logits),
+                            visit_counts=jnp.zeros_like(logits))
+    return policy
