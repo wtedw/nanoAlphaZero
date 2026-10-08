@@ -740,7 +740,8 @@ def test_chess_packed_sparse_cycle_and_checkpoint(chess_config, assembly, tmp_pa
     assert (tmp_path / "chess-False.safetensors").stat().st_size < (tmp_path / "chess-True.safetensors").stat().st_size
 
 
-def test_compact_resume_restarts_buffers_and_runs_warmup(config, assembly, tmp_path):
+@pytest.mark.parametrize("layout", ["original", "features"])
+def test_compact_resume_restarts_buffers_and_runs_warmup(config, assembly, tmp_path, layout):
     from nanoalphazero.checkpoint import (
         save_muzero_checkpoint, muzero_checkpoint_payload,
     )
@@ -751,14 +752,24 @@ def test_compact_resume_restarts_buffers_and_runs_warmup(config, assembly, tmp_p
     state, _ = algorithm.run_fn(algorithm.runner_state, jnp.bool_(False))
     payload = muzero_checkpoint_payload(state, 1, False)
     path = tmp_path / "compact.safetensors"
-    save_muzero_checkpoint(path, payload, algorithm.config)
-    fresh = assembly.make_muzero(config, jax.random.PRNGKey(0))
+    # Compact checkpoints written before the flag also support switching layout.
+    saved_config = {key: value for key, value in algorithm.config.items() if key != "buffer_layout"}
+    save_muzero_checkpoint(path, payload, saved_config)
+    resumed_config = {**config, "buffer_layout": layout}
+    fresh = assembly.make_muzero(resumed_config, jax.random.PRNGKey(0))
     restored = run_muzero(fresh, num_iters=1, resume=path)
     assert int(restored.model_ts.n_updates) == int(state.model_ts.n_updates)
     assert int(restored.selfplay_state.step_count) == config["cycle_n_selfplay"]
     assert int(restored.selfplay_buffer_state.overwritten_count) == 0
     assert bool(fresh.replay_buffer.can_sample(restored.replay_buffer_state))
+    if layout == "features":
+        assert restored.replay_buffer_state.experience.observation.ndim == 3
     assert_trees_equal(restored.model_ts, payload["model_ts"])
+
+    # Changing storage layout must not silently change optimization semantics.
+    fresh.config["learning_rate"] *= 2
+    with pytest.raises(ValueError, match="identical resolved configuration"):
+        run_muzero(fresh, num_iters=1, resume=path)
 
 
 def test_chess_storage_estimates_and_defaults(chess_config):

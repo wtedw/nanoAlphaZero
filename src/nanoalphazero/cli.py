@@ -362,6 +362,8 @@ class MuZeroArgs:
     self_consistency_weight: float | None = None
     # Include exploratory positions as training starts for all enabled losses.
     exp_train_on_exploration: bool | None = None
+    # MuZero replay storage only; self-play retains its original layout.
+    buffer_layout: Literal["original", "features"] | None = None
     selfplay_buffer_max_len: int | None = None
     selfplay_buffer_consume_size: int | None = None
     replay_buffer_max_len: int | None = None

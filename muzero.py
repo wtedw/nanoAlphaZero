@@ -224,7 +224,7 @@ def make_muzero(config, rng, data_sharding=None):
     import jax.numpy as jnp
     from nanoalphazero.buffers import (
         get_dummy_muzero_selfplay_output, get_dummy_muzero_training_sample,
-        make_muzero_selfplay_buffer, make_replay_buffer, check_muzero_storage_budget,
+        make_muzero_selfplay_buffer, make_muzero_replay_buffer, check_muzero_storage_budget,
     )
     from nanoalphazero.config import validate_muzero_config
     from nanoalphazero.core import make_env, RunnerState, DATA_PARALLEL_SHARDING
@@ -253,7 +253,7 @@ def make_muzero(config, rng, data_sharding=None):
     selfplay_buffer, selfplay_buffer_state = make_muzero_selfplay_buffer(
         config, get_dummy_muzero_selfplay_output(config), data_sharding,
     )
-    replay_buffer, replay_buffer_state = make_replay_buffer(
+    replay_buffer, replay_buffer_state = make_muzero_replay_buffer(
         config, get_dummy_muzero_training_sample(config), data_sharding,
     )
     train_fn, model_ts = make_muzero_train(config, model, model_state, data_sharding)
@@ -361,8 +361,19 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None, 
         payload, saved_config = load_muzero_checkpoint(
             resume, muzero_checkpoint_payload(state, 0, include_replay)
         )
-        if saved_config != config:
-            raise ValueError("MuZero resume requires identical resolved configuration")
+        # Older checkpoints predate the layout setting. Compact checkpoints
+        # rebuild buffers, so their layout may change.
+        saved_config.setdefault("buffer_layout", "original")
+        resume_config = {"buffer_layout": "original", **config}
+        if not include_replay:
+            resume_config.update(
+                buffer_layout=saved_config["buffer_layout"],
+            )
+        if saved_config != resume_config:
+            raise ValueError(
+                "MuZero resume requires identical resolved configuration "
+                "except buffer_layout for compact checkpoints"
+            )
         start_cycle = int(payload["cycle"])
         if include_replay:
             state = payload["runner_state"]

@@ -628,6 +628,42 @@ def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions
     return sample, missing
 
 
+def make_muzero_replay_buffer(config, dummy, data_sharding=None):
+    """Optionally store each replay field as [B, T, features].
+
+    Only storage changes: sampled fields regain their original trailing shapes.
+    Self-play retains its existing layout for return backfill and window gathers.
+    """
+    layout = config.get("buffer_layout", "original")
+    if layout == "original":
+        return make_replay_buffer(config, dummy, data_sharding)
+    if layout != "features":
+        raise ValueError(f"Unknown MuZero buffer layout: {layout}")
+
+    def flatten(batch, leading):
+        return jax.tree.map(lambda x: x.reshape((*x.shape[:leading], -1)), batch)
+
+    inner, state = make_replay_buffer(config, flatten(dummy, 0), data_sharding)
+
+    def init(example):
+        return inner.init(flatten(example, 0))
+
+    @functools.partial(jax.jit, donate_argnums=(0,))
+    def add(state, batch):
+        return inner.add(state, flatten(batch, 2))
+
+    @jax.jit
+    def sample(state, key):
+        result = inner.sample(state, key)
+        experience = jax.tree.map(
+            lambda x, example: x.reshape((*x.shape[:2], *example.shape)),
+            result.experience, dummy,
+        )
+        return result.replace(experience=experience)
+
+    return inner.replace(init=init, add=add, sample=sample), state
+
+
 def make_muzero_selfplay_buffer(config, dummy_selfplay_output, data_sharding=None):
     """Persistent transitions, completed returns, and AlphaZero consume selection.
 

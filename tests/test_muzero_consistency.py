@@ -234,10 +234,11 @@ def test_packed_future_observations_match_dense_loss(runner):
 
 
 @pytest.mark.parametrize("sharded", [False, True])
-def test_enabled_cycle_checkpoint_continuation(runner, tmp_path, sharded):
+@pytest.mark.parametrize("layout", ["original", "features"])
+def test_enabled_cycle_checkpoint_continuation(runner, tmp_path, sharded, layout):
     from nanoalphazero.checkpoint import save_muzero_checkpoint, load_muzero_checkpoint, muzero_checkpoint_payload
 
-    cfg = config(exp_self_consistency=True)
+    cfg = config(exp_self_consistency=True, buffer_layout=layout)
     if sharded:
         if jax.device_count() != 4:
             pytest.skip("Requires four devices")
@@ -254,6 +255,9 @@ def test_enabled_cycle_checkpoint_continuation(runner, tmp_path, sharded):
     save_muzero_checkpoint(path, payload, algorithm.config)
     loaded, restored_config = load_muzero_checkpoint(path, payload)
     assert restored_config["exp_self_consistency"]
+    assert restored_config["buffer_layout"] == layout
+    if layout == "features":
+        assert state.replay_buffer_state.experience.observation.ndim == 3
     restored = jax.device_put(loaded["runner_state"], jax.tree.map(lambda x: x.sharding, state))
     if sharded:
         assert len(state.replay_buffer_state.experience.observation.addressable_shards) == 4

@@ -568,6 +568,7 @@ def get_muzero_config(env="hex4", **overrides):
     config = CONFIG_FACTORIES[env]()
     config.update(
         algorithm="muzero", env=env, seed=0,
+        buffer_layout="original",
         muzero_network="spatial", muzero_unroll_steps=5, muzero_discount=1.0,
         muzero_remat_blocks=env == "chess", muzero_remat_unroll=env == "chess",
         muzero_checkpoint_replay=env != "chess",
@@ -581,7 +582,7 @@ def get_muzero_config(env="hex4", **overrides):
     if config.get("exp_self_consistency", False):
         config.setdefault("self_consistency_weight", 1.0)
     # Completed games may wait through a collection phase before consumption.
-    # More headroom than AlphaZero is needed for overlapping unrolls.
+    # Extra headroom reduces evictions before completed starts are consumed.
     if "selfplay_buffer_max_len" not in overrides:
         config["selfplay_buffer_max_len"] = (
             4 * config["game_max_steps"] + config["cycle_n_selfplay"]
@@ -589,8 +590,8 @@ def get_muzero_config(env="hex4", **overrides):
         )
         if env.startswith("hex"):
             # Random fresh-start selection can leave a small remainder across
-            # several cycles. The shorter Hex5 ring failed the runtime guard;
-            # 512 slots passed the bounded TPU runs. Keep the guard active.
+            # several cycles. Keep the empirically tested 512-slot default;
+            # evictions are now counted rather than stopping training.
             config["selfplay_buffer_max_len"] = max(512, config["selfplay_buffer_max_len"])
     config["selfplay_buffer_add_batch_size"] = config["selfplay_batch_size"]
     config["selfplay_buffer_sample_batch_size"] = config["selfplay_batch_size"]

@@ -64,6 +64,14 @@ no policy loss. Completed games alone supply training samples. If no replay
 batch is ready, a cycle advances games without an optimizer update. Warmup also
 advances games and fills buffers without optimizer updates.
 
+`--buffer-layout features` flattens each replay field to `[B, T, F]`, keeping
+its dtype and restoring its original shape when sampled. For chess with K=5,
+`board_float` changes from `[B, T, 6, 8, 8, 2]` to `[B, T, 768]` in storage.
+Logical bytes, sample selection, and training targets are unchanged. This is a
+MuZero-only wrapper around the existing replay factory; AlphaZero and self-play
+storage are unchanged. The default is `--buffer-layout original`. Matrix layout
+remains a benchmark experiment. The flag currently applies only to replay.
+
 PGX's current auto-reset discards the boundary observation on truncation.
 The new path reports truncation as an error instead of inventing a bootstrap
 target. Built-in environments use termination, including their game limits.
@@ -214,8 +222,14 @@ counter. Older full v1/v2 checkpoints have different state layouts and are
 rejected; compact v1 checkpoints remain compatible because they contain no
 observation buffers or buffer counters.
 Compact resume starts fresh games and buffers and reruns warmup; it is not exact
-trajectory continuation. Both modes require identical resolved configuration
-for resume. Historical episode-based
+trajectory continuation. Compact checkpoints allow changing
+`buffer_layout` when rebuilding buffers; all other
+resolved settings must match. Full checkpoints require identical configuration.
+Full checkpoints retain their selected layout; switching a full checkpoint's
+layout requires conversion and is not implemented. Resume a features checkpoint
+with `--buffer-layout features` again. Checkpoints without a layout
+setting use `original`. Compact checkpoints can resume with either layout.
+Historical episode-based
 checkpoints cannot resume this pipeline. The host returns the final runner
 state; exposed component handles can be used for evaluation independently.
 Historical research diagnostic/evaluation CLIs remain available for their
