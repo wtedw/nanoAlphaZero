@@ -517,8 +517,10 @@ class MuZeroTrainingSample:
 
 @chex.dataclass(frozen=True)
 class MuZeroSelfplayBufferState(CustomTrajectoryBufferState):
-    # Sticky errors stop the host before any invalid data can train the model.
+    # Evictions are expected data loss, counted separately from invalid samples.
     overwritten_count: ArrayLike = 0
+    dropped_pending_count: ArrayLike = 0
+    # Sticky errors stop the host before any invalid data can train the model.
     missing_count: ArrayLike = 0
     truncated_count: ArrayLike = 0
 
@@ -634,7 +636,7 @@ def make_muzero_selfplay_buffer(config, dummy_selfplay_output, data_sharding=Non
     """
     original, initial = make_selfplay_buffer(config, dummy_selfplay_output, data_sharding)
     initial = MuZeroSelfplayBufferState(
-        **vars(initial), overwritten_count=jnp.int32(0),
+        **vars(initial), overwritten_count=jnp.int32(0), dropped_pending_count=jnp.int32(0),
         missing_count=jnp.int32(0), truncated_count=jnp.int32(0),
     )
     capacity = config["selfplay_buffer_max_len"]
@@ -643,25 +645,20 @@ def make_muzero_selfplay_buffer(config, dummy_selfplay_output, data_sharding=Non
     def add_backfill(state, output, env_state_terminated, env_state_rewards):
         old = state.experience
         index = state.current_index
-        # An old transition may still be needed by a fresh predecessor.
-        predecessors = (index - jnp.arange(k + 1)) % capacity
-        dependent = old.is_valid_sample[:, predecessors] & (
-            old.global_step_id[:, predecessors] + jnp.arange(k + 1)
-            == old.global_step_id[:, index, None]
-        ) & (old.game_id[:, predecessors] == old.game_id[:, index, None])
-        protected = old.is_from_selfplay[:, index] & (
-            (old.is_pending_reward_i8[:, index] != 0) | jnp.any(dependent, axis=1)
-        )
+        # Chronological eviction removes a start before any of its successors.
+        # Thus every surviving completed start still has its forward unroll.
+        dropped_pending = old.is_from_selfplay[:, index] & (old.is_pending_reward_i8[:, index] != 0)
+        dropped_completed = old.is_from_selfplay[:, index] & ~dropped_pending & old.is_valid_sample[:, index]
         updated = original.add(state, output)
         exp = updated.experience
         pending = exp.is_from_selfplay & (exp.is_pending_reward_i8 != 0)
         finished = output.just_terminated[:, 0]
         completed = pending & finished[:, None]
-        # Detect loss of an episode prefix, independently of overwrite checks.
-        missing_prefix = finished & (jnp.sum(pending, axis=1) != output.ep_step[:, 0] + 1)
 
         def finish_returns(exp):
             # Read oldest -> newest across ring wrap, then scan backwards.
+            # An evicted prefix is unnecessary: retained returns depend only
+            # on the suffix through termination, which is still chronological.
             order = (updated.current_index + jnp.arange(capacity)) % capacity
             rewards = exp.transition_reward[:, order].T
             discounts = exp.discount[:, order].T
@@ -690,8 +687,8 @@ def make_muzero_selfplay_buffer(config, dummy_selfplay_output, data_sharding=Non
         exp = jax.lax.cond(jnp.any(finished), finish_returns, lambda x: x, exp)
         updated = updated.replace(
             experience=exp, num_valid_consumable=jnp.sum(exp.is_valid_sample),
-            overwritten_count=state.overwritten_count + jnp.sum(protected),
-            missing_count=state.missing_count + jnp.sum(missing_prefix),
+            overwritten_count=state.overwritten_count + jnp.sum(dropped_pending | dropped_completed),
+            dropped_pending_count=state.dropped_pending_count + jnp.sum(dropped_pending),
         )
         return updated, ({"selfplay_buffer/overwritten_count": updated.overwritten_count}, {})
 
@@ -710,7 +707,7 @@ def make_muzero_selfplay_buffer(config, dummy_selfplay_output, data_sharding=Non
         empty = original.init(example)
         return MuZeroSelfplayBufferState(
             **vars(empty), num_valid_consumable=jnp.int32(0),
-            overwritten_count=jnp.int32(0), missing_count=jnp.int32(0),
+            overwritten_count=jnp.int32(0), dropped_pending_count=jnp.int32(0), missing_count=jnp.int32(0),
             truncated_count=jnp.int32(0),
         )
 

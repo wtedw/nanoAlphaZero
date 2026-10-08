@@ -202,7 +202,7 @@ def save_muzero_checkpoint(path, state, config):
                 value = jax.random.key_data(value)
             tensors[name] = np.array(jax.device_get(value), copy=True, order="C")
         save_safetensors_file(tensors, temporary, metadata={
-            "format": ("nanoalphazero.muzero.persistent.v2" if "runner_state" in state
+            "format": ("nanoalphazero.muzero.persistent.v3" if "runner_state" in state
                        else "nanoalphazero.muzero.compact.v1"),
             "paths": json.dumps(paths), "key_impls": json.dumps(key_impls),
             "config": json.dumps(config, sort_keys=True, allow_nan=False),
@@ -215,7 +215,7 @@ def save_muzero_checkpoint(path, state, config):
 
 def load_muzero_checkpoint(path, template):
     expected, tree = jax.tree_util.tree_flatten_with_path(template)
-    expected_format = ("nanoalphazero.muzero.persistent.v2" if "runner_state" in template
+    expected_format = ("nanoalphazero.muzero.persistent.v3" if "runner_state" in template
                        else "nanoalphazero.muzero.compact.v1")
     with safe_open(str(path), framework="flax") as reader:
         meta = reader.metadata()

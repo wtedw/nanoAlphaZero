@@ -290,6 +290,60 @@ def test_overwrite_of_pending_game_is_reported(config):
     for t in range(5):
         state = append(buffer, state, transition(config, t, t))
     assert int(state.overwritten_count) == 2
+    assert int(state.dropped_pending_count) == 2
+    # Multiple wraps discard the prefix, but the retained suffix still has
+    # exact signed, discounted returns and complete forward unrolls.
+    for t in range(5, 10):
+        state = append(buffer, state, transition(config, t, t, terminal=t == 9,
+                                                 reward=float(t == 9), discount=-0.5))
+    assert int(state.overwritten_count) == int(state.dropped_pending_count) == 12
+    assert int(state.missing_count) == 0
+    assert int(state.num_valid_consumable) == 8
+    np.testing.assert_allclose(state.experience.reward[:, [2, 3, 0, 1]],
+                               [[-0.125, 0.25, -0.5, 1]] * 2)
+    for _ in range(4):
+        state, samples, _ = jax.jit(buffer.consume)(state)
+        assert bool(jnp.all(samples.value_mask))
+        assert int(state.missing_count) == 0
+
+
+def test_unconsumed_completed_start_is_counted_on_eviction(config):
+    # Six completed starts yield one batch of five and one leftover. A buffer
+    # longer than the completed episode can still evict that leftover.
+    config = {**config, "selfplay_buffer_max_len": 8, "selfplay_buffer_min_len": 1,
+              "selfplay_buffer_consume_size": 5}
+    buffer, state = make_buffer(config)
+    for t in range(3):
+        state = append(buffer, state, transition(config, t, t, terminal=t == 2,
+                                                 reward=float(t == 2)))
+    state, _, _ = jax.jit(buffer.consume)(state)
+    assert int(state.num_valid_consumable) == 1
+    remaining_step = int(jnp.max(jnp.where(state.experience.is_valid_sample,
+                                         state.experience.global_step_id, 0)))
+    assert not bool(jnp.any(state.experience.is_pending_reward_i8[:, :3]))
+    for t in range(3, remaining_step + config["selfplay_buffer_max_len"] + 1):
+        assert int(state.overwritten_count) == 0
+        state = append(buffer, state, transition(config, t, t - 3, game_id=2))
+    assert int(state.overwritten_count) == 1
+    assert int(state.dropped_pending_count) == 0
+    assert int(state.num_valid_consumable) == 0
+    assert int(state.missing_count) == 0
+
+
+def test_completed_evictions_preserve_surviving_unrolls(config):
+    config = {**config, "selfplay_buffer_max_len": 8, "selfplay_buffer_min_len": 1}
+    buffer, state = make_buffer(config)
+    # Do not consume: evict an entire completed game and a prefix of the next.
+    for t in range(15):
+        state = append(buffer, state, transition(config, t, t % 5,
+                        terminal=t % 5 == 4, reward=float(t % 5 == 4), game_id=t // 5 + 1))
+    assert int(state.overwritten_count) == 14
+    assert int(state.dropped_pending_count) == 0
+    assert int(state.num_valid_consumable) == 16
+    for _ in range(8):
+        state, samples, _ = jax.jit(buffer.consume)(state)
+        assert bool(jnp.all(samples.value_mask))
+        assert int(state.missing_count) == 0
 
 
 @pytest.mark.parametrize("enabled", [False, True])
@@ -512,7 +566,7 @@ def test_games_continue_across_short_cycles(config, assembly):
     assert int(metrics["selfplay_buffer/error_count"]) == 0
 
 
-@pytest.mark.parametrize("error", ["overwritten_count", "missing_count", "truncated_count"])
+@pytest.mark.parametrize("error", ["missing_count", "truncated_count"])
 def test_error_blocks_optimizer_updates(config, assembly, error):
     algorithm = assembly.make_muzero(config, jax.random.PRNGKey(0))
     state = algorithm.runner_state
@@ -520,6 +574,34 @@ def test_error_blocks_optimizer_updates(config, assembly, error):
     following, metrics = algorithm.run_fn(state, jnp.bool_(False))
     assert int(metrics["selfplay_buffer/error_count"]) >= 1
     assert int(following.model_ts.n_updates) == 0
+
+
+def test_evictions_allow_optimizer_updates(config, assembly, tmp_path):
+    from nanoalphazero.checkpoint import save_muzero_checkpoint, load_muzero_checkpoint
+
+    # T=4 forces eviction before tic-tac-toe can finish (at least five plies).
+    config = {**config, "selfplay_buffer_max_len": 4, "selfplay_buffer_min_len": 1}
+    algorithm = assembly.make_muzero(config, jax.random.PRNGKey(0))
+    state = algorithm.runner_state
+    for _ in range(3):
+        state, metrics = algorithm.run_fn(state, jnp.bool_(False))
+        assert int(metrics["selfplay_buffer/error_count"]) == 0
+        assert all(np.isfinite(value) for value in metrics.values())
+    assert int(state.model_ts.n_updates) == 3
+    assert int(metrics["selfplay_buffer/dropped_pending_count"]) > 0
+    assert int(metrics["selfplay_buffer/dropped_completed_count"]) > 0
+    assert int(metrics["selfplay_buffer/overwritten_count"]) == (
+        int(metrics["selfplay_buffer/dropped_pending_count"])
+        + int(metrics["selfplay_buffer/dropped_completed_count"]))
+    path = tmp_path / "evictions.safetensors"
+    payload = {"runner_state": state, "cycle": jnp.int32(3)}
+    save_muzero_checkpoint(path, payload, algorithm.config)
+    loaded, _ = load_muzero_checkpoint(path, payload)
+    assert_trees_equal(loaded, payload)
+    following, metrics = algorithm.run_fn(state, jnp.bool_(False))
+    restored, restored_metrics = algorithm.run_fn(loaded["runner_state"], jnp.bool_(False))
+    assert_trees_equal(following, restored)
+    assert_trees_equal(metrics, restored_metrics)
 
 
 def test_sparse_policy_loss_and_gradients_use_full_action_space(assembly):

@@ -53,9 +53,11 @@ Individual buffer states and model train state live in `runner_state`.
    `sample_sequence_length` stays 1. Sampling replay does not consume an item.
 
 Chronology is checked with global step, game ID, and episode step. Circular
-storage must retain every transition needed by pending games or fresh starts.
-Overwrite and missing-sequence counters are sticky; the optimizer is skipped
-when any error is present, and the host raises an exception.
+storage may evict pending positions or unconsumed completed starts; cumulative
+counters report those drops without blocking training. Surviving starts retain
+their forward transitions because eviction is chronological. Missing transitions
+inside a sampled window remain sticky errors: the optimizer is skipped and the
+host raises an exception.
 
 Terminal tails train zero rewards and values with random padding actions and
 no policy loss. Completed games alone supply training samples. If no replay
@@ -189,17 +191,28 @@ artifacts are preserved; convert old command budgets explicitly before new runs.
 MuZero still learns latent transitions and rewards and trains unroll samples,
 so matching these settings does not make it identical to AlphaZero.
 Hex self-play storage has a 512-slot minimum by default: the shorter Hex5 ring
-hit the buffer safety guard in runtime testing. Random selection may retain a
-fresh remainder across cycles; this capacity is empirically validated, not a
-guarantee against overflow. Explicit capacity overrides and error checks remain.
+hit the former overwrite guard in runtime testing. Random selection may retain a
+fresh remainder across cycles. Capacity defaults remain unchanged, but ring
+evictions now count dropped data instead of stopping training:
+`selfplay_buffer/dropped_pending_count` counts discarded positions awaiting a
+game outcome, and `selfplay_buffer/dropped_completed_count` counts discarded
+completed starts not yet consumed. Both are cumulative counts across all lanes;
+`selfplay_buffer/overwritten_count` is their total. Already consumed starts and
+completed ineligible positions do not count as dropped samples.
+Chronological writes evict a start before its successors, so surviving starts
+still have complete forward windows. If an unfinished game outlives the ring,
+its retained suffix receives correct returns at termination; discarded prefix
+positions are not needed for those returns. Missing transitions within a sampled
+window and unsupported environment truncation remain fatal errors.
 
-Full checkpoints use `nanoalphazero.muzero.persistent.v2` and include environment
+Full checkpoints use `nanoalphazero.muzero.persistent.v3` and include environment
 state, both buffers, optimizer, model parameters, RNG, and cycle number. They
 support exact continuation. Chess defaults to compact checkpoints using
 `nanoalphazero.muzero.compact.v1`: parameters, optimizer, RNG, and cycle only.
-The v2 format records the unified observation sequence. Older full v1 checkpoints
-use a different replay layout and are rejected; compact v1 checkpoints remain
-compatible because they contain no observation buffers.
+The v3 format records the unified observation sequence and the pending-drop
+counter. Older full v1/v2 checkpoints have different state layouts and are
+rejected; compact v1 checkpoints remain compatible because they contain no
+observation buffers or buffer counters.
 Compact resume starts fresh games and buffers and reruns warmup; it is not exact
 trajectory continuation. Both modes require identical resolved configuration
 for resume. Historical episode-based

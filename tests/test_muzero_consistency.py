@@ -79,15 +79,16 @@ def test_checkpoint_observation_layout_version(tmp_path):
     save_muzero_checkpoint(path, full, {})
     with safe_open(str(path), framework="numpy") as reader:
         metadata = reader.metadata()
-        assert metadata["format"] == "nanoalphazero.muzero.persistent.v2"
+        assert metadata["format"] == "nanoalphazero.muzero.persistent.v3"
         tensors = {key: reader.get_tensor(key) for key in reader.keys()}
     restored, _ = load_muzero_checkpoint(path, full)
     assert_trees_equal(restored, full)
     # Even matching tensor paths must not let an old replay schema through.
-    metadata["format"] = "nanoalphazero.muzero.persistent.v1"
-    save_file(tensors, str(path), metadata=metadata)
-    with pytest.raises(ValueError, match="persistent.v2"):
-        load_muzero_checkpoint(path, full)
+    for version in (1, 2):
+        metadata["format"] = f"nanoalphazero.muzero.persistent.v{version}"
+        save_file(tensors, str(path), metadata=metadata)
+        with pytest.raises(ValueError, match="persistent.v3"):
+            load_muzero_checkpoint(path, full)
 
     # Existing compact v1 contains no replay observations and remains readable.
     compact = {"model_ts": jnp.float32(1), "rng": jax.random.PRNGKey(0), "cycle": jnp.int32(2)}

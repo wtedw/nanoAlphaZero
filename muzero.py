@@ -300,7 +300,7 @@ def make_muzero(config, rng, data_sharding=None):
 
         state = jax.lax.fori_loop(0, n_slices, drain_step, state)
         buffered = state.selfplay_buffer_state
-        errors = buffered.overwritten_count + buffered.missing_count + buffered.truncated_count
+        errors = buffered.missing_count + buffered.truncated_count
 
         # 3. A replay item is already an unroll; Flashbax samples one item.
         def train_step(state, _):
@@ -325,6 +325,8 @@ def make_muzero(config, rng, data_sharding=None):
             "drain/remaining_fresh": buffered.num_valid_consumable,
             "selfplay_buffer/error_count": errors,
             "selfplay_buffer/overwritten_count": buffered.overwritten_count,
+            "selfplay_buffer/dropped_pending_count": buffered.dropped_pending_count,
+            "selfplay_buffer/dropped_completed_count": buffered.overwritten_count - buffered.dropped_pending_count,
             "selfplay_buffer/missing_count": buffered.missing_count,
             "selfplay_buffer/truncated_count": buffered.truncated_count,
             "runner_state/n_updates": state.model_ts.n_updates,
