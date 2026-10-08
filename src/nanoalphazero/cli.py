@@ -348,6 +348,8 @@ class MuZeroArgs:
     platform: Literal["cpu", "tpu"] | None = None
 
     ckpt: MuZeroCheckpointArgs = field(default_factory=MuZeroCheckpointArgs)
+    # Past-self ladder period in cycles; 0 disables it. Inherits AlphaZero defaults.
+    ladder_period: int | None = None
     muzero_network: Literal["vector", "spatial"] | None = None
     hex_eval_period: int = 0
     hex_eval_engine_path: str | None = None

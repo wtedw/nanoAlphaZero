@@ -11,7 +11,12 @@ import jax.numpy as jnp
 import numpy as np
 import pgx1
 
-from nanoalphazero.buffers import unpack_bitmask_vmap
+from nanoalphazero.eval.ladder import make_ladder
+# Preserve existing helper import paths for callers outside the training host.
+from nanoalphazero.eval.matches import (
+    _legal_mask_from_state, _random_legal_actions,
+    all_opening_actions, run_eval_match, evaluate_vs,
+)
 from nanoalphazero.checkpoint import (
     _CHECKPOINT_FORMAT,
     _CHECKPOINT_FORMAT_VERSION,
@@ -319,30 +324,10 @@ def run_alphazero(config, ckpt_path=None, hex_eval_engine_pool=None):
     norm_history = {"grad": [], "param": []}  # per-cycle grad/param norms, ASCII chart
     chart_period = config.get("loss_chart_period", 50)
 
-    # --- Strength eval setup: a GATED ELO LADDER.
-    # The anchor is a frozen opponent we measure ΔElo against; the current model's
-    # absolute Elo = anchor_elo + ΔElo(current vs anchor). The ladder starts pinned
-    # to the random opponent (anchor_params=None, anchor_elo=0). We only PROMOTE the
-    # current checkpoint to be the new anchor once it beats the current anchor in the
-    # *informative* band of the logistic — score ≥ eval_promote_score, sustained for
-    # eval_promote_patience consecutive evals (hysteresis). Promoting in-band (rather
-    # than at ~100%, where score saturates and the ΔElo gap is unmeasurable) keeps
-    # each rung's height a real measurement instead of a clamp-capped guess, so the
-    # ladder Elo stays calibrated to absolute strength rather than inflating.
-    eval_period = config.get("eval_period", 100)
-    # Promote when current scores this well vs the anchor (top of the informative
-    # band: ~0.85 ≈ +300 ΔElo). Higher → fewer, taller rungs but riskier saturation.
-    eval_promote_score = config.get("eval_promote_score", 0.75)
-    # ...and only after it holds for this many consecutive evals (noise guard).
-    eval_promote_patience = config.get("eval_promote_patience", 2)
-    # Periodic checkpointing: every ckpt_period cycles, overwrite ckpt_path with
-    # the latest params (crash recovery / resumable inference). Disabled if no
-    # ckpt_period set or no path given (e.g. --no-save).
-    ckpt_period = config.get("ckpt_period")
-    eval_openings = all_opening_actions(
-        wenv, config, plies=config.get("eval_opening_plies", 1)
+    ladder_fn, ladder_state = make_ladder(
+        config, env=wenv, policy_fn=az.run_mcts_fn, chart_fn=_ascii_loss_chart,
     )
-    eval_fn = az.run_mcts_fn
+    ckpt_period = config.get("ckpt_period")
     hex_eval_period = int(resolved_config.get("hex_eval_period", 0))
     if hex_eval_period and hex_eval_engine_pool is None:
         raise ValueError("Hex engine evaluation is enabled without a MoHex process bank")
@@ -356,15 +341,6 @@ def run_alphazero(config, ckpt_path=None, hex_eval_engine_pool=None):
             Path(log_path).with_suffix(".hex-eval"),
             board_size=int(resolved_config["boardsize"]),
         )
-    # Ladder state. anchor_params=None ⇒ rung 0 = random opponent, pinned at Elo 0.
-    anchor_params = None
-    anchor_elo = 0.0
-    anchor_cycle = 0
-    rung = 0
-    qualify_deltas = []  # in-band ΔElo samples accumulating toward a promotion
-    best_score_rand = 0.0  # high-water mark vs random, for a forgetting warning
-    elo_curve = [0.0]  # current model's absolute Elo over time (anchor_elo + live Δ)
-    elo_cycles = [0]
 
     # Graceful Ctrl+C: the first press finishes the in-flight cycle, then breaks
     # out of training so we still save params + play against the model. A second
@@ -493,116 +469,15 @@ def run_alphazero(config, ckpt_path=None, hex_eval_engine_pool=None):
         elif is_diagnostic_time and config["env_id"].startswith("go"):
             _run_go_diagnostics(runner_state.model_ts, wenv, config)
 
-        # --- Strength eval: gated Elo ladder (see setup block above).
-        # Always measure vs random (forgetting detector + rung-0 yardstick); on
-        # higher rungs also measure vs the frozen anchor. Promote in-band.
-        if eval_period and cycle_n % eval_period == 0:
-            print(
-                f"\n--- Strength eval at cycle {cycle_n} "
-                f"({len(eval_openings)} openings x2 colors per opponent) ---"
-            )
-            cur_params = runner_state.model_ts.params
-            ek_rand, ek_anchor = jax.random.split(jax.random.PRNGKey(1234 + cycle_n))
-
-            # vs random: permanent baseline. On rung 0 this IS the anchor match.
-            score_rand, delta_rand = evaluate_vs(
-                eval_fn,
-                wenv,
-                config,
-                cur_params,
-                None,
-                openings=eval_openings,
-                key=ek_rand,
-                label="random (Elo 0)",
-            )
-            # Cap the Elo credit for beating the random opponent. Random is rung
-            # 0's anchor, so its ΔElo is the base every higher rung stacks on.
-            # Beating random ~100% otherwise pegs ΔElo at the score→Elo clamp
-            # ceiling (≈+1600), inflating the whole ladder. With the default cap
-            # of 0, beating random just anchors the ladder at Elo 0 (no credit
-            # for beating random); all real Elo then comes from beating past
-            # selves. min() keeps the negative side, so losing to random still
-            # shows negative Elo and trips the forgetting detector.
-            rand_elo_cap = config.get("eval_vs_random_max_elo", 0.0)
-            if rand_elo_cap is not None:
-                delta_rand = min(delta_rand, float(rand_elo_cap))
-            if score_rand > best_score_rand:
-                best_score_rand = score_rand
-            elif rung > 0 and score_rand < best_score_rand - 0.15:
-                print(
-                    f"  [eval] ⚠️  forgetting? vs-random score {score_rand:.3f} is "
-                    f"well below high-water {best_score_rand:.3f}",
-                    flush=True,
-                )
-
-            # Score/ΔElo against the *current* anchor drives the ladder.
-            if anchor_params is None:  # rung 0: the anchor is random
-                score_vs_anchor, delta_vs_anchor = score_rand, delta_rand
-            else:
-                score_vs_anchor, delta_vs_anchor = evaluate_vs(
-                    eval_fn,
-                    wenv,
-                    config,
-                    cur_params,
-                    anchor_params,
-                    openings=eval_openings,
-                    key=ek_anchor,
-                    label=f"anchor R{rung}@{anchor_cycle}",
-                )
-
-            # Absolute Elo = height of the current rung + live gap above it.
-            live_elo = anchor_elo + float(delta_vs_anchor)
-            online_metrics.update(
-                {
-                    "eval/score_vs_random": float(score_rand),
-                    "eval/elo_vs_random": float(delta_rand),
-                    "eval/score_vs_anchor": float(score_vs_anchor),
-                    "eval/elo_vs_anchor": float(delta_vs_anchor),
-                    "eval/ladder_elo": float(live_elo),
-                    "eval/rung": int(rung),
-                }
-            )
-            elo_curve.append(live_elo)
-            elo_cycles.append(cycle_n)
-            print(
-                f"  [eval] ladder Elo: {live_elo:+.0f}  (rung {rung} @ "
-                f"{anchor_elo:+.0f}, +{float(delta_vs_anchor):.0f} over anchor)",
-                flush=True,
-            )
-
-            # Promotion: in-band score, sustained eval_promote_patience evals. We
-            # freeze the rung height as the *mean* in-band gap over the streak,
-            # which halves its variance vs a single 1-batch measurement.
-            if score_vs_anchor >= eval_promote_score:
-                qualify_deltas.append(float(delta_vs_anchor))
-                if len(qualify_deltas) >= eval_promote_patience:
-                    rung_height = float(np.mean(qualify_deltas))
-                    anchor_elo += rung_height
-                    anchor_params = jax.tree_util.tree_map(jnp.copy, cur_params)
-                    anchor_cycle = cycle_n
-                    rung += 1
-                    qualify_deltas = []
-                    print(
-                        f"  [eval] ⬆ PROMOTE to rung {rung}: anchor now @ "
-                        f"{anchor_elo:+.0f} Elo (rung height +{rung_height:.0f}, "
-                        f"avg of {eval_promote_patience} evals)",
-                        flush=True,
-                    )
-            else:
-                qualify_deltas = []  # streak broken — reset hysteresis
-
-            if len(elo_curve) >= 3:
-                print(
-                    f"\n── ladder Elo over cycles {elo_cycles[1]}..{elo_cycles[-1]} ──",
-                    flush=True,
-                )
-                print(_ascii_loss_chart({"total": elo_curve}), flush=True)
-                print(flush=True)
+        ladder_state, ladder_metrics = ladder_fn(
+            ladder_state, cycle_n, runner_state.model_ts.params,
+        )
+        online_metrics.update(ladder_metrics)
 
         if hex_evaluator is not None:
             online_metrics.update(hex_evaluator.run_if_due(
                 cycle_n,
-                eval_fn,
+                az.run_mcts_fn,
                 wenv,
                 resolved_config,
                 runner_state.model_ts.params,
@@ -645,201 +520,6 @@ def run_alphazero(config, ckpt_path=None, hex_eval_engine_pool=None):
         wandb_run.summary["cycle/final"] = int(completed_cycle)
         wandb_run.finish()
     return runner_state
-
-
-# =============================================================================
-# Head-to-head evaluation (any game)
-# =============================================================================
-# Self-play loss curves don't tell you if the model is getting stronger (both
-# players co-improve). These helpers give a fixed yardstick that works for every
-# pgx game (incl. chess, no external engine): play one game per legal opening
-# move (ttt->9, connect4->7, hex4x4->16, chess->20) head-to-head between two
-# param sets and report the win/draw/loss split. Two useful opponents:
-#   * None         -> uniform-random legal play  (sanity: is it learning at all?)
-#   * anchor_params -> a frozen earlier snapshot  (is it STILL improving? -> ΔElo)
-# Enumerating every opening covers the position space deterministically (greedy
-# MCTS), so the same model gives the same scoreline every time -> low variance.
-# Everything is batched on-TPU and reuses run_mcts + the env, so it's cheap.
-
-
-def _legal_mask_from_state(env_state, config):
-    if config["env_id"] == "chess":
-        return unpack_bitmask_vmap(env_state.legal_action_bitmask)
-    return env_state.legal_action_mask
-
-
-def _random_legal_actions(env_state, config, key):
-    """Uniform random over legal actions (batched)."""
-    legal = _legal_mask_from_state(env_state, config)
-    logits = jnp.where(legal, 0.0, -jnp.inf)
-    g = jax.random.gumbel(key, logits.shape, dtype=logits.dtype)
-    return jnp.argmax(logits + g, axis=-1).astype(jnp.int32)
-
-
-def all_opening_actions(wenv, config, plies=1):
-    """Every legal opening LINE of length `plies` from the initial position.
-
-    Returns a 2-D int array of shape (num_openings, plies); row i is one forced
-    move sequence. plies=1 -> one row per legal first move (ttt->9, connect4->7,
-    hex4x4->16, chess->20). plies=2 -> every legal (move1, move2) pair (chess
-    ->~400), which probes a wider, more balanced slice of the opening tree and
-    so gives a lower-variance ladder score. Lines that terminate before `plies`
-    moves are dropped (can't host a full game), keeping the result rectangular.
-    """
-    env_state = wenv.init_dummy_estate(batch_size=1)
-    legal = np.asarray(_legal_mask_from_state(env_state, config)[0])
-    lines = [[int(a)] for a in np.nonzero(legal)[0]]
-    for _ in range(int(plies) - 1):
-        n = len(lines)
-        env_state = wenv.init_dummy_estate(batch_size=n)
-        depth = len(lines[0])
-        for d in range(depth):  # replay the line built so far, batched
-            col = jnp.asarray([line[d] for line in lines], dtype=jnp.int32)
-            env_state = wenv.step(env_state, col)
-        legal_masks = np.asarray(_legal_mask_from_state(env_state, config))
-        terminated = np.asarray(env_state.terminated)
-        next_lines = []
-        for i, line in enumerate(lines):
-            if terminated[i]:
-                continue  # game over before reaching `plies` moves -> drop
-            for a in np.nonzero(legal_masks[i])[0]:
-                next_lines.append(line + [int(a)])
-        lines = next_lines
-    return np.asarray(lines, dtype=np.int32)
-
-
-def run_eval_match(
-    run_mcts_fn,
-    wenv,
-    config,
-    params_p0,
-    params_p1,
-    *,
-    opening_actions,
-    key,
-    max_plies=None,
-    num_simulations=None,
-    gumbel_scale=0.0,
-):
-    """Play one game per forced opening, fully batched.
-
-    `opening_actions` is an array of forced opening lines: shape (N,) for a single
-    forced move each, or (N, K) for a K-move forced line. One game is played per
-    row. Seat 0 plays with `params_p0`, seat 1 with `params_p1`. A param set of
-    `None` means uniform-random legal play. After the forced opening moves, both
-    sides play greedy MCTS. Returns (p0_wins, draws, p1_wins) as ints; games that
-    don't finish within `max_plies` count as draws.
-    """
-    if max_plies is None:
-        max_plies = config.get("eval_max_plies") or config.get("game_max_steps") or 512
-    if num_simulations is None:
-        num_simulations = config["mcts_num_simulations"]
-
-    opening_actions = np.asarray(opening_actions, dtype=np.int32)
-    if opening_actions.ndim == 1:  # (N,) -> (N, 1): one forced move per game
-        opening_actions = opening_actions[:, None]
-    num_real = len(opening_actions)
-
-    # Pad the batch up to a multiple of the device count so data-parallel
-    # sharding is happy; padded games duplicate real openings and are dropped.
-    mult = jax.device_count() if config.get("enable_sharding", False) else 1
-    pad = (-num_real) % mult
-    batch_actions = (
-        np.concatenate([opening_actions, opening_actions[:pad]])
-        if pad
-        else opening_actions
-    )
-    num_games = len(batch_actions)
-
-    env_state = wenv.init_dummy_estate(batch_size=num_games)
-    for d in range(batch_actions.shape[1]):  # play each forced opening ply
-        env_state = wenv.step(env_state, jnp.asarray(batch_actions[:, d]))
-
-    final_rewards = jnp.zeros((num_games, 2), dtype=jnp.float32)
-    finished = env_state.terminated
-
-    for _ply in range(int(max_plies)):
-        newly = env_state.terminated & ~finished
-        final_rewards = jnp.where(newly[:, None], env_state.rewards, final_rewards)
-        finished = finished | env_state.terminated
-        if bool(jnp.all(finished)):
-            break
-
-        # Live games are in lockstep (player alternates each ply), so one seat
-        # moves for the whole batch this ply.
-        cp = jnp.where(~finished, env_state.current_player, -1)
-        seat = int(jnp.max(cp))
-        params = params_p0 if seat == 0 else params_p1
-
-        key, mk = jax.random.split(key)
-        if params is None:
-            actions = _random_legal_actions(env_state, config, mk)
-        else:
-            actions = run_mcts_fn(
-                mk, env_state, params, gumbel_scale, num_games, num_simulations
-            ).action
-        env_state = wenv.step(env_state, actions)
-
-    # Credit any game that terminated on the very last step.
-    newly = env_state.terminated & ~finished
-    final_rewards = jnp.where(newly[:, None], env_state.rewards, final_rewards)
-
-    r0 = np.asarray(final_rewards[:num_real, 0])  # drop padded games
-    p0_wins = int(np.sum(r0 > 0))
-    p1_wins = int(np.sum(r0 < 0))
-    draws = num_real - p0_wins - p1_wins
-    return p0_wins, draws, p1_wins
-
-
-def evaluate_vs(
-    run_mcts_fn,
-    wenv,
-    config,
-    cur_params,
-    opp_params,
-    *,
-    openings,
-    key,
-    label,
-    num_simulations=None,
-):
-    """Play `cur_params` vs `opp_params` over every opening, from BOTH colors.
-    Prints a W/D/L line + score + ΔElo estimate, and returns the score in [0,1]."""
-    k1, k2 = jax.random.split(key)
-    # current as seat 0
-    w0, d0, l0 = run_eval_match(
-        run_mcts_fn,
-        wenv,
-        config,
-        cur_params,
-        opp_params,
-        opening_actions=openings,
-        key=k1,
-        num_simulations=num_simulations,
-    )
-    # current as seat 1 (swap): current's wins are the seat-1 wins
-    l1, d1, w1 = run_eval_match(
-        run_mcts_fn,
-        wenv,
-        config,
-        opp_params,
-        cur_params,
-        opening_actions=openings,
-        key=k2,
-        num_simulations=num_simulations,
-    )
-    wins, draws, losses = w0 + w1, d0 + d1, l0 + l1
-    n = max(wins + draws + losses, 1)
-    score = (wins + 0.5 * draws) / n
-    s = min(max(score, 1e-4), 1 - 1e-4)
-    elo = -400.0 * np.log10(1.0 / s - 1.0)
-    print(
-        f"  [eval] vs {label:<14} {wins:>3}W {draws:>3}D {losses:>3}L "
-        f"| score={score:.3f} | ΔElo≈{elo:+.0f}",
-        flush=True,
-    )
-    return score, elo
-
 
 
 # =============================================================================

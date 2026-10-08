@@ -12,8 +12,9 @@ inherit the selected game's defaults; boolean overrides retain `--flag` and
 
 ## Components
 
-New definitions are appended to existing package files. Original AlphaZero
-definitions remain unchanged; `core.py` remains unchanged in its entirety.
+MuZero definitions are appended to existing package files. AlphaZero's training
+math, self-play, and search remain unchanged; `core.py` remains unchanged in its
+entirety. Both host loops now use the extracted shared strength ladder.
 
 | Location | MuZero responsibility |
 | --- | --- |
@@ -22,14 +23,81 @@ definitions remain unchanged; `core.py` remains unchanged in its entirety.
 | `model.py` | Representation, dynamics, prediction, optional rematerialization |
 | `mcts.py` | Learned recurrent callback to the existing search engine |
 | `buffers.py` | Extended records, completed returns, sequence gathering, storage budget |
+| `muzero_metrics.py` | Component metric selection, batch counts, norms, and cycle reductions |
 | `eval/hex/training.py` | Shared Hex match evaluator and MuZero evaluation adapter |
 | `eval/muzero.py` | Fixed-opening head diagnostics and tracker chart adapters |
+| `eval/ladder.py` | Shared explicit-state ladder against random play and frozen past selves |
+| `eval/matches.py` | Shared forced openings and color-swapped batched matches |
 | `checkpoint.py` | Full persistent-state snapshots |
 | `cli.py` | Root script arguments; existing entry points unchanged |
 
-`make_muzero()` exposes `env`, `model`, `run_mcts_fn`, `selfplay_fn`,
-`selfplay_buffer`, `replay_buffer`, `train_fn`, `runner_state`, and `run_fn`.
-Individual buffer states and model train state live in `runner_state`.
+`make_muzero()` returns the top-level `MuZeroAlgorithm` dataclass, exposing
+`env`, `model`, `run_mcts_fn`, `selfplay_fn`, `selfplay_buffer`, `replay_buffer`,
+`train_fn`, initial `runner_state`, and `run_fn`. It describes the assembly;
+the host advances the separate `RunnerState` throughout training. Individual
+buffer states and model train state live in that runner state.
+
+MuZero self-play returns `(state, output, metrics)`; training returns
+`(state, metrics)`, with losses and diagnostics in the metrics dictionary.
+Metric helpers have no tracker dependencies, and the
+host forwards the combined cycle metrics to Trackio or W&B.
+
+### Training metrics
+
+- Self-play wins/draws sum all events in a cycle. `selfplay/ep_term_step_*`
+  describes games completed during that cycle: min/max across finishes and an
+  average weighted by finish count, or -1 when none finished. As in AlphaZero,
+  these are zero-based final move indices (add 1 for the number of moves).
+  `selfplay/ep_step_min`, `ep_step_max`, and `ep_step_std` describe the lanes at
+  cycle end. Legal-move averages cover the cycle; the midgame average is weighted
+  by the number of lanes with episode steps 11 through 30, and is 0 if none qualify.
+- `train_batch/n_is_valid` and `n_is_invalid` count windows with/without any
+  policy-supervised position. `n_policy_valid`, `n_value_valid`, and
+  `n_reward_valid` count positions supervised by the respective loss masks.
+  `n_reward_pos`, `n_reward_neg`, and `n_reward_zero` count supervised completed
+  value targets, not immediate rewards. Value/reward counts include absorbing
+  padding; policy and consistency counts exclude it. Enabled consistency retains
+  its existing `consistency/n_valid` metric.
+- `norms/grad_norm` measures gradients before clipping, `norms/param_norm`
+  measures parameters before the update, and `norms/update_norm` measures the
+  actual optimizer update, including clipping and weight decay. Training metrics
+  are averaged across optimizer batches in the cycle. Cycles without updates
+  emit zero training metrics and `train/ready=0`.
+
+No `selfplay/global_step` or `norms/current_lr` metric is added.
+
+### Shared strength ladder
+
+Both AlphaZero and MuZero construct the same component once:
+
+```python
+ladder_fn, ladder_state = make_ladder(
+    config, env=algorithm.env, policy_fn=algorithm.run_mcts_fn,
+)
+ladder_state, ladder_metrics = ladder_fn(ladder_state, cycle, params)
+metrics.update(ladder_metrics)
+```
+
+The factory captures openings, search, and configuration. `LadderState` contains
+the frozen anchor, rung, qualifying streak, random-opponent high-water score,
+and rating history. Calls return a new state; disabled/not-due calls return the
+unchanged state and `{}`. Only promotion copies the current model parameters.
+No evaluator state is checkpointed; a resumed host starts a new ladder.
+
+Existing AlphaZero settings and metric names remain: `eval_period` (cycles),
+`eval_opening_plies`, `eval_promote_score`, `eval_promote_patience`,
+`eval_vs_random_max_elo`, and the six `eval/*` score/rating metrics. MuZero inherits
+the game defaults and exposes `--ladder-period N`; use 0 to disable the ladder.
+These settings are independent of MoHex and head diagnostics. Both Trackio and
+W&B receive ladder metrics through the usual MuZero host logger.
+
+Match helpers retain the original AlphaZero behavior, including both colors,
+zero Gumbel exploration, game/search budgets, and treating games unfinished at
+the ply cap as draws. RNG uses the existing independent `1234 + cycle` seed.
+Metrics describe the evaluated rung before any promotion; qualifying deltas are
+averaged to set the next rung height. Ratings are relative ladder estimates,
+not externally calibrated chess Elo. AlphaZero keeps its ASCII rating chart.
+Existing imports of match helpers from `training.py` and `core.py` still work.
 
 ## Data lifecycle
 
@@ -351,8 +419,8 @@ and a four-device CPU control.
 
 The original MacBook refactor received static checks only. The chess port adds
 CPU regression coverage below. Original AlphaZero sections and all of `core.py`
-are preserved byte-for-byte; changes to existing package files stay within their
-appended MuZero sections.
+retain their training semantics; the shared evaluation helpers were extracted
+from the AlphaZero host without changing match or ladder rules.
 
 On the authorized environment, first run the focused logic tests:
 

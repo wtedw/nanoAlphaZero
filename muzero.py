@@ -13,18 +13,52 @@ The historical portable export is muzero-singlefile.py.
 import json
 import os
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from functools import partial
-from types import SimpleNamespace
 
 # Keep JAX and device-initializing component imports inside functions so the CLI
 # can select its backend before any accelerator is initialized.
 
 
+@dataclass
+class MuZeroAlgorithm:
+    """Assembled components and initial RunnerState, not a training snapshot.
+
+    run_fn advances a RunnerState containing the model/optimizer, persistent
+    games, both buffers, and RNG. The host owns the current state after each
+    cycle; runner_state here is the starting state.
+    """
+
+    config: dict
+    env: object
+    model: object
+    run_mcts_fn: Callable
+    selfplay_fn: Callable
+    train_fn: Callable
+    selfplay_buffer: object
+    replay_buffer: object
+    runner_state: object  # RunnerState from nanoalphazero.core
+    run_fn: Callable
+    data_sharding: object
+    buffer_storage: dict
+    compression_probe: Callable | None = None
+
+
 def make_muzero_selfplay(config, wenv, run_mcts_fn, data_sharding=None):
-    """Keep AlphaZero's action selection, auto-reset, and persistent game state."""
+    """Build selfplay_fn and its initial SelfplayState.
+
+    selfplay_fn(rng, state, params) -> SelfplayState, MuZeroSelfplayOutput, metrics
+
+    Advance each lane by one real environment step. Output fields have leading
+    dimensions [B, 1], where B is the self-play batch size. Unfinished games
+    continue on the next call. AlphaZero's action selection and auto-reset remain
+    unchanged; MuZero adds immediate rewards and signed discounts to the output.
+    """
     import jax.numpy as jnp
     from nanoalphazero.buffers import MuZeroSelfplayOutput
     from nanoalphazero.core import make_selfplay
+    from nanoalphazero.muzero_metrics import selfplay_metrics
 
     original, state = make_selfplay(config, wenv, run_mcts_fn, data_sharding)
 
@@ -40,13 +74,29 @@ def make_muzero_selfplay(config, wenv, run_mcts_fn, data_sharding=None):
         output = MuZeroSelfplayOutput(
             **vars(output), transition_reward=reward[:, None], discount=discount[:, None],
         )
-        return following, output, metrics
+        return following, output, selfplay_metrics(metrics[0], following, output)
 
     return selfplay_fn, state
 
 
 def unroll_muzero_predictions(model, params, batch, remat=False, *, return_latents=False):
-    """Run h once and g/f K times; policy/value include the root prediction."""
+    """Encode the root with h, then imagine K recorded actions through g and f.
+
+    batch is a MuZeroTrainingSample; B is training batch size, K is unroll
+    length, and A is the full action count:
+        action:             [B, K]
+        reward:             [B, K+1] completed value targets
+        transition_reward:  [B, K] immediate reward targets
+        policy/value masks: [B, K+1]
+        reward_mask:        [B, K]
+
+    Observations have shape [B, K+1, ...] with consistency, [B, 1, ...]
+    otherwise; chess may store packed board_bool/board_float instead.
+    Only the root observation initializes this imagined trajectory.
+
+    Return policy logits [B, K+1, A], values [B, K+1], and rewards [B, K].
+    If requested, append future latents [B, K, ...] for consistency training.
+    """
     import jax
     import jax.numpy as jnp
     from nanoalphazero.model import scale_gradient
@@ -65,10 +115,13 @@ def unroll_muzero_predictions(model, params, batch, remat=False, *, return_laten
         observation = combine_observation_vmap(batch.board_bool[:, 0], batch.board_float[:, 0])
     else:
         observation = observation[:, 0].astype(jnp.float32)
+    # h encodes the real root; f predicts its policy and value.
     latent, logits, value = initial(params, observation)
     policies, values, rewards = [logits], [value], []
     latents = []
     for step in range(batch.action.shape[1]):
+        # g advances the latent using a recorded action and predicts reward;
+        # f predicts policy/value from that next latent, without the environment.
         latent, reward, logits, value = recurrent(
             params, scale_gradient(latent, 0.5), batch.action[:, step]
         )
@@ -168,12 +221,21 @@ def muzero_loss(model, params, batch, remat=False, *, self_consistency_weight=0.
 
 
 def make_muzero_train(config, model, model_state, data_sharding=None):
-    """Expose the established train_fn(model_ts, batch, is_warmup) interface."""
+    """Build train_fn and its initial CustomTrainState.
+
+    train_fn(state, batch, is_warmup) -> CustomTrainState, metrics
+
+    Each MuZeroTrainingSample entry is one trajectory window. Train h, g, and f
+    jointly through the imagined unroll, using per-position loss masks.
+    Metrics contain losses, batch counts, and optimizer norms. A warmup call
+    leaves the model/optimizer state unchanged.
+    """
     import jax
     import jax.numpy as jnp
     import optax
     from flax.traverse_util import flatten_dict, unflatten_dict
     from nanoalphazero.core import CustomTrainState
+    from nanoalphazero.muzero_metrics import training_batch_metrics, training_norm_metrics
 
     rate = config["learning_rate"]
     warmup = config.get("lr_warmup_steps", 0)
@@ -211,15 +273,23 @@ def make_muzero_train(config, model, model_state, data_sharding=None):
             )
 
         (loss, metrics), grads = jax.value_and_grad(objective, has_aux=True)(state.params)
-        updated = state.apply_gradients(grads=grads).replace(n_updates=state.n_updates + 1)
+        updates, opt_state = state.tx.update(grads, state.opt_state, state.params)
+        updated = state.replace(
+            params=optax.apply_updates(state.params, updates), opt_state=opt_state,
+            step=state.step + 1, n_updates=state.n_updates + 1,
+        )
+        metrics = {
+            "total_loss": loss, **metrics, **training_batch_metrics(batch),
+            **training_norm_metrics(state.params, grads, updates),
+        }
         updated = jax.lax.cond(is_warmup, lambda: state, lambda: updated)
-        return updated, (loss, metrics)
+        return updated, metrics
 
     return train_fn, model_ts
 
 
 def make_muzero(config, rng, data_sharding=None):
-    """Assemble MuZero; expose each component for inspection and independent use."""
+    """Return a MuZeroAlgorithm with component functions and initial RunnerState."""
     import jax
     import jax.numpy as jnp
     from nanoalphazero.buffers import (
@@ -230,6 +300,7 @@ def make_muzero(config, rng, data_sharding=None):
     from nanoalphazero.core import make_env, RunnerState, DATA_PARALLEL_SHARDING
     from nanoalphazero.mcts import make_muzero_mcts, make_muzero_compression_probe
     from nanoalphazero.model import make_muzero_model
+    from nanoalphazero.muzero_metrics import aggregate_selfplay_metrics, empty_training_metrics
 
     config = dict(config)
     if config.get("enable_sharding", False):
@@ -271,10 +342,16 @@ def make_muzero(config, rng, data_sharding=None):
 
     @partial(jax.jit, donate_argnums=(0,))
     def run_fn(state, is_warmup=False):
-        # 1. Advance every lane. Unfinished games survive this cycle boundary.
+        """RunnerState -> updated RunnerState, cycle metrics.
+
+        Collect N real steps per lane, drain completed windows, then perform M
+        optimizer steps when replay is ready and this is not warmup.
+        N = cycle_n_selfplay; M = cycle_n_train.
+        """
+        # 1. Advance every lane N real steps. Unfinished games survive the cycle.
         def selfplay_step(state, _):
             rng, key = jax.random.split(state.rng)
-            games, output, _ = selfplay_fn(key, state.selfplay_state, state.model_ts.params)
+            games, output, metrics = selfplay_fn(key, state.selfplay_state, state.model_ts.params)
             buffered, _ = selfplay_buffer.add_backfill(
                 state.selfplay_buffer_state, output, games.env_state.terminated,
                 games.env_state.rewards,
@@ -286,11 +363,12 @@ def make_muzero(config, rng, data_sharding=None):
             )
             return state._replace(
                 selfplay_state=games, selfplay_buffer_state=buffered, rng=rng,
-            ), None
+            ), metrics
 
-        state, _ = jax.lax.scan(selfplay_step, state, None, length=config["cycle_n_selfplay"])
+        state, selfplay_stack = jax.lax.scan(selfplay_step, state, None, length=config["cycle_n_selfplay"])
 
-        # 2. AlphaZero consume chooses fresh starts. MuZero returns K-step items.
+        # 2. Select completed fresh starts and gather K-step trajectory windows.
+        #    Replay stores complete MuZeroTrainingSample entries.
         n_slices = state.selfplay_buffer_state.num_valid_consumable // config["selfplay_buffer_consume_size"]
 
         def drain_step(_, state):
@@ -302,26 +380,24 @@ def make_muzero(config, rng, data_sharding=None):
         buffered = state.selfplay_buffer_state
         errors = buffered.missing_count + buffered.truncated_count
 
-        # 3. A replay item is already an unroll; Flashbax samples one item.
+        # 3. Sample replay windows and perform M optimizer updates.
+        #    A replay item is already an unroll; Flashbax samples one item.
         def train_step(state, _):
             rng, key = jax.random.split(state.rng)
             batch = replay_buffer.sample(state.replay_buffer_state, key).experience
             batch = jax.tree.map(lambda x: x[:, 0], batch)
-            model_ts, (loss, metrics) = train_fn(state.model_ts, batch, is_warmup)
-            return state._replace(model_ts=model_ts, rng=rng), {"total_loss": loss, **metrics}
+            model_ts, metrics = train_fn(state.model_ts, batch, is_warmup)
+            return state._replace(model_ts=model_ts, rng=rng), metrics
 
         def train_cycle(state):
             state, metrics = jax.lax.scan(train_step, state, None, length=config["cycle_n_train"])
             return state, jax.tree.map(lambda x: jnp.mean(x), metrics)
 
         ready = replay_buffer.can_sample(state.replay_buffer_state) & (errors == 0) & ~jnp.asarray(is_warmup)
-        empty_metrics = {name: jnp.float32(0) for name in ("total_loss", "loss_pi", "loss_v", "loss_r")}
-        if config.get("exp_self_consistency", False):
-            empty_metrics.update(loss_consistency=jnp.float32(0),
-                                 **{"consistency/n_valid": jnp.float32(0)})
+        empty_metrics = empty_training_metrics(config.get("exp_self_consistency", False))
         state, metrics = jax.lax.cond(ready, train_cycle, lambda s: (s, empty_metrics), state)
         return state, {
-            **metrics, "drain/n_slices": n_slices,
+            **metrics, **aggregate_selfplay_metrics(selfplay_stack), "drain/n_slices": n_slices,
             "drain/remaining_fresh": buffered.num_valid_consumable,
             "selfplay_buffer/error_count": errors,
             "selfplay_buffer/overwritten_count": buffered.overwritten_count,
@@ -334,7 +410,7 @@ def make_muzero(config, rng, data_sharding=None):
             "train/ready": ready,
         }
 
-    return SimpleNamespace(
+    return MuZeroAlgorithm(
         config=config, env=env, model=model, run_fn=run_fn, runner_state=runner_state,
         run_mcts_fn=run_mcts_fn, selfplay_fn=selfplay_fn, selfplay_buffer=selfplay_buffer,
         replay_buffer=replay_buffer, train_fn=train_fn, data_sharding=data_sharding,
@@ -352,6 +428,7 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None, 
     from nanoalphazero.checkpoint import (
         save_muzero_checkpoint, load_muzero_checkpoint, muzero_checkpoint_payload,
     )
+    from nanoalphazero.eval.ladder import make_ladder
 
     config = algorithm.config
     state = algorithm.runner_state
@@ -425,6 +502,9 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None, 
         run = wandb.init(project="nanoAlphaZero-muzero", config=config)
     try:
         head_probe = None
+        ladder_fn, ladder_state = make_ladder(
+            config, env=algorithm.env, policy_fn=algorithm.run_mcts_fn,
+        )
         if evaluator is not None:
             evaluator.run(start_cycle, state, force=True)
         if resume is None or not include_replay:
@@ -474,6 +554,8 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None, 
                     if all(name in stats for stats in memory):
                         metrics[f"memory/{name}_max"] = max(stats[name] for stats in memory)
             check(metrics)
+            ladder_state, ladder_metrics = ladder_fn(ladder_state, cycle, state.model_ts.params)
+            metrics.update(ladder_metrics)
             if evaluator is not None:
                 metrics.update(evaluator.run(cycle, state, force=cycle == cycles))
             print(json.dumps({"cycle": cycle, **metrics}), flush=True)
@@ -504,8 +586,10 @@ def main(argv=None):
     if args.platform:
         os.environ["JAX_PLATFORMS"] = args.platform
     overrides = {name: value for name, value in vars(args).items()
-                 if value is not None and name not in ("env", "ckpt", "platform")
+                 if value is not None and name not in ("env", "ckpt", "platform", "ladder_period")
                  and not name.startswith("hex_eval_")}
+    if args.ladder_period is not None:
+        overrides["eval_period"] = args.ladder_period
     if args.ckpt.every is not None:
         overrides["ckpt_period"] = args.ckpt.every
     if args.ckpt.mode is not None:

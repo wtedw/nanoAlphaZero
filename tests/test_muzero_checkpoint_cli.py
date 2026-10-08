@@ -17,7 +17,7 @@ from nanoalphazero.config import get_muzero_config
     [
         ("chess", [], False, None),
         ("hex4", [], True, None),
-        ("hex4", ["--ckpt.mode", "compact", "--ckpt.every", "400"], False, 400),
+        ("hex4", ["--ckpt.mode", "compact", "--ckpt.every", "400", "--ladder-period", "0"], False, 400),
         ("chess", ["--ckpt.mode", "full", "--ckpt.every", "0"], True, 0),
     ],
 )
@@ -49,6 +49,8 @@ def test_checkpoint_options_reach_runner(monkeypatch, env, options, expected_mod
         get_muzero_config(env)["ckpt_period"] if expected_period is None else expected_period
     )
     assert "ckpt" not in config
+    assert "ladder_period" not in config
+    assert config["eval_period"] == (0 if "--ladder-period" in options else get_muzero_config(env)["eval_period"])
     assert captured["checkpoint_path"] == Path("artifacts/output.safetensors")
     assert captured["resume"] == Path("artifacts/input.safetensors")
 

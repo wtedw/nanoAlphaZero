@@ -620,6 +620,12 @@ def test_cycle_and_checkpoint_continuation(config, assembly, tmp_path):
     state, metrics = algorithm.run_fn(algorithm.runner_state, jnp.bool_(False))
     assert int(metrics["selfplay_buffer/error_count"]) == 0
     assert int(state.model_ts.n_updates) == 1
+    assert float(metrics["train_batch/n_is_valid"]) == config["train_batch_size"]
+    assert float(metrics["norms/grad_norm"]) > 0
+    assert float(metrics["selfplay/ep_term_step_avg"]) >= 0
+    assert "selfplay/global_step" not in metrics
+    assert "norms/current_lr" not in metrics
+    assert not any(name.startswith("_") for name in metrics)
     path = tmp_path / "muzero.safetensors"
     payload = {"runner_state": state, "cycle": jnp.int32(1)}
     save_muzero_checkpoint(path, payload, algorithm.config)
@@ -629,6 +635,45 @@ def test_cycle_and_checkpoint_continuation(config, assembly, tmp_path):
     continued, _ = algorithm.run_fn(state, jnp.bool_(False))
     restored, _ = algorithm.run_fn(loaded["runner_state"], jnp.bool_(False))
     assert_trees_equal(continued, restored)
+
+
+def test_host_threads_ladder_state_and_logs_metrics(config, assembly, monkeypatch, capsys):
+    from nanoalphazero.eval import ladder
+
+    calls = []
+    def make_ladder(cfg, *, env, policy_fn):
+        assert env is algorithm.env and policy_fn is algorithm.run_mcts_fn
+        def ladder_fn(state, cycle, params):
+            calls.append((state, cycle))
+            return state + 1, {"eval/ladder_elo": float(state + 1)}
+        return ladder_fn, 0
+    monkeypatch.setattr(ladder, "make_ladder", make_ladder)
+    algorithm = assembly.make_muzero({**config, "diagnostic_period": 0}, jax.random.PRNGKey(0))
+    assembly.run_muzero(algorithm, num_iters=20)
+    assert calls == [(0, 1), (1, 2)]
+    assert '"eval/ladder_elo": 2.0' in capsys.readouterr().out
+
+
+def test_training_metrics_preserve_optimizer_update(config, assembly):
+    from nanoalphazero.muzero_metrics import empty_training_metrics
+
+    buffer, state = make_buffer(config)
+    for step in range(3):
+        state = append(buffer, state, transition(config, step, step, terminal=step == 2,
+                                                 reward=float(step == 2)))
+    _, samples, _ = buffer.consume(state)
+    batch = jax.tree.map(lambda x: x[:, 0], samples)
+    model, variables = make_muzero_model(config, jax.random.PRNGKey(3))
+    train_fn, model_state = assembly.make_muzero_train(config, model, variables)
+    grads = jax.grad(lambda params: assembly.muzero_loss(model, params, batch)[0])(model_state.params)
+    expected = model_state.apply_gradients(grads=grads).replace(n_updates=model_state.n_updates + 1)
+    updated, metrics = jax.jit(train_fn)(model_state, batch, False)
+    assert_trees_equal(updated, expected)
+    assert set(metrics) == set(empty_training_metrics())
+    assert float(metrics["train_batch/n_is_valid"]) == config["train_batch_size"]
+    assert float(metrics["norms/update_norm"]) > 0
+    unchanged, _ = jax.jit(train_fn)(model_state, batch, True)
+    assert_trees_equal(unchanged, model_state)
 
 
 def test_games_continue_across_short_cycles(config, assembly):
