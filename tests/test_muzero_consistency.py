@@ -54,16 +54,51 @@ def test_flag_and_default_storage():
     assert parse_muzero_args(["--self-consistency-weight", "0.5"]).self_consistency_weight == .5
     cfg = config()
     off = get_dummy_muzero_training_sample(cfg)
-    assert off.consistency_observation is None
+    assert off.observation.shape == (1, *cfg["game_obs_shape"])
     assert "exp_self_consistency" not in cfg
     on_cfg = {**cfg, "exp_self_consistency": True}
     on = get_dummy_muzero_training_sample(on_cfg)
-    assert on.consistency_observation.shape == (5, *cfg["game_obs_shape"])
-    assert on.consistency_observation.dtype == get_dummy_muzero_selfplay_output(cfg).observation.dtype
+    assert on.observation.shape == (6, *cfg["game_obs_shape"])
+    assert on.observation.dtype == get_dummy_muzero_selfplay_output(cfg).observation.dtype
+    assert off.observation.dtype == on.observation.dtype
+    assert not any(name.startswith("consistency_") for name in vars(on))
     old_storage = estimate_muzero_storage(cfg)
     new_storage = estimate_muzero_storage(on_cfg)
     assert old_storage["selfplay"] == new_storage["selfplay"]
     assert old_storage["replay"]["bytes"] < new_storage["replay"]["bytes"]
+
+
+def test_checkpoint_observation_layout_version(tmp_path):
+    import json
+    from safetensors import safe_open
+    from safetensors.numpy import save_file
+    from nanoalphazero.checkpoint import save_muzero_checkpoint, load_muzero_checkpoint
+
+    full = {"runner_state": {"observation": jnp.ones((2, 1, 3), jnp.bool_)}, "cycle": jnp.int32(0)}
+    path = tmp_path / "full.safetensors"
+    save_muzero_checkpoint(path, full, {})
+    with safe_open(str(path), framework="numpy") as reader:
+        metadata = reader.metadata()
+        assert metadata["format"] == "nanoalphazero.muzero.persistent.v2"
+        tensors = {key: reader.get_tensor(key) for key in reader.keys()}
+    restored, _ = load_muzero_checkpoint(path, full)
+    assert_trees_equal(restored, full)
+    # Even matching tensor paths must not let an old replay schema through.
+    metadata["format"] = "nanoalphazero.muzero.persistent.v1"
+    save_file(tensors, str(path), metadata=metadata)
+    with pytest.raises(ValueError, match="persistent.v2"):
+        load_muzero_checkpoint(path, full)
+
+    # Existing compact v1 contains no replay observations and remains readable.
+    compact = {"model_ts": jnp.float32(1), "rng": jax.random.PRNGKey(0), "cycle": jnp.int32(2)}
+    leaves, _ = jax.tree_util.tree_flatten_with_path(compact)
+    save_file({str(i): np.asarray(value) for i, (_, value) in enumerate(leaves)}, str(path), metadata={
+        "format": "nanoalphazero.muzero.compact.v1",
+        "paths": json.dumps([jax.tree_util.keystr(keys) for keys, _ in leaves]),
+        "key_impls": "{}", "config": "{}",
+    })
+    restored, _ = load_muzero_checkpoint(path, compact)
+    assert_trees_equal(restored, compact)
 
 
 @pytest.mark.parametrize("env", ["hex5", "chess"])
@@ -93,12 +128,14 @@ def test_future_targets_wrap_and_exclude_next_game(env):
         exp, starts, 5, cfg["game_num_actions"], self_consistency=True,
     )
     assert int(missing) == 0
-    future = getattr(sample, "consistency_" + field)
+    observations = getattr(sample, field)
+    np.testing.assert_array_equal(observations[:, 0].reshape(2, -1)[:, 0], [4, 5])
+    future = observations[:, 1:]
     np.testing.assert_array_equal(future.reshape(2, 5, -1)[:, :, 0], [[5, 6, 7, 0, 0], [6, 7, 0, 0, 0]])
     np.testing.assert_array_equal(sample.policy_mask[:, 1:], [[1, 1, 1, 0, 0], [1, 1, 0, 0, 0]])
     if env == "chess":
-        assert sample.consistency_observation is None
-        assert sample.consistency_board_float.shape[:2] == (2, 5)
+        assert sample.observation is None
+        assert sample.board_float.shape[:2] == (2, 6)
     # Missing observations remain a buffer error, not a fabricated target.
     broken = exp.replace(global_step_id=times.at[0, 0].set(99))
     _, missing = gather_muzero_training_samples(
@@ -134,8 +171,10 @@ def test_consistency_gradients_and_disabled_equivalence(runner, network):
     sample = get_dummy_muzero_training_sample(enabled)
     batch = jax.tree.map(lambda x: jnp.broadcast_to(x, (2, *x.shape)), sample)
     batch = batch.replace(
-        observation=jax.random.normal(jax.random.PRNGKey(4), (2, *cfg["game_obs_shape"])),
-        consistency_observation=jax.random.normal(jax.random.PRNGKey(5), (2, 3, *cfg["game_obs_shape"])),
+        observation=jnp.concatenate((
+            jax.random.normal(jax.random.PRNGKey(4), (2, 1, *cfg["game_obs_shape"])),
+            jax.random.normal(jax.random.PRNGKey(5), (2, 3, *cfg["game_obs_shape"])),
+        ), axis=1),
         action_weights=jnp.full((2, 4, 9), 1 / 9),
         policy_mask=jnp.ones((2, 4), bool), value_mask=jnp.ones((2, 4), bool),
         reward_mask=jnp.ones((2, 3), bool),
@@ -157,8 +196,9 @@ def test_consistency_gradients_and_disabled_equivalence(runner, network):
         assert all(np.isfinite(x).all() for x in leaves)
         assert sum(float(jnp.sum(x * x)) for x in leaves) > 0
     observation_grad = jax.grad(lambda obs: runner.muzero_loss(
-        model, params, batch.replace(consistency_observation=obs), self_consistency_weight=1.)[0]
-    )(batch.consistency_observation)
+        model, params, batch.replace(observation=batch.observation.at[:, 1:].set(obs)),
+        self_consistency_weight=1.)[0]
+    )(batch.observation[:, 1:])
     np.testing.assert_array_equal(observation_grad, 0)
     masked = batch.replace(policy_mask=batch.policy_mask.at[:, 1:].set(False))
     loss, metrics = runner.muzero_loss(model, params, masked, self_consistency_weight=1.)
@@ -178,14 +218,13 @@ def test_packed_future_observations_match_dense_loss(runner):
     bits = bits.reshape((2, 3, *bits.shape[1:]))
     floats = floats.reshape((2, 3, *floats.shape[1:]))
     batch = batch.replace(
-        board_bool=bits[:, 0], board_float=floats[:, 0],
-        consistency_board_bool=bits[:, 1:], consistency_board_float=floats[:, 1:],
+        board_bool=bits, board_float=floats,
         policy_mask=jnp.ones((2, 3), bool), value_mask=jnp.ones((2, 3), bool),
         reward_mask=jnp.ones((2, 2), bool),
     )
-    decoded = combine_observation_vmap(bits[:, 1:].reshape(4, -1), floats[:, 1:].reshape(4, 8, 8, 2))
-    dense = batch.replace(consistency_observation=decoded.reshape(2, 2, 8, 8, 119),
-                          consistency_board_bool=None, consistency_board_float=None)
+    decoded = combine_observation_vmap(bits.reshape(6, -1), floats.reshape(6, 8, 8, 2))
+    dense = batch.replace(observation=decoded.reshape(2, 3, 8, 8, 119),
+                          board_bool=None, board_float=None)
     loss = jax.jit(lambda b: runner.muzero_loss(
         model, variables["params"], b, remat=True, self_consistency_weight=1.0))
     packed_result = loss(batch)
@@ -216,7 +255,7 @@ def test_enabled_cycle_checkpoint_continuation(runner, tmp_path, sharded):
     assert restored_config["exp_self_consistency"]
     restored = jax.device_put(loaded["runner_state"], jax.tree.map(lambda x: x.sharding, state))
     if sharded:
-        assert len(state.replay_buffer_state.experience.consistency_observation.addressable_shards) == 4
+        assert len(state.replay_buffer_state.experience.observation.addressable_shards) == 4
     expected, _ = algorithm.run_fn(state, False)
     actual, _ = algorithm.run_fn(restored, False)
     assert_trees_equal(expected, actual)

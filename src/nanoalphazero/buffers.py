@@ -501,6 +501,7 @@ class MuZeroSelfplayOutput(SelfplayOutput):
 
 @chex.dataclass(frozen=True)
 class MuZeroTrainingSample:
+    # Observation fields have a position axis: root only (1), or root + K futures.
     observation: ArrayLike
     action: ArrayLike
     action_weights: ArrayLike
@@ -512,10 +513,6 @@ class MuZeroTrainingSample:
     board_bool: Optional[ArrayLike] = None
     board_float: Optional[ArrayLike] = None
     k_indices: Optional[ArrayLike] = None
-    # Optional K future observations, retained only for self-consistency.
-    consistency_observation: Optional[ArrayLike] = None
-    consistency_board_bool: Optional[ArrayLike] = None
-    consistency_board_float: Optional[ArrayLike] = None
 
 
 @chex.dataclass(frozen=True)
@@ -539,15 +536,16 @@ def get_dummy_muzero_training_sample(config):
     k = config["muzero_unroll_steps"]
     record = get_dummy_muzero_selfplay_output(config)
 
-    def future(name):
+    def observations(name):
         value = getattr(record, name)
-        if not config.get("exp_self_consistency", False) or value is None:
+        if value is None:
             return None
-        return jnp.zeros((k, *value.shape), value.dtype)
+        length = k + 1 if config.get("exp_self_consistency", False) else 1
+        return jnp.zeros((length, *value.shape), value.dtype)
 
     return MuZeroTrainingSample(
-        observation=None if record.observation is None else record.observation.astype(jnp.float32),
-        board_bool=record.board_bool, board_float=record.board_float,
+        observation=observations("observation"),
+        board_bool=observations("board_bool"), board_float=observations("board_float"),
         k_indices=None if record.k_indices is None else jnp.broadcast_to(record.k_indices, (k + 1, *record.k_indices.shape)),
         action=jnp.zeros((k,), jnp.int32),
         action_weights=jnp.zeros((k + 1, record.action_weights.shape[-1]), jnp.float32),
@@ -556,9 +554,6 @@ def get_dummy_muzero_training_sample(config):
         policy_mask=jnp.zeros((k + 1,), bool),
         value_mask=jnp.zeros((k + 1,), bool),
         reward_mask=jnp.zeros((k,), bool),
-        consistency_observation=future("observation"),
-        consistency_board_bool=future("board_bool"),
-        consistency_board_float=future("board_float"),
     )
 
 
@@ -574,8 +569,8 @@ def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions
     lanes = jnp.maximum(starts.row_id.astype(jnp.int32) - 1, 0)
     offsets = jnp.arange(unroll_steps + 1)
     indices = (starts.global_step_id[:, None] % capacity + offsets) % capacity
-    # Root observations come from starts. Only gather the sequence fields used
-    # below, avoiding K+1 copies of packed boards and legality masks.
+    # Root observations come from starts. Gather future boards only when
+    # consistency needs them; training samples do not carry legality masks.
     def gather(name, count=unroll_steps + 1, offset=0):
         return getattr(experience, name)[lanes[:, None], indices[:, offset:offset + count]]
     valid = starts.is_valid_sample
@@ -601,17 +596,22 @@ def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions
         (lanes.shape[0], unroll_steps), 0, num_actions,
     )
 
-    def future(name):
-        if not self_consistency or getattr(experience, name) is None:
+    def observations(name):
+        root = getattr(starts, name)
+        if root is None:
             return None
+        root = root[:, None]
+        if not self_consistency:
+            return root
         # Gather exactly K columns, preserving the TPU gather/slice workaround.
         values = gather(name, unroll_steps, offset=1)
         mask = real[:, 1:].reshape((*real[:, 1:].shape, *((1,) * (values.ndim - 2))))
-        return jnp.where(mask, values, jnp.zeros((), values.dtype))
+        future = jnp.where(mask, values, jnp.zeros((), values.dtype))
+        return jnp.concatenate((root, future), axis=1)
 
     sample = MuZeroTrainingSample(
-        observation=None if starts.observation is None else starts.observation.astype(jnp.float32),
-        board_bool=starts.board_bool, board_float=starts.board_float,
+        observation=observations("observation"),
+        board_bool=observations("board_bool"), board_float=observations("board_float"),
         k_indices=None if experience.k_indices is None else jnp.where(real[..., None], gather("k_indices"), 0),
         action=jnp.where(real[:, :-1], gather("action", unroll_steps), random_actions),
         action_weights=jnp.where(real[..., None], gather("action_weights"), 0),
@@ -622,9 +622,6 @@ def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions
         policy_mask=real,
         value_mask=jnp.broadcast_to(complete[:, None], real.shape),
         reward_mask=jnp.broadcast_to(complete[:, None], real[:, :-1].shape),
-        consistency_observation=future("observation"),
-        consistency_board_bool=future("board_bool"),
-        consistency_board_float=future("board_float"),
     )
     return sample, missing
 

@@ -317,7 +317,7 @@ def test_exploration_training_is_opt_in(config, enabled):
     assert int(state.missing_count) == 0
     assert bool(jnp.all(samples.value_mask))
     assert bool(jnp.all(samples.reward_mask))
-    assert samples.consistency_observation is not None
+    assert samples.observation.shape[2] == config["muzero_unroll_steps"] + 1
     # Only the enabled run selects the two exploratory step-zero starts. Their
     # full three-position policy targets and two future consistency pairs stay valid.
     root_lengths = jnp.sum(samples.policy_mask[:, 0], axis=1)
@@ -371,12 +371,12 @@ def test_model_loss_and_gradients_match_research(config, network, assembly):
     original_variables = original.init(jax.random.PRNGKey(3), jnp.zeros((1, 3, 3, 2)), jnp.zeros(1, jnp.int32))
     assert_trees_equal(variables, original_variables)
     batch = MuZeroTrainingSample(
-        observation=jnp.ones((2, 3, 3, 2)), action=jnp.array([[0, 1, 2], [3, 4, 5]]),
+        observation=jnp.ones((2, 1, 3, 3, 2)), action=jnp.array([[0, 1, 2], [3, 4, 5]]),
         action_weights=jnp.ones((2, 4, 9)) / 9, reward=jnp.ones((2, 4)),
         transition_reward=jnp.zeros((2, 3)), policy_mask=jnp.ones((2, 4), bool),
         value_mask=jnp.ones((2, 4), bool), reward_mask=jnp.ones((2, 3), bool),
     )
-    old_batch = dict(observation=batch.observation, action=batch.action,
+    old_batch = dict(observation=batch.observation[:, 0], action=batch.action,
                      policy=batch.action_weights, value=batch.reward, reward=batch.transition_reward,
                      policy_mask=batch.policy_mask, value_mask=batch.value_mask, reward_mask=batch.reward_mask)
     actual = jax.value_and_grad(lambda p: assembly.muzero_loss(model, p, batch)[0])(variables["params"])
@@ -586,7 +586,7 @@ def test_packed_sparse_sequences_keep_storage_and_full_padding_space(chess_confi
     sample, missing = gather_muzero_training_samples(exp, starts, 2, 4672)
     assert int(missing) == 0
     assert sample.observation is None
-    assert sample.board_bool.shape == (2, 936)
+    assert sample.board_bool.shape == (2, 1, 936)
     assert sample.k_indices.shape == (2, 3, 128)
     assert bool(jnp.any(sample.action[:, 1] >= 128))
     assert bool(jnp.all(sample.action < 4672))
@@ -640,7 +640,7 @@ def test_chess_packed_sparse_cycle_and_checkpoint(chess_config, assembly, tmp_pa
         assert replay.board_bool.addressable_shards[0].data.shape[0] == 1
     batch = algorithm.replay_buffer.sample(state.replay_buffer_state, jax.random.PRNGKey(3)).experience
     batch = jax.tree.map(lambda x: x[:, 0], batch)
-    decoded = batch.replace(observation=combine_observation_vmap(batch.board_bool, batch.board_float),
+    decoded = batch.replace(observation=combine_observation_vmap(batch.board_bool[:, 0], batch.board_float[:, 0])[:, None],
                             board_bool=None, board_float=None)
     objective = jax.jit(jax.value_and_grad(lambda p, b: assembly.muzero_loss(algorithm.model, p, b)[0]))
     packed_result = objective(state.model_ts.params, batch)

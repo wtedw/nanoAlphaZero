@@ -41,7 +41,8 @@ Both variants retain every bit, dtype, item, RNG decision, and time index.
 Logical storage bytes are unchanged. Checkpoint layouts would change, so these
 remain isolated experiments pending production integration/migration handling.
 
-TPU comparison on 2026-10-07: both candidates executed 40 optimizer updates
+Historical TPU comparison at commit 81716d8 (separate root/future observation
+fields), on 2026-10-07: both candidates executed 40 optimizer updates
 with finite losses and zero buffer errors at the failing baseline's dimensions.
 XLA's padded temporary payload fell from 21.69 GiB (9.62 GiB unpadded) to
 10.01 GiB (9.74 GiB unpadded) for features and 6.96 GiB (6.96 GiB unpadded)
@@ -49,6 +50,8 @@ for matrix. Matrix also had higher initialization allocation peaks, so do not
 infer overall peak memory solely from its lower execution reservation.
 These two-cycle synthetic-replay probes did not exercise completed-game drain
 or long-run wraparound. Results: evals/muzero/replay-layout-padding-20261007.json.
+The probe now uses unified observation sequences; repeat TPU measurements before
+applying those historical numbers to this new schema.
 See https://docs.cloud.google.com/tpu/docs/performance-guide for TPU tiling.
 """
 
@@ -202,8 +205,8 @@ def main(argv=None):
             state = replay.add(state, batch)
             sample = replay.sample(state, key).experience
             # Exercise both observation decoding and the sparse target payload.
-            future_bool = sample.consistency_board_bool.reshape((-1, 936))
-            future_float = sample.consistency_board_float.reshape((-1, 8, 8, 2))
+            future_bool = sample.board_bool[:, :, 1:].reshape((-1, 936))
+            future_float = sample.board_float[:, :, 1:].reshape((-1, 8, 8, 2))
             observed = buffers.combine_observation_vmap(future_bool, future_float)
             return state, {'checksum': jnp.sum(observed) + jnp.sum(sample.action_weights)}
 

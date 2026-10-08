@@ -98,13 +98,17 @@ It introduces no running normalization state or target-network update. The
 coefficient and valid-pair averaging follow this runner's loss scaling rather
 than reproducing the reference experiment's hyperparameters.
 
-Enabled replay samples additionally retain K future observations. Chess stays
-packed until training; dense observations retain their self-play storage dtype.
+Replay observation fields (`observation`, or packed `board_bool`/`board_float`)
+have one position axis: length 1 without consistency, length K+1 with it.
+Training reads position 0 for the root and positions 1 onward for consistency;
+there are no separate consistency-observation fields. Chess stays packed until
+training; dense observations retain their self-play storage dtype, including
+the root, and are converted to float32 only when used by the model.
 The existing chronology checks and policy masks exclude reset/absorbing tails
 and cross-game targets. Terminal next observations are not stored by this runner,
 so consistency is not applied to the transition ending a game. Storage estimates
-include the added observations. Disabled runs retain their original parameter
-and replay tensor layouts. Enabled checkpoints require the same feature flag
+include the added observations. Disabling consistency leaves model parameters
+unchanged and stores only the root observation. Enabled checkpoints require the same feature flag
 and coefficient on resume; this experiment is intended for a fresh run.
 
 For example, add `--exp-self-consistency --self-consistency-weight 1.0` to the
@@ -189,10 +193,13 @@ hit the buffer safety guard in runtime testing. Random selection may retain a
 fresh remainder across cycles; this capacity is empirically validated, not a
 guarantee against overflow. Explicit capacity overrides and error checks remain.
 
-Full checkpoints use `nanoalphazero.muzero.persistent.v1` and include environment
+Full checkpoints use `nanoalphazero.muzero.persistent.v2` and include environment
 state, both buffers, optimizer, model parameters, RNG, and cycle number. They
 support exact continuation. Chess defaults to compact checkpoints using
 `nanoalphazero.muzero.compact.v1`: parameters, optimizer, RNG, and cycle only.
+The v2 format records the unified observation sequence. Older full v1 checkpoints
+use a different replay layout and are rejected; compact v1 checkpoints remain
+compatible because they contain no observation buffers.
 Compact resume starts fresh games and buffers and reruns warmup; it is not exact
 trajectory continuation. Both modes require identical resolved configuration
 for resume. Historical episode-based

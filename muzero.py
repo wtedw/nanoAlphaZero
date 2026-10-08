@@ -62,7 +62,9 @@ def unroll_muzero_predictions(model, params, batch, remat=False, *, return_laten
     observation = batch.observation
     if observation is None:
         from nanoalphazero.buffers import combine_observation_vmap
-        observation = combine_observation_vmap(batch.board_bool, batch.board_float)
+        observation = combine_observation_vmap(batch.board_bool[:, 0], batch.board_float[:, 0])
+    else:
+        observation = observation[:, 0].astype(jnp.float32)
     latent, logits, value = initial(params, observation)
     policies, values, rewards = [logits], [value], []
     latents = []
@@ -113,15 +115,15 @@ def muzero_consistency_loss(model, params, batch, predicted_latents, remat=False
     def flatten_time(x):
         return x.reshape((-1, *x.shape[2:]))
 
-    observation = batch.consistency_observation
+    observation = batch.observation
     if observation is None:
         from nanoalphazero.buffers import combine_observation_vmap
         observation = combine_observation_vmap(
-            flatten_time(batch.consistency_board_bool),
-            flatten_time(batch.consistency_board_float),
+            flatten_time(batch.board_bool[:, 1:]),
+            flatten_time(batch.board_float[:, 1:]),
         )
     else:
-        observation = flatten_time(observation).astype(jnp.float32)
+        observation = flatten_time(observation[:, 1:]).astype(jnp.float32)
 
     def target_projection(params, observation):
         latent = model.apply({"params": params}, observation, method=model.encode)
