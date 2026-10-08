@@ -315,7 +315,7 @@ def bayeselo_main(argv: Sequence[str] | None = None) -> None:
 
 # MuZero components
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Annotated, Literal
 
 import tyro
@@ -327,16 +327,27 @@ MuZeroEnv = Literal[tuple(CONFIG_FACTORIES)]
 
 
 @dataclass
+class MuZeroCheckpointArgs:
+    """Checkpoint output, restoration, and snapshot contents."""
+
+    # Output safetensors path. Omit to disable saving.
+    save: Path | None = None
+    # Restore a checkpoint. Does not enable saving.
+    resume: Path | None = None
+    # Period in training cycles; 0 disables periodic saves. First/final saves remain.
+    every: int | None = None
+    # Compact restarts games/buffers; full restores them. Default: chess compact, others full.
+    mode: Literal["compact", "full"] | None = None
+
+
+@dataclass
 class MuZeroArgs:
     """Persistent MuZero. Omitted overrides inherit the selected game's defaults."""
 
     env: MuZeroEnv = "hex4"
     platform: Literal["cpu", "tpu"] | None = None
 
-    # Optional safetensors checkpoint; chess defaults to compact.
-    save: Path | None = None
-
-    resume: Path | None = None
+    ckpt: MuZeroCheckpointArgs = field(default_factory=MuZeroCheckpointArgs)
     muzero_network: Literal["vector", "spatial"] | None = None
     hex_eval_period: int = 0
     hex_eval_engine_path: str | None = None
@@ -370,7 +381,6 @@ class MuZeroArgs:
     mcts_num_root_considered: int | None = None
     mcts_num_survivors: int | None = None
     lr_warmup_steps: int | None = None
-    ckpt_period: int | None = None
     mcts_num_k_actions: int | None = None
     selfplay_buffer_min_len: int | None = None
     replay_buffer_total_size: int | None = None
@@ -388,7 +398,6 @@ class MuZeroArgs:
     muzero_remat_blocks: bool | None = None
     muzero_remat_unroll: bool | None = None
     exp_bnk_action_weights: bool | None = None
-    muzero_checkpoint_replay: bool | None = None
 
 
 def parse_muzero_args(argv: Sequence[str] | None = None) -> MuZeroArgs:

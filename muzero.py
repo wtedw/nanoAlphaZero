@@ -504,8 +504,12 @@ def main(argv=None):
     if args.platform:
         os.environ["JAX_PLATFORMS"] = args.platform
     overrides = {name: value for name, value in vars(args).items()
-                 if value is not None and name not in ("env", "save", "resume", "platform")
+                 if value is not None and name not in ("env", "ckpt", "platform")
                  and not name.startswith("hex_eval_")}
+    if args.ckpt.every is not None:
+        overrides["ckpt_period"] = args.ckpt.every
+    if args.ckpt.mode is not None:
+        overrides["muzero_checkpoint_replay"] = args.ckpt.mode == "full"
     config = get_muzero_config(args.env, **overrides)
     pool = None
     try:
@@ -519,7 +523,8 @@ def main(argv=None):
         algorithm = make_muzero(config, jax.random.PRNGKey(config["seed"]))
         evaluator = (MuZeroHexEvaluator(algorithm, pool, args.hex_eval_period, args.hex_eval_output)
                      if pool is not None else None)
-        run_muzero(algorithm, checkpoint_path=args.save, resume=args.resume, evaluator=evaluator)
+        run_muzero(algorithm, checkpoint_path=args.ckpt.save,
+                   resume=args.ckpt.resume, evaluator=evaluator)
     finally:
         if pool is not None:
             pool.close()

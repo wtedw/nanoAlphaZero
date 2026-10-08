@@ -288,9 +288,22 @@ state; exposed component handles can be used for evaluation independently.
 Historical research diagnostic/evaluation CLIs remain available for their
 original checkpoint format; they have not been switched to this format.
 
-Run chess with `uv run python muzero.py --env chess --save artifacts/chess.safetensors`.
+MuZero groups checkpoint CLI options under `--ckpt.*`:
+
+| Option | Meaning |
+| --- | --- |
+| `--ckpt.save PATH` | Save to this path; omit to disable saving. |
+| `--ckpt.resume PATH` | Restore this checkpoint; does not enable saving. |
+| `--ckpt.every N` | Save every N training cycles; defaults to the game's checkpoint period. Zero disables periodic saves, but first/final saves remain. |
+| `--ckpt.mode compact\|full` | Snapshot contents for saving and restoring; defaults to compact for chess, full otherwise. Must match the checkpoint when resuming. |
+
+These replace the flat MuZero options `--save`, `--resume`, `--ckpt-period`, and
+`--[no-]muzero-checkpoint-replay`. AlphaZero's CLI is unchanged. This grouping
+preserves checkpoint formats, configuration matching, and save timing.
+
+Run chess with `uv run python muzero.py --env chess --ckpt.save artifacts/chess.safetensors`.
 Saving remains opt-in; the first cycle, periodic cycles (50 for chess), and final
-cycle update that path. Add `--muzero-checkpoint-replay` for full snapshots,
+cycle update that path. Add `--ckpt.mode full` for full snapshots,
 `--mcts-num-k-actions N` to set target support, or `--no-exp-bnk-action-weights`
 for dense targets. `--replay-buffer-total-size` counts unroll items;
 `--selfplay-buffer-max-len` counts transitions per lane. An explicit
@@ -310,10 +323,10 @@ MoHex adapter (the engine pool starts before JAX initializes):
 ```bash
 uv run python muzero.py --env hex4 --platform tpu --num-iters 5000 \
   --replay-buffer-warmup-steps 20 --muzero-unroll-steps 3 --no-enable-wandb \
-  --no-muzero-checkpoint-replay --ckpt-period 50 \
+  --ckpt.mode compact --ckpt.every 50 \
   --hex-eval-period 50 --hex-eval-engine-path /path/to/mohex \
   --hex-eval-output artifacts/hex4-NEW/mohex \
-  --save artifacts/hex4-NEW/latest.safetensors
+  --ckpt.save artifacts/hex4-NEW/latest.safetensors
 ```
 
 The evaluation directory must be new. Baseline, scheduled, and final evaluations
