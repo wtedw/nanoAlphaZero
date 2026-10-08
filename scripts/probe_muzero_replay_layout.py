@@ -10,9 +10,13 @@ After the TPU is free, run each layout in a SEPARATE process, retaining logs:
       --depth 10 --width 256
     # Repeat with --layout features, then --layout matrix.
 
-The full-cycle probe uses 552 self-play slots, K=5, BNK-128 targets,
-consistency, rematerialization, and 20 self-play/20 optimizer steps per cycle.
-It seeds synthetic replay to exercise training immediately, NOT measure learning.
+Chess defaults to 512 self-play slots, K=5, BNK-128 targets, consistency,
+rematerialization, and 20 self-play/20 optimizer steps per cycle. Sizes, cycle
+lengths, consistency, and replay seeding are configurable. Synthetic replay
+exercises training immediately, NOT learning. --no-seed-replay waits for real
+completed games; inspect drain counts and update counts rather than assuming
+every cycle trains. --warmup-iterations excludes calls from timing summaries,
+but these calls DO train (unlike the production replay warmup).
 It writes no checkpoints or tracker data. No production factory is changed on disk.
 For HLO diagnostics, optionally set XLA_FLAGS=--xla_dump_to=NEW_DIRECTORY, but
 large full-cycle dumps require substantial free disk space.
@@ -29,7 +33,7 @@ The following are compiler-reported TEMPORARY allocations, not storage estimates
 The root board_float allocation was already unpadded (128 MiB).
 
 Candidate layouts:
-  features: flatten each stored sample field, e.g. (5,8,8,2) -> (640,).
+  features: flatten each stored sample field, e.g. (6,8,8,2) -> (768,).
     Flashbax gathers flat features; only the sampled batch is reshaped for loss.
     This also folds K into the BNK and packed-observation feature axes.
   matrix: additionally store each field as (lanes, capacity * features), so
@@ -52,17 +56,27 @@ These two-cycle synthetic-replay probes did not exercise completed-game drain
 or long-run wraparound. Results: evals/muzero/replay-layout-padding-20261007.json.
 The probe now uses unified observation sequences; repeat TPU measurements before
 applying those historical numbers to this new schema.
+Use scripts/benchmark_muzero_layouts.py to automate fresh-process comparisons.
+Replay mode fills the complete ring outside timing. Add uses a dynamic input
+batch; sample returns all fields; roundtrip includes observation decoding and a
+policy checksum (unused gathered fields can be optimized out). Cycle mode is
+the end-to-end control, including self-play, drain, sampling and optimization.
+Only replay changes layout; self-play is always original. Per-field shard sizes
+are logical sizes, NOT measured TPU tile allocation. Compiler memory_analysis,
+allocator counters, and optional raw HLO/driver reports remain separate.
 See https://docs.cloud.google.com/tpu/docs/performance-guide for TPU tiling.
 """
 
 import argparse
 from functools import partial
 import importlib.util
+import importlib.metadata
 import json
 import math
 import os
 from pathlib import Path
 import subprocess
+import statistics
 import time
 from unittest.mock import patch
 
@@ -73,7 +87,7 @@ def make_layout_replay_buffer(config, dummy, data_sharding=None, *, layout, fact
     from nanoalphazero.buffers import make_replay_buffer
 
     factory = factory or make_replay_buffer
-    if layout == "baseline":
+    if layout in ("baseline", "original"):
         return factory(config, dummy, data_sharding)
     if layout not in ("features", "matrix"):
         raise ValueError(layout)
@@ -134,7 +148,8 @@ def make_synthetic_batch(dummy, batch_size, sharding=None):
 
     sample = dummy.replace(
         action_weights=jnp.full_like(dummy.action_weights, 1 / dummy.action_weights.shape[-1]),
-        k_indices=jnp.broadcast_to(jnp.arange(dummy.k_indices.shape[-1], dtype=dummy.k_indices.dtype), dummy.k_indices.shape),
+        k_indices=(None if dummy.k_indices is None else jnp.broadcast_to(
+            jnp.arange(dummy.k_indices.shape[-1], dtype=dummy.k_indices.dtype), dummy.k_indices.shape)),
         reward=jnp.full_like(dummy.reward, .25),
         policy_mask=jnp.ones_like(dummy.policy_mask),
         value_mask=jnp.ones_like(dummy.value_mask),
@@ -147,14 +162,27 @@ def make_synthetic_batch(dummy, batch_size, sharding=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--platform', choices=('cpu', 'tpu'), default='cpu')
-    parser.add_argument('--layout', choices=('baseline', 'features', 'matrix'), required=True)
+    parser.add_argument('--layout', choices=('original', 'baseline', 'features', 'matrix'), required=True)
     parser.add_argument('--mode', choices=('replay', 'cycle'), default='replay')
+    parser.add_argument('--operation', choices=('add', 'sample', 'roundtrip'), default='roundtrip')
+    parser.add_argument('--env', choices=('chess', 'hex4', 'hex5'), default='chess')
     parser.add_argument('--batch', type=int, default=16)
     parser.add_argument('--capacity', type=int, default=16)
     parser.add_argument('--depth', type=int, default=1)
     parser.add_argument('--width', type=int, default=8)
-    parser.add_argument('--iterations', type=int, default=2)
+    parser.add_argument('--iterations', type=int, default=10)
+    parser.add_argument('--warmup-iterations', type=int, default=2)
+    parser.add_argument('--selfplay-capacity', type=int, default=512)
+    parser.add_argument('--selfplay-steps', type=int, default=20)
+    parser.add_argument('--train-steps', type=int, default=20)
+    parser.add_argument('--unroll', type=int, default=5)
+    parser.add_argument('--consistency', action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument('--seed-replay', action=argparse.BooleanOptionalAction, default=True,
+                        help='Seed synthetic replay in cycle mode; disable to wait for real completed games.')
+    parser.add_argument('--seed', type=int, default=0)
     args = parser.parse_args(argv)
+    if args.iterations < 1 or args.warmup_iterations < 0:
+        parser.error('iterations must be positive and warmup-iterations nonnegative')
     if args.platform == 'tpu':
         check_tpu_ownership()
     os.environ['JAX_PLATFORMS'] = args.platform
@@ -163,7 +191,7 @@ def main(argv=None):
     import jax.numpy as jnp
     from nanoalphazero import buffers
     from nanoalphazero.config import get_muzero_config
-    from nanoalphazero.core import DATA_PARALLEL_SHARDING
+    from nanoalphazero.core import DATA_PARALLEL_SHARDING, make_env
 
     def emit(**data):
         print(json.dumps(data), flush=True)
@@ -172,19 +200,31 @@ def main(argv=None):
         return [device.memory_stats() or {} for device in jax.devices()]
 
     cfg = get_muzero_config(
-        'chess', conv_depth=args.depth, conv_width=args.width,
+        args.env, conv_depth=args.depth, conv_width=args.width,
         selfplay_batch_size=args.batch, train_batch_size=args.batch,
-        selfplay_buffer_consume_size=args.batch, selfplay_buffer_max_len=552,
-        replay_buffer_max_len=args.capacity, exp_self_consistency=True,
-        exp_train_on_exploration=False,
+        selfplay_buffer_consume_size=args.batch, selfplay_buffer_max_len=args.selfplay_capacity,
+        selfplay_buffer_min_len=1, replay_buffer_min_len=1,
+        replay_buffer_max_len=args.capacity, exp_self_consistency=args.consistency,
+        cycle_n_selfplay=args.selfplay_steps, cycle_n_train=args.train_steps,
+        muzero_unroll_steps=args.unroll,
+        exp_train_on_exploit_unroll_states=True,
     )
-    cfg.update(game_obs_shape=[8, 8, 119], game_num_actions=4672)
+    env = make_env(cfg)
+    cfg.update(game_obs_shape=list(env.obs_shape), game_num_actions=env.num_actions)
     dummy = buffers.get_dummy_muzero_training_sample(cfg)
     factory = partial(make_layout_replay_buffer, layout=args.layout, factory=buffers.make_replay_buffer)
     sharding = DATA_PARALLEL_SHARDING
     batch = make_synthetic_batch(dummy, args.batch, sharding)
+    def version(name):
+        try:
+            return importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
+            return None
+
     emit(stage='start', layout=args.layout, mode=args.mode, config=cfg,
-         jax_version=jax.__version__, devices=[str(d) for d in jax.devices()])
+         options=vars(args), versions={name: version(name) for name in ('jax', 'jaxlib', 'libtpu', 'flashbax')},
+         devices=[{'id': d.id, 'kind': d.device_kind, 'platform': d.platform} for d in jax.devices()])
+    initialized_at = time.monotonic()
 
     if args.mode == 'cycle':
         spec = importlib.util.spec_from_file_location('muzero_layout_runner', Path(__file__).resolve().parents[1] / 'muzero.py')
@@ -192,49 +232,95 @@ def main(argv=None):
         spec.loader.exec_module(runner)
         # Process-local substitution, never modify the package or another process.
         with patch.object(buffers, 'make_replay_buffer', factory):
-            algorithm = runner.make_muzero(cfg, jax.random.PRNGKey(0))
+            algorithm = runner.make_muzero(cfg, jax.random.PRNGKey(args.seed))
         state = algorithm.runner_state
-        state = state._replace(replay_buffer_state=algorithm.replay_buffer.add(state.replay_buffer_state, batch))
+        if args.seed_replay:
+            state = state._replace(replay_buffer_state=algorithm.replay_buffer.add(state.replay_buffer_state, batch))
         fn, extra = algorithm.run_fn, jnp.bool_(False)
         stored = state.replay_buffer_state
     else:
         replay, state = factory(cfg, dummy, sharding)
-
+        # Populate all T insertion slots, including wrap, outside timed calls.
         @partial(jax.jit, donate_argnums=(0,))
-        def fn(state, key):
-            state = replay.add(state, batch)
+        def fill(state, batch):
+            return jax.lax.fori_loop(0, args.capacity + 1, lambda _, s: replay.add(s, batch), state)
+
+        state = fill(state, batch)
+
+        @partial(jax.jit, donate_argnums=(0,) if args.operation != 'sample' else ())
+        def fn(state, key, batch):
+            if args.operation != 'sample':
+                state = replay.add(state, batch)
+            if args.operation == 'add':
+                return state, {'index': state.current_index}
             sample = replay.sample(state, key).experience
-            # Exercise both observation decoding and the sparse target payload.
-            future_bool = sample.board_bool[:, :, 1:].reshape((-1, 936))
-            future_float = sample.board_float[:, :, 1:].reshape((-1, 8, 8, 2))
-            observed = buffers.combine_observation_vmap(future_bool, future_float)
+            if args.operation == 'sample':
+                # Return every field to prevent dead-code elimination of gathers.
+                return sample
+            if sample.observation is None:
+                observed = buffers.combine_observation_vmap(
+                    sample.board_bool.reshape((-1, *dummy.board_bool.shape[1:])),
+                    sample.board_float.reshape((-1, *dummy.board_float.shape[1:])))
+            else:
+                observed = sample.observation.astype(jnp.float32)
             return state, {'checksum': jnp.sum(observed) + jnp.sum(sample.action_weights)}
 
         extra = jax.random.PRNGKey(1)
         stored = state
 
     jax.block_until_ready(state)
-    emit(stage='storage', fields={name: {'shape': list(x.shape), 'dtype': str(x.dtype),
-         'logical_bytes': x.size * x.dtype.itemsize} for name, x in vars(stored.experience).items() if x is not None}, memory=memory())
+    def fields(experience):
+        return {name: {'shape': list(x.shape), 'dtype': str(x.dtype),
+                'logical_bytes': x.size * x.dtype.itemsize,
+                'local_shards': [{'shape': list(s.data.shape), 'logical_bytes': s.data.nbytes,
+                                  'device': str(s.device)} for s in x.addressable_shards]}
+                for name, x in vars(experience).items() if x is not None}
+
+    emit(stage='storage', fields=fields(stored.experience),
+         selfplay_fields=fields(state.selfplay_buffer_state.experience) if args.mode == 'cycle' else None,
+         initialization_seconds=time.monotonic()-initialized_at, memory=memory())
     started = time.monotonic()
     emit(stage='compiling')
-    executable = fn.lower(state, extra).compile()
+    call_args = (state, extra) if args.mode == 'cycle' else (state, extra, batch)
+    executable = fn.lower(*call_args).compile()
     analysis = executable.memory_analysis()
     sizes = {name: getattr(analysis, name, 0) for name in (
         'argument_size_in_bytes', 'output_size_in_bytes', 'alias_size_in_bytes', 'temp_size_in_bytes')}
-    emit(stage='compiled', seconds=time.monotonic()-started, compiled_memory=sizes)
-    for iteration in range(args.iterations):
+    emit(stage='compiled', seconds=time.monotonic()-started, compiled_memory=sizes, memory=memory())
+    durations = []
+    updates = 0
+    for iteration in range(args.warmup_iterations + args.iterations):
+        if args.mode == 'replay':
+            extra = jax.random.fold_in(jax.random.PRNGKey(args.seed), iteration)
         started = time.monotonic()
-        state, metrics = executable(state, extra)
+        if args.mode == 'cycle':
+            state, metrics = executable(state, extra)
+        elif args.operation == 'sample':
+            metrics = executable(state, extra, batch)
+        else:
+            state, metrics = executable(state, extra, batch)
         jax.block_until_ready((state, metrics))
-        metrics = {name: float(value) for name, value in jax.device_get(metrics).items()}
+        elapsed = time.monotonic()-started
+        if args.mode == 'replay' and args.operation == 'sample':
+            # Keep reduction/host transfer outside timed sample execution.
+            metrics = {'checksum': sum(float(jnp.sum(x.astype(jnp.float32))) for x in jax.tree.leaves(metrics))}
+        else:
+            metrics = {name: float(value) for name, value in jax.device_get(metrics).items()}
         assert all(math.isfinite(value) for value in metrics.values())
         if args.mode == 'cycle':
             assert metrics['selfplay_buffer/error_count'] == 0
-            assert metrics['runner_state/n_updates'] == (iteration + 1) * cfg['cycle_n_train']
-        emit(stage='executed', iteration=iteration, seconds=time.monotonic()-started,
-             metrics=metrics, memory=memory())
-    emit(stage='passed')
+            updates += int(metrics['train/ready']) * cfg['cycle_n_train']
+            assert metrics['runner_state/n_updates'] == updates
+            if args.seed_replay:
+                assert metrics['train/ready']
+        measured = iteration >= args.warmup_iterations
+        if measured:
+            durations.append(elapsed)
+        emit(stage='executed', iteration=iteration, seconds=elapsed,
+             device_call_seconds=elapsed, measured=measured, metrics=metrics, memory=memory())
+    emit(stage='passed', median_seconds=statistics.median(durations),
+         min_seconds=min(durations), max_seconds=max(durations), optimizer_updates=updates,
+         measured_iterations=len(durations), compiled_executions=args.iterations+args.warmup_iterations)
 
 
 if __name__ == '__main__':

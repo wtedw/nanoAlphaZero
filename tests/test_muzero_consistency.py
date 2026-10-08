@@ -68,7 +68,8 @@ def test_flag_and_default_storage():
     assert old_storage["replay"]["bytes"] < new_storage["replay"]["bytes"]
 
 
-def test_checkpoint_observation_layout_version(tmp_path):
+@pytest.mark.parametrize("legacy_key", ["exp_train_on_exploration", "exp_train_on_exploratory_unroll_states"])
+def test_checkpoint_observation_layout_version(tmp_path, legacy_key):
     import json
     from safetensors import safe_open
     from safetensors.numpy import save_file
@@ -76,18 +77,19 @@ def test_checkpoint_observation_layout_version(tmp_path):
 
     full = {"runner_state": {"observation": jnp.ones((2, 1, 3), jnp.bool_)}, "cycle": jnp.int32(0)}
     path = tmp_path / "full.safetensors"
-    save_muzero_checkpoint(path, full, {})
+    save_muzero_checkpoint(path, full, {legacy_key: False})
     with safe_open(str(path), framework="numpy") as reader:
         metadata = reader.metadata()
-        assert metadata["format"] == "nanoalphazero.muzero.persistent.v3"
+        assert metadata["format"] == "nanoalphazero.muzero.persistent.v4"
         tensors = {key: reader.get_tensor(key) for key in reader.keys()}
-    restored, _ = load_muzero_checkpoint(path, full)
+    restored, restored_config = load_muzero_checkpoint(path, full)
+    assert restored_config == {"exp_train_on_exploit_unroll_states": True}
     assert_trees_equal(restored, full)
     # Even matching tensor paths must not let an old replay schema through.
-    for version in (1, 2):
+    for version in (1, 2, 3):
         metadata["format"] = f"nanoalphazero.muzero.persistent.v{version}"
         save_file(tensors, str(path), metadata=metadata)
-        with pytest.raises(ValueError, match="persistent.v3"):
+        with pytest.raises(ValueError, match="persistent.v4"):
             load_muzero_checkpoint(path, full)
 
     # Existing compact v1 contains no replay observations and remains readable.
@@ -96,9 +98,10 @@ def test_checkpoint_observation_layout_version(tmp_path):
     save_file({str(i): np.asarray(value) for i, (_, value) in enumerate(leaves)}, str(path), metadata={
         "format": "nanoalphazero.muzero.compact.v1",
         "paths": json.dumps([jax.tree_util.keystr(keys) for keys, _ in leaves]),
-        "key_impls": "{}", "config": "{}",
+        "key_impls": "{}", "config": json.dumps({legacy_key: True}),
     })
-    restored, _ = load_muzero_checkpoint(path, compact)
+    restored, restored_config = load_muzero_checkpoint(path, compact)
+    assert restored_config == {"exp_train_on_exploit_unroll_states": False}
     assert_trees_equal(restored, compact)
 
 

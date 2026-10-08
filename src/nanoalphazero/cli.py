@@ -360,8 +360,8 @@ class MuZeroArgs:
     # Experimental EfficientZero-style temporal consistency objective.
     exp_self_consistency: bool | None = None
     self_consistency_weight: float | None = None
-    # Include exploratory positions as training starts for all enabled losses.
-    exp_train_on_exploration: bool | None = None
+    # Train direct losses only at exploit states across the K+1 unroll.
+    exp_train_on_exploit_unroll_states: bool = True
     # MuZero replay storage only; self-play retains its original layout.
     buffer_layout: Literal["original", "features"] | None = None
     selfplay_buffer_max_len: int | None = None

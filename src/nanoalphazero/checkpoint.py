@@ -202,7 +202,7 @@ def save_muzero_checkpoint(path, state, config):
                 value = jax.random.key_data(value)
             tensors[name] = np.array(jax.device_get(value), copy=True, order="C")
         save_safetensors_file(tensors, temporary, metadata={
-            "format": ("nanoalphazero.muzero.persistent.v3" if "runner_state" in state
+            "format": ("nanoalphazero.muzero.persistent.v4" if "runner_state" in state
                        else "nanoalphazero.muzero.compact.v1"),
             "paths": json.dumps(paths), "key_impls": json.dumps(key_impls),
             "config": json.dumps(config, sort_keys=True, allow_nan=False),
@@ -215,7 +215,7 @@ def save_muzero_checkpoint(path, state, config):
 
 def load_muzero_checkpoint(path, template):
     expected, tree = jax.tree_util.tree_flatten_with_path(template)
-    expected_format = ("nanoalphazero.muzero.persistent.v3" if "runner_state" in template
+    expected_format = ("nanoalphazero.muzero.persistent.v4" if "runner_state" in template
                        else "nanoalphazero.muzero.compact.v1")
     with safe_open(str(path), framework="flax") as reader:
         meta = reader.metadata()
@@ -236,4 +236,9 @@ def load_muzero_checkpoint(path, template):
             if value.shape != np.shape(example) or value.dtype != expected_dtype:
                 raise ValueError(f"MuZero checkpoint tensor {name} has an incompatible shape or dtype")
             leaves.append(value)
-    return tree.unflatten(leaves), json.loads(meta["config"])
+    config = json.loads(meta["config"])
+    for old_name in ("exp_train_on_exploratory_unroll_states", "exp_train_on_exploration"):
+        if old_name in config:
+            config.setdefault("exp_train_on_exploit_unroll_states", not config.pop(old_name))
+    config.setdefault("exp_train_on_exploit_unroll_states", True)
+    return tree.unflatten(leaves), config

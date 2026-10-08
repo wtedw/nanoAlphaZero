@@ -347,36 +347,121 @@ def test_completed_evictions_preserve_surviving_unrolls(config):
 
 
 @pytest.mark.parametrize("enabled", [False, True])
-def test_exploration_training_is_opt_in(config, enabled):
+def test_exploit_unroll_training_is_default(config, enabled):
     from nanoalphazero.cli import parse_muzero_args
 
-    assert parse_muzero_args([]).exp_train_on_exploration is None
-    assert parse_muzero_args(["--exp-train-on-exploration"]).exp_train_on_exploration is True
-    assert parse_muzero_args(["--no-exp-train-on-exploration"]).exp_train_on_exploration is False
-    config = {**config, "exp_train_on_exploration": enabled, "exp_self_consistency": True,
-              "selfplay_buffer_consume_size": 6 if enabled else 4}
+    assert config["exp_train_on_exploit_unroll_states"] is True
+    assert parse_muzero_args([]).exp_train_on_exploit_unroll_states is True
+    assert parse_muzero_args(["--exp-train-on-exploit-unroll-states"]).exp_train_on_exploit_unroll_states is True
+    assert parse_muzero_args(["--no-exp-train-on-exploit-unroll-states"]).exp_train_on_exploit_unroll_states is False
+    config = {**config, "exp_train_on_exploit_unroll_states": enabled, "exp_self_consistency": True,
+              "selfplay_buffer_consume_size": 6}
     buffer, state = make_buffer(config)
     for t in range(3):
         state = append(buffer, state, transition(config, t, t, exploration=t == 0,
                                                  terminal=t == 2, reward=float(t == 2)))
         if t < 2:
             assert int(state.num_valid_consumable) == 0
-    assert int(state.num_valid_consumable) == (6 if enabled else 4)
-    np.testing.assert_array_equal(state.experience.is_valid_sample[:, :3], [[enabled, True, True]] * 2)
+    assert int(state.num_valid_consumable) == 6
+    np.testing.assert_array_equal(state.experience.is_valid_sample[:, :3], [[True, True, True]] * 2)
     # Exploration changes eligibility, never the action or completed return.
     np.testing.assert_array_equal(state.experience.action[:, :3], [[0, 1, 2]] * 2)
     np.testing.assert_array_equal(state.experience.reward[:, :3], [[1, -1, 1]] * 2)
     state, samples, _ = jax.jit(buffer.consume)(state)
     assert int(state.num_valid_consumable) == 0
     assert int(state.missing_count) == 0
-    assert bool(jnp.all(samples.value_mask))
-    assert bool(jnp.all(samples.reward_mask))
     assert samples.observation.shape[2] == config["muzero_unroll_steps"] + 1
-    # Only the enabled run selects the two exploratory step-zero starts. Their
-    # full three-position policy targets and two future consistency pairs stay valid.
+    # Both settings retain exploratory roots with exploit successors. Only the
+    # disabled setting applies direct losses to those roots/actions themselves.
+    roots = np.asarray(samples.action[:, 0, 0])
+    for i, root in enumerate(roots):
+        policy = np.array([True] * (3 - root) + [False] * (root + 1))
+        value = np.ones(4, bool)
+        reward = np.ones(3, bool)
+        if root == 0 and enabled:
+            policy[0] = value[0] = reward[0] = False
+        np.testing.assert_array_equal(samples.policy_mask[i, 0], policy)
+        np.testing.assert_array_equal(samples.value_mask[i, 0], value)
+        np.testing.assert_array_equal(samples.reward_mask[i, 0], reward)
     root_lengths = jnp.sum(samples.policy_mask[:, 0], axis=1)
-    assert int(jnp.sum(root_lengths == 3)) == (2 if enabled else 0)
-    assert int(jnp.sum(samples.policy_mask[:, 0, 1:])) == (6 if enabled else 2)
+    assert int(jnp.sum(root_lengths == 3)) == (0 if enabled else 2)
+    assert int(jnp.sum(samples.policy_mask[:, 0, 1:])) == 6
+
+
+def test_masked_exploration_losses_keep_rollout_gradients(config, assembly):
+    cfg = {**config, "exp_self_consistency": True}
+    buffer, state = make_buffer(cfg)
+    for step in range(4):
+        row = transition(cfg, step, step, exploration=step % 2 == 0,
+                         terminal=step == 3, reward=float(step == 3))
+        row = row.replace(observation=jax.random.bernoulli(jax.random.PRNGKey(step), shape=row.observation.shape))
+        state = append(buffer, state, row)
+    starts = jax.tree.map(lambda x: x[:, :1], state.experience)
+    batch, missing = gather_muzero_training_samples(state.experience, starts, 3, self_consistency=True)
+    assert int(missing) == 0
+    np.testing.assert_array_equal(batch.policy_mask, [[False, True, False, True]] * 2)
+    np.testing.assert_array_equal(batch.value_mask, batch.policy_mask)
+    np.testing.assert_array_equal(batch.reward_mask, [[False, True, False]] * 2)
+    model, variables = make_muzero_model(cfg, jax.random.PRNGKey(3))
+    objective = jax.jit(jax.value_and_grad(
+        lambda params, sample: assembly.muzero_loss(model, params, sample, self_consistency_weight=1.),
+        has_aux=True))
+    expected = objective(variables["params"], batch)
+    changed = batch.replace(
+        action_weights=jnp.where(batch.policy_mask[..., None], batch.action_weights, 1 / 9),
+        reward=batch.reward + jnp.where(batch.value_mask, 0, 100),
+        transition_reward=batch.transition_reward + jnp.where(batch.reward_mask, 0, 100),
+        observation=batch.observation.at[:, 2].set(~batch.observation[:, 2]),
+    )
+    assert_trees_equal(expected, objective(variables["params"], changed))
+    assert float(expected[0][1]["consistency/n_valid"]) == 4
+    gradient = jax.grad(lambda obs: assembly.muzero_loss(
+        model, variables["params"], batch.replace(observation=obs), self_consistency_weight=1.)[0]
+    )(batch.observation.astype(jnp.float32))
+    # The root is exploratory, but later exploit losses still train h and g.
+    assert float(jnp.linalg.norm(gradient[:, 0])) > 0
+    np.testing.assert_array_equal(gradient[:, 1:], 0)  # stopped consistency targets
+    assert sum(float(jnp.sum(x * x)) for x in jax.tree.leaves(expected[1]["dynamics"])) > 0
+
+
+def test_exploit_window_eligibility_respects_wrap_lanes_and_game_boundaries(config):
+    cfg = {**config, "selfplay_buffer_max_len": 8, "selfplay_buffer_min_len": 1}
+    buffer, state = make_buffer(cfg)
+    # Leave one previous-game position in storage after the following wrap.
+    for t in range(6):
+        state = append(buffer, state, transition(cfg, t, t, exploration=True, terminal=t == 5))
+    assert int(state.num_valid_consumable) == 0
+    for step in range(7):
+        row = transition(cfg, step + 6, step, exploration=True, terminal=step == 6,
+                         reward=float(step == 6), game_id=2)
+        # Only lane zero has an exploit position, at episode step four.
+        row = row.replace(is_exploration=row.is_exploration.at[0, 0].set(step != 4))
+        state = append(buffer, state, row)
+    assert int(state.missing_count) == 0
+    assert int(state.num_valid_consumable) == 4
+    slots = np.arange(6, 13) % 8
+    np.testing.assert_array_equal(state.experience.is_valid_sample[:, slots],
+                                  [[False, True, True, True, True, False, False], [False] * 7])
+    assert not bool(jnp.any(state.experience.is_valid_sample[:, 5]))  # previous game
+    starts = jax.tree.map(lambda x: x[:, 7:8], state.experience)  # exploit exactly K ahead
+    samples, missing = gather_muzero_training_samples(state.experience, starts, 3)
+    assert int(missing) == 0
+    np.testing.assert_array_equal(samples.policy_mask, [[False, False, False, True], [False] * 4])
+    np.testing.assert_array_equal(samples.value_mask, samples.policy_mask)
+    assert not bool(jnp.any(samples.reward_mask))
+    starts = jax.tree.map(lambda x: x[:, 2:3], state.experience)  # exploit root, exploratory tail
+    samples, missing = gather_muzero_training_samples(state.experience, starts, 3)
+    assert int(missing) == 0
+    np.testing.assert_array_equal(samples.policy_mask, [[True, False, False, False], [False] * 4])
+    np.testing.assert_array_equal(samples.value_mask, [[True, False, False, True], [False] * 4])
+    np.testing.assert_array_equal(samples.reward_mask, [[True, False, False], [False] * 3])
+    np.testing.assert_array_equal(samples.reward[0], [1, -1, 1, 0])
+    # An exploit position immediately after reset must not resurrect the
+    # preceding game's exploratory tail, even though it is physically adjacent.
+    state = append(buffer, state, transition(cfg, 13, 0, terminal=True, reward=1, game_id=3))
+    assert not bool(jnp.any(state.experience.is_valid_sample[:, 3:5]))
+    assert bool(jnp.all(state.experience.is_valid_sample[:, 5]))
+    assert int(state.num_valid_consumable) == 6
 
 
 @pytest.mark.parametrize("exploration_moves", [0, 4])
@@ -740,8 +825,9 @@ def test_chess_packed_sparse_cycle_and_checkpoint(chess_config, assembly, tmp_pa
     assert (tmp_path / "chess-False.safetensors").stat().st_size < (tmp_path / "chess-True.safetensors").stat().st_size
 
 
+@pytest.mark.parametrize("capacity", [16, 32])
 @pytest.mark.parametrize("layout", ["original", "features"])
-def test_compact_resume_restarts_buffers_and_runs_warmup(config, assembly, tmp_path, layout):
+def test_compact_resume_restarts_buffers_and_runs_warmup(config, assembly, tmp_path, capacity, layout):
     from nanoalphazero.checkpoint import (
         save_muzero_checkpoint, muzero_checkpoint_payload,
     )
@@ -755,18 +841,19 @@ def test_compact_resume_restarts_buffers_and_runs_warmup(config, assembly, tmp_p
     # Compact checkpoints written before the flag also support switching layout.
     saved_config = {key: value for key, value in algorithm.config.items() if key != "buffer_layout"}
     save_muzero_checkpoint(path, payload, saved_config)
-    resumed_config = {**config, "buffer_layout": layout}
+    resumed_config = {**config, "selfplay_buffer_max_len": capacity, "buffer_layout": layout}
     fresh = assembly.make_muzero(resumed_config, jax.random.PRNGKey(0))
     restored = run_muzero(fresh, num_iters=1, resume=path)
     assert int(restored.model_ts.n_updates) == int(state.model_ts.n_updates)
     assert int(restored.selfplay_state.step_count) == config["cycle_n_selfplay"]
     assert int(restored.selfplay_buffer_state.overwritten_count) == 0
     assert bool(fresh.replay_buffer.can_sample(restored.replay_buffer_state))
+    assert restored.selfplay_buffer_state.experience.action.shape[1] == capacity
     if layout == "features":
         assert restored.replay_buffer_state.experience.observation.ndim == 3
     assert_trees_equal(restored.model_ts, payload["model_ts"])
 
-    # Changing storage layout must not silently change optimization semantics.
+    # Storage recovery must not silently change optimization semantics.
     fresh.config["learning_rate"] *= 2
     with pytest.raises(ValueError, match="identical resolved configuration"):
         run_muzero(fresh, num_iters=1, resume=path)

@@ -560,7 +560,7 @@ def get_dummy_muzero_training_sample(config):
 
 
 def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions=None,
-                                  *, self_consistency=False):
+                                  *, self_consistency=False, train_on_exploit_unroll_states=True):
     """Gather ordered records, never extending a sequence into another game.
 
     Starts come from AlphaZero consume, which adds a singleton time axis.
@@ -587,7 +587,14 @@ def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions
     )
     missing = jnp.sum(real & ~matches)
     complete = valid & jnp.all(~real | matches, axis=1)
+    allowed = ~gather("is_exploration") if train_on_exploit_unroll_states else jnp.ones_like(real)
+    # A window needs at least one real supervised position, not just padding.
+    complete = complete & jnp.any(real & allowed, axis=1)
     real = real & complete[:, None]
+    # Rewards belong to the action at the source position. Gather K directly
+    # rather than slicing a K+1 gather (the TPU gather/slice compiler workaround).
+    reward_allowed = (~gather("is_exploration", unroll_steps) if train_on_exploit_unroll_states
+                      else jnp.ones_like(real[:, :-1]))
     if num_actions is None:
         if experience.k_indices is not None:
             raise ValueError("Sparse MuZero sequences require the full action count")
@@ -621,9 +628,9 @@ def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions
         # Gather K transitions directly. Gathering K+1 then slicing the result
         # triggers an invalid TPU all-reduce-scatter rewrite at K=5.
         transition_reward=jnp.where(real[:, :-1], gather("transition_reward", unroll_steps), 0),
-        policy_mask=real,
-        value_mask=jnp.broadcast_to(complete[:, None], real.shape),
-        reward_mask=jnp.broadcast_to(complete[:, None], real[:, :-1].shape),
+        policy_mask=real & allowed,
+        value_mask=complete[:, None] & (~real | allowed),
+        reward_mask=complete[:, None] & (~real[:, :-1] | reward_allowed),
     )
     return sample, missing
 
@@ -698,18 +705,27 @@ def make_muzero_selfplay_buffer(config, dummy_selfplay_output, data_sharding=Non
             order = (updated.current_index + jnp.arange(capacity)) % capacity
             rewards = exp.transition_reward[:, order].T
             discounts = exp.discount[:, order].T
+            supervised = completed
+            if config.get("exp_train_on_exploit_unroll_states", True):
+                supervised = supervised & ~exp.is_exploration
+            supervised = supervised[:, order].T
 
-            def backup(value, row):
-                reward, discount = row
+            def backup(carry, row):
+                value, distance = carry
+                reward, discount, supervised = row
                 value = reward + discount * value
-                return value, value
+                distance = jnp.where(supervised, 0, jnp.minimum(distance + 1, k + 1))
+                return (value, distance), (value, distance <= k)
 
-            _, returns = jax.lax.scan(
-                backup, jnp.zeros(rewards.shape[1], jnp.float32),
-                (rewards, discounts), reverse=True,
+            _, (returns, eligible) = jax.lax.scan(
+                backup, (jnp.zeros(rewards.shape[1], jnp.float32),
+                         jnp.full(rewards.shape[1], k + 1, jnp.int32)),
+                (rewards, discounts, supervised), reverse=True,
             )
             returns = jnp.zeros_like(exp.reward).at[:, order].set(returns.T)
-            eligible = ~exp.is_exploration | config.get("exp_train_on_exploration", False)
+            # Eligibility looks ahead K positions within the just-finished game.
+            # Reusing the return scan avoids materializing a [B, T, K+1] tensor.
+            eligible = jnp.zeros_like(completed).at[:, order].set(eligible.T)
             fresh = (exp.is_fresh_i8 != 0) | (completed & eligible)
             return exp.replace(
                 reward=jnp.where(completed, returns, exp.reward),
@@ -735,6 +751,7 @@ def make_muzero_selfplay_buffer(config, dummy_selfplay_output, data_sharding=Non
         samples, missing = gather_muzero_training_samples(
             after.experience, starts, k, config["game_num_actions"],
             self_consistency=config.get("exp_self_consistency", False),
+            train_on_exploit_unroll_states=config.get("exp_train_on_exploit_unroll_states", True),
         )
         after = after.replace(missing_count=after.missing_count + missing)
         return after, jax.tree.map(lambda x: x[:, None], samples), metrics

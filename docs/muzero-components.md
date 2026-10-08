@@ -44,7 +44,8 @@ Individual buffer states and model train state live in `runner_state`.
    target; `transition_reward` stores the immediate acting-player reward.
    `discount` is signed to convert the next player's value to the actor's value.
 4. At termination, `add_backfill` scans chronological transitions backwards to
-   calculate returns. Eligible non-exploration starts become fresh. Finished
+   calculate returns. Starts with an exploit position in their K+1-position
+   window become fresh, including starts whose root is exploratory. Finished
    game IDs and final step numbers are assigned using existing self-play output.
 5. `consume` calls the existing AlphaZero consumer to select fresh starts and
    clear their flags. It then gathers K transitions and K+1 policy/value targets
@@ -125,13 +126,55 @@ For example, add `--exp-self-consistency --self-consistency-weight 1.0` to the
 existing Hex5 command. No additional evaluation or logging backend is required;
 both Trackio and W&B receive the new scalar metrics through the usual host loop.
 
-`--exp-train-on-exploration` additionally makes completed exploratory positions
-eligible as replay starts. All existing policy, value, reward, and (if enabled)
-self-consistency losses apply to them with the normal terminal masks. This flag
-does not change action selection or create a separate dynamics-only objective.
-It is off by default and independent of `--exp-self-consistency`. Policy targets
-remain search distributions; value targets remain completed self-play returns,
-including any exploratory moves. Positions still wait for game completion.
+By default, a completed start is eligible when at least one of its K+1 real
+positions is non-exploratory. Exploratory roots are retained when they lead to
+exploit positions within the unroll. All-exploration windows are excluded;
+terminal padding and the next game cannot make a start eligible.
+Policy and value losses are masked at each exploratory position. Reward loss
+is masked for the action taken at an exploratory source position. Consistency
+uses the future target position's mask. Actions and observations remain intact,
+so losses at later exploit positions still backpropagate through exploratory
+transitions. Absorbing zero-value/reward padding keeps its existing masks.
+
+`--exp-train-on-exploit-unroll-states` enables this masking and is on by
+default. Use `--no-exp-train-on-exploit-unroll-states` to train direct losses
+at exploratory positions too, including all-exploration windows. It is independent
+of `--exp-self-consistency`. This flag does not change action selection. Policy
+targets remain search distributions; value targets remain completed self-play
+returns, including any exploratory moves. Positions still wait for completion.
+
+### Differences from the MuZero paper
+
+The reference is [MuZero, Appendix G: Training](https://arxiv.org/pdf/1911.08265),
+which specifies board-game exceptions to the general three-head loss in the
+main text. This implementation is not an exact reproduction of that setup.
+
+| Detail | Paper's board-game setup | This implementation and implication |
+| --- | --- | --- |
+| Reward loss | Omitted for board games without intermediate rewards. | `muzero_loss` retains immediate-reward MSE, including terminal rewards. This adds a separate transition prediction objective; many zero targets can make average reward loss small without accurate terminal predictions. |
+| Loss scaling | Appendix G describes scaling each head's loss by `1/K`. | Each head is averaged over its own unmasked positions across the batch and unroll. With all positions enabled, policy/value divide by `B*(K+1)` and reward by `B*K`. With fewer supervised positions, their individual weights increase instead of the head's contribution shrinking under a fixed denominator. |
+| Replay eligibility | Board-game states are sampled uniformly. | Replay entries are sampled uniformly after eligibility filtering. By default, windows need at least one real exploit state and direct losses at exploratory positions are masked. This changes the supervised population. |
+| Consistency | Not part of the original MuZero loss. | Optional `--exp-self-consistency` adds an EfficientZero-style negative cosine objective between predicted future latents and representations of actual future observations, through projection heads with a stopped target gradient. |
+
+Terminal rewards still supply value targets even when a separate reward loss is
+omitted. For board games, extending the return to termination leaves no estimated
+continuation value: with discount 1 and no intermediate rewards, each value target
+is the final outcome from that position's player perspective. Our completed-return
+backfill follows this convention. Policy/value are supervised at the root and
+each imagined position, subject to the masks described above.
+
+For example, with K=5 and no masking, our six policy/value losses are divided by
+6 per sample, rather than 5 under a literal fixed-`1/K` sum. If only two policy
+positions per sample remain supervised, their sum is divided by 2 rather than 5.
+Reward has five predictions because the root has no predicted incoming reward.
+
+See `unroll_muzero_predictions` and `muzero_loss` in [muzero.py](../muzero.py),
+and `make_muzero_selfplay_buffer` in
+[buffers.py](../src/nanoalphazero/buffers.py). The unroll retains the paper's
+0.5 gradient scaling at the dynamics input; representation and recurrent latent
+states retain min/max normalization to [0, 1], with an epsilon for constant states.
+K defaults to 5. These differences have not been established as improvements by
+controlled strength comparisons.
 
 Both dense and compressed BNK targets are supported. The MuZero search adapter
 selects and renormalizes top-K probabilities from the existing dense search
@@ -213,22 +256,32 @@ its retained suffix receives correct returns at termination; discarded prefix
 positions are not needed for those returns. Missing transitions within a sampled
 window and unsupported environment truncation remain fatal errors.
 
-Full checkpoints use `nanoalphazero.muzero.persistent.v3` and include environment
+Full checkpoints use `nanoalphazero.muzero.persistent.v4` and include environment
 state, both buffers, optimizer, model parameters, RNG, and cycle number. They
 support exact continuation. Chess defaults to compact checkpoints using
 `nanoalphazero.muzero.compact.v1`: parameters, optimizer, RNG, and cycle only.
-The v3 format records the unified observation sequence and the pending-drop
-counter. Older full v1/v2 checkpoints have different state layouts and are
-rejected; compact v1 checkpoints remain compatible because they contain no
-observation buffers or buffer counters.
+The v4 format records position-level exploration masks and window-based start
+eligibility, alongside the unified observation sequence and pending-drop counter.
+Older full checkpoints are rejected: v1/v2 have different state layouts, and v3
+replay lacks exploration flags needed to reconstruct the new masks. Compact v1
+checkpoints remain compatible because they rebuild both buffers on resume.
 Compact resume starts fresh games and buffers and reruns warmup; it is not exact
 trajectory continuation. Compact checkpoints allow changing
-`buffer_layout` when rebuilding buffers; all other
+`selfplay_buffer_max_len` and `buffer_layout` when rebuilding buffers; all other
 resolved settings must match. Full checkpoints require identical configuration.
 Full checkpoints retain their selected layout; switching a full checkpoint's
 layout requires conversion and is not implemented. Resume a features checkpoint
 with `--buffer-layout features` again. Checkpoints without a layout
 setting use `original`. Compact checkpoints can resume with either layout.
+Under the former overwrite guard, the 552-slot chess capacity failed a real run
+after warmup, despite passing short memory probes. The default capacity remains
+2073 slots with N=20, K=5; monitor drop counts when reducing capacity.
+A bounded TPU recovery check with b10c256, batches of 4096, replay length 128,
+and consistency enabled passed 76 warmup plus 32 training cycles: 2160 self-play
+steps crossed the larger ring's first wrap with zero buffer errors. The compact
+checkpoint advanced from 20 to 660 optimizer updates. This is not a guarantee
+against evictions in arbitrarily long runs. These TPU measurements predate the
+change from fatal overwrites to logged evictions.
 Historical episode-based
 checkpoints cannot resume this pipeline. The host returns the final runner
 state; exposed component handles can be used for evaluation independently.

@@ -135,8 +135,8 @@ def muzero_consistency_loss(model, params, batch, predicted_latents, remat=False
     prediction = model.apply(
         {"params": params}, flatten_time(predicted_latents), predict=True, method=model.project,
     )
-    # A recorded final action has no stored terminal next observation. Its
-    # following slot belongs to the next game and must never become a target.
+    # Use the target position's policy mask: exclude exploratory targets and
+    # terminal/reset tails, while allowing gradients through exploratory actions.
     mask = batch.policy_mask[:, 1:].reshape(-1)
     return masked_consistency_loss(prediction, target, mask)
 
@@ -362,17 +362,18 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None, 
             resume, muzero_checkpoint_payload(state, 0, include_replay)
         )
         # Older checkpoints predate the layout setting. Compact checkpoints
-        # rebuild buffers, so their layout may change.
+        # rebuild buffers, so their layout and self-play capacity may change.
         saved_config.setdefault("buffer_layout", "original")
         resume_config = {"buffer_layout": "original", **config}
         if not include_replay:
             resume_config.update(
+                selfplay_buffer_max_len=saved_config["selfplay_buffer_max_len"],
                 buffer_layout=saved_config["buffer_layout"],
             )
         if saved_config != resume_config:
             raise ValueError(
                 "MuZero resume requires identical resolved configuration "
-                "except buffer_layout for compact checkpoints"
+                "except selfplay_buffer_max_len and buffer_layout for compact checkpoints"
             )
         start_cycle = int(payload["cycle"])
         if include_replay:
