@@ -886,7 +886,8 @@ def test_compact_resume_restarts_buffers_and_runs_warmup(config, assembly, tmp_p
     # Compact checkpoints written before the flag also support switching layout.
     saved_config = {key: value for key, value in algorithm.config.items() if key != "buffer_layout"}
     save_muzero_checkpoint(path, payload, saved_config)
-    resumed_config = {**config, "selfplay_buffer_max_len": capacity, "buffer_layout": layout}
+    resumed_config = {**config, "selfplay_buffer_max_len": capacity, "buffer_layout": layout,
+                      "acpl": {"period": 0, "output": str(tmp_path / "new-acpl")}}
     fresh = assembly.make_muzero(resumed_config, jax.random.PRNGKey(0))
     restored = run_muzero(fresh, num_iters=1, resume=path)
     assert int(restored.model_ts.n_updates) == int(state.model_ts.n_updates)

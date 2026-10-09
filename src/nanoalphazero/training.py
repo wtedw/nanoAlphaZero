@@ -12,6 +12,7 @@ import numpy as np
 import pgx1
 
 from nanoalphazero.eval.ladder import make_ladder
+from nanoalphazero.eval.acpl import make_acpl
 # Preserve existing helper import paths for callers outside the training host.
 from nanoalphazero.eval.matches import (
     _legal_mask_from_state, _random_legal_actions,
@@ -23,7 +24,7 @@ from nanoalphazero.checkpoint import (
     checkpoint_model_config,
     save_checkpoint,
 )
-from nanoalphazero.core import make_alphazero
+from nanoalphazero.core import make_alphazero, DATA_PARALLEL_SHARDING
 
 
 # =============================================================================
@@ -327,6 +328,10 @@ def run_alphazero(config, ckpt_path=None, hex_eval_engine_pool=None):
     ladder_fn, ladder_state = make_ladder(
         config, env=wenv, policy_fn=az.run_mcts_fn, chart_fn=_ascii_loss_chart,
     )
+    eval_acpl_fn, acpl_state = make_acpl(
+        resolved_config, env=wenv, policy_fn=az.run_mcts_fn,
+        data_sharding=DATA_PARALLEL_SHARDING if config.get("enable_sharding", False) else None,
+    )
     ckpt_period = config.get("ckpt_period")
     hex_eval_period = int(resolved_config.get("hex_eval_period", 0))
     if hex_eval_period and hex_eval_engine_pool is None:
@@ -473,6 +478,8 @@ def run_alphazero(config, ckpt_path=None, hex_eval_engine_pool=None):
             ladder_state, cycle_n, runner_state.model_ts.params,
         )
         online_metrics.update(ladder_metrics)
+        acpl_state, acpl_metrics = eval_acpl_fn(acpl_state, cycle_n, runner_state.model_ts.params)
+        online_metrics.update(acpl_metrics)
 
         if hex_evaluator is not None:
             online_metrics.update(hex_evaluator.run_if_due(

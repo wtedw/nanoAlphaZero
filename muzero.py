@@ -429,6 +429,7 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None, 
         save_muzero_checkpoint, load_muzero_checkpoint, muzero_checkpoint_payload,
     )
     from nanoalphazero.eval.ladder import make_ladder
+    from nanoalphazero.eval.acpl import make_acpl
 
     config = algorithm.config
     state = algorithm.runner_state
@@ -447,7 +448,10 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None, 
                 selfplay_buffer_max_len=saved_config["selfplay_buffer_max_len"],
                 buffer_layout=saved_config["buffer_layout"],
             )
-        if saved_config != resume_config:
+        # Evaluation can be enabled or reconfigured without changing training state.
+        saved_training_config = {key: value for key, value in saved_config.items() if key != "acpl"}
+        resume_training_config = {key: value for key, value in resume_config.items() if key != "acpl"}
+        if saved_training_config != resume_training_config:
             raise ValueError(
                 "MuZero resume requires identical resolved configuration "
                 "except selfplay_buffer_max_len and buffer_layout for compact checkpoints"
@@ -505,6 +509,10 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None, 
         ladder_fn, ladder_state = make_ladder(
             config, env=algorithm.env, policy_fn=algorithm.run_mcts_fn,
         )
+        eval_acpl_fn, acpl_state = make_acpl(
+            config, env=algorithm.env, policy_fn=algorithm.run_mcts_fn,
+            data_sharding=algorithm.data_sharding,
+        )
         if evaluator is not None:
             evaluator.run(start_cycle, state, force=True)
         if resume is None or not include_replay:
@@ -556,6 +564,8 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None, 
             check(metrics)
             ladder_state, ladder_metrics = ladder_fn(ladder_state, cycle, state.model_ts.params)
             metrics.update(ladder_metrics)
+            acpl_state, acpl_metrics = eval_acpl_fn(acpl_state, cycle, state.model_ts.params)
+            metrics.update(acpl_metrics)
             if evaluator is not None:
                 metrics.update(evaluator.run(cycle, state, force=cycle == cycles))
             print(json.dumps({"cycle": cycle, **metrics}), flush=True)
@@ -586,8 +596,11 @@ def main(argv=None):
     if args.platform:
         os.environ["JAX_PLATFORMS"] = args.platform
     overrides = {name: value for name, value in vars(args).items()
-                 if value is not None and name not in ("env", "ckpt", "platform", "ladder_period")
+                 if value is not None and name not in ("env", "ckpt", "acpl", "platform", "ladder_period")
                  and not name.startswith("hex_eval_")}
+    if args.acpl.period:
+        from nanoalphazero.eval.acpl.config import acpl_config_dict
+        overrides["acpl"] = acpl_config_dict(args.acpl)
     if args.ladder_period is not None:
         overrides["eval_period"] = args.ladder_period
     if args.ckpt.every is not None:

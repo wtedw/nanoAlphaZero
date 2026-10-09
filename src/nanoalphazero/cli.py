@@ -90,6 +90,8 @@ def parse_train_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default="default",
         help="MoHex config path, or 'default' for the bundled uncapped solver config",
     )
+    from nanoalphazero.eval.acpl.config import add_acpl_arguments
+    add_acpl_arguments(parser)
     return parser.parse_args(argv)
 
 
@@ -138,6 +140,10 @@ def train_main(argv: Sequence[str] | None = None) -> None:
     config = CONFIG_FACTORIES[args.env]()
     config["game_name"] = args.env
     config["enable_wandb"] = args.enable_wandb
+    from nanoalphazero.eval.acpl.config import acpl_from_args, acpl_config_dict
+    acpl = acpl_from_args(args)
+    if acpl.period:
+        config["acpl"] = acpl_config_dict(acpl)
     if args.hex_eval_period < 0:
         raise SystemExit("--hex-eval-period must be non-negative")
     config["hex_eval_period"] = args.hex_eval_period
@@ -321,6 +327,7 @@ from typing import Annotated, Literal
 import tyro
 
 from nanoalphazero.config import CONFIG_FACTORIES
+from nanoalphazero.eval.acpl.config import AcplConfig
 
 
 MuZeroEnv = Literal[tuple(CONFIG_FACTORIES)]
@@ -348,6 +355,7 @@ class MuZeroArgs:
     platform: Literal["cpu", "tpu"] | None = None
 
     ckpt: MuZeroCheckpointArgs = field(default_factory=MuZeroCheckpointArgs)
+    acpl: AcplConfig = field(default_factory=AcplConfig)
     # Past-self ladder period in cycles; 0 disables it. Inherits AlphaZero defaults.
     ladder_period: int | None = None
     muzero_network: Literal["vector", "spatial"] | None = None

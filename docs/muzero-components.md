@@ -28,6 +28,7 @@ entirety. Both host loops now use the extracted shared strength ladder.
 | `eval/muzero.py` | Fixed-opening head diagnostics and tracker chart adapters |
 | `eval/ladder.py` | Shared explicit-state ladder against random play and frozen past selves |
 | `eval/matches.py` | Shared forced openings and color-swapped batched matches |
+| `eval/acpl/` | Shared chess self-play scored by Stockfish; explicit evaluation state |
 | `checkpoint.py` | Full persistent-state snapshots |
 | `cli.py` | Root script arguments; existing entry points unchanged |
 
@@ -98,6 +99,21 @@ Metrics describe the evaluated rung before any promotion; qualifying deltas are
 averaged to set the next rung height. Ratings are relative ladder estimates,
 not externally calibrated chess Elo. AlphaZero keeps its ASCII rating chart.
 Existing imports of match helpers from `training.py` and `core.py` still work.
+
+### Chess ACPL
+
+Both hosts construct `eval_acpl_fn, acpl_state = make_acpl(...)` and call it with
+the current state, cycle, and parameters. The component returns updated state
+and `acpl/*` metrics; it manages game recording, parallel Stockfish analysis,
+artifacts, and cadence. It is off by default, independent of the ladder, and
+does not checkpoint evaluator state.
+
+Enable it with `--acpl.period 100 --acpl.stockfish-path /path/to/stockfish`.
+The same `--acpl.*` options work in root MuZero and AlphaZero's `train` CLI.
+See [ACPL component documentation](../src/nanoalphazero/eval/acpl/README.md)
+for the preserved legacy scoring convention, budgets, output files, and smoke
+commands. The default 496 games/depth 18 budget is substantial; use explicit
+smaller budgets for smoke tests. Multihost structure is retained but unvalidated.
 
 ## Data lifecycle
 
