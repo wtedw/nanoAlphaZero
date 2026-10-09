@@ -16,6 +16,7 @@ import numpy as np
 from jax.experimental import multihost_utils
 
 from nanoalphazero.eval.acpl.config import resolve_acpl
+from nanoalphazero.eval.acpl import AcplResult
 from nanoalphazero.eval.acpl.rollout import collect_games
 from nanoalphazero.eval.acpl.scoring import score_fens
 
@@ -90,7 +91,7 @@ def summarize(rows):
 
 
 def make_acpl(config, *, env, policy_fn, data_sharding=None):
-    """Return eval_acpl_fn(state, cycle, params) and initial AcplState.
+    """Return eval_acpl_fn(state, cycle, params) -> (state, AcplResult), and state.
 
     No tracker/model-class dependencies, persistent engines, module-global mesh,
     or evaluator checkpoint state. All hosts must call with the same cycle.
@@ -112,7 +113,7 @@ def make_acpl(config, *, env, policy_fn, data_sharding=None):
 
     def eval_acpl_fn(state, cycle, params):
         if not options.period or cycle % options.period or state.last_cycle == cycle:
-            return state, {}
+            return state, AcplResult()
         started = time.perf_counter()
         host, hosts = jax.process_index(), jax.process_count()
         # Fixed-length identifier broadcast preserves shared output paths across hosts.
@@ -161,6 +162,8 @@ def make_acpl(config, *, env, policy_fn, data_sharding=None):
             print("ACPL_RESULT " + json.dumps(metrics, allow_nan=False), flush=True)
         if hosts > 1:
             multihost_utils.sync_global_devices(f"acpl_done_{cycle}_{state.runs}")
-        return AcplState(state.runs + 1, cycle, str(directory)), metrics
+        files = ({name: directory / name for name in ("games.pgn", "manifest.json", "summary.json")}
+                 if host == 0 else {})
+        return AcplState(state.runs + 1, cycle, str(directory)), AcplResult(metrics, files)
 
     return eval_acpl_fn, AcplState()

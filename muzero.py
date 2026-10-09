@@ -428,7 +428,7 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
     import numpy as np
     from nanoalphazero import ckpt
     from nanoalphazero.eval.ladder import make_ladder
-    from nanoalphazero.eval.acpl import make_acpl, acpl_files
+    from nanoalphazero.eval.acpl import make_acpl
     from nanoalphazero.tracking import make_tracker
 
     config = algorithm.config
@@ -463,7 +463,7 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
         from nanoalphazero.diagnostics import DiagnosticOutput, make_diagnostics_fn
         diagnose_fn = None
         ladder_fn, ladder_state = make_ladder(
-            config, env=algorithm.env, policy_fn=algorithm.run_mcts_fn,
+            config, env=algorithm.env, policy_fn=algorithm.run_mcts_fn, separate_sessions=True,
         )
         eval_acpl_fn, acpl_state = make_acpl(
             config, env=algorithm.env, policy_fn=algorithm.run_mcts_fn,
@@ -493,7 +493,9 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
             metrics["timing/cycle_seconds"] = time.monotonic() - started
             diagnostic = DiagnosticOutput()
             period = config.get("diagnostic_period", 50)
-            if period and (cycle == start_cycle + 1 or cycle % period == 0 or cycle == cycles):
+            if tracker.should_log(cycle) and period and (
+                cycle == start_cycle + 1 or cycle % period == 0 or cycle == cycles
+            ):
                 if diagnose_fn is None:
                     diagnose_fn = make_diagnostics_fn(algorithm.model, algorithm.env, config)
                 diagnostic = diagnose_fn(state.model_ts.params)
@@ -527,16 +529,21 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
                 extra_metrics.update({f"checkpoint/{key}": value for key, value in checkpoint_metrics.items()})
             ladder_state, ladder_metrics = ladder_fn(ladder_state, cycle, state.model_ts.params)
             extra_metrics.update(ladder_metrics)
-            acpl_state, acpl_metrics = eval_acpl_fn(acpl_state, cycle, state.model_ts.params)
-            extra_metrics.update(acpl_metrics)
+            acpl_state, acpl_result = eval_acpl_fn(acpl_state, cycle, state.model_ts.params)
+            extra_metrics.update(acpl_result.metrics)
             if evaluator is not None:
                 extra_metrics.update(evaluator.run(cycle, state, force=cycle == cycles))
             metrics.update(extra_metrics)
             print(json.dumps({"cycle": cycle, **metrics}), flush=True)
-            tracker.log(extra_metrics, step=cycle)
+            files = acpl_result.files
+            html = {}
+            if files and tracker.should_log(cycle):
+                from nanoalphazero.diagnostics.chess_games import games_html
+                html["acpl/games_viewer"] = games_html(files["games.pgn"].read_text())
+            tracker.log(extra_metrics, step=cycle, html=html)
             tracker.log_files("model-diagnostics", diagnostic.files, step=cycle)
-            tracker.log_files("acpl-games", acpl_files(acpl_state, acpl_metrics), step=cycle,
-                              kind="evaluation-games", metadata=acpl_metrics)
+            tracker.log_files("acpl-games", files, step=cycle,
+                              kind="evaluation-games", metadata=acpl_result.metrics)
         if checkpoint_path and n_cycles == 0:
             ckpt.save_checkpoint(
                 checkpoint_path, state=state, cycle=cycle, config=config, mode=checkpoint_mode,
@@ -566,6 +573,8 @@ def main(argv=None):
     if args.ckpt.every is not None:
         overrides["ckpt_period"] = args.ckpt.every
     config = get_muzero_config(args.env, **overrides)
+    from nanoalphazero.ckpt import validate_resume_config
+    validate_resume_config(args.ckpt.resume, config, args.ckpt.mode)
     pool = None
     try:
         # Start subprocess engines before JAX/libtpu owns accelerator resources.

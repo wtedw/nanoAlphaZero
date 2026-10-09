@@ -56,7 +56,7 @@ host forwards the combined cycle metrics to Trackio or W&B.
 - `train_batch/n_is_valid` and `n_is_invalid` count windows with/without any
   policy-supervised position. `n_policy_valid`, `n_value_valid`, and
   `n_reward_valid` count positions supervised by the respective loss masks.
-  `n_reward_pos`, `n_reward_neg`, and `n_reward_zero` count supervised completed
+  `n_value_pos`, `n_value_neg`, and `n_value_zero` count supervised completed
   value targets, not immediate rewards. Value/reward counts include absorbing
   padding; policy and consistency counts exclude it. Enabled consistency retains
   its existing `consistency/n_valid` metric.
@@ -92,6 +92,11 @@ Existing AlphaZero settings and metric names remain: `eval_period` (cycles),
 the game defaults and exposes `--ladder-period N`; use 0 to disable the ladder.
 These settings are independent of MoHex and head diagnostics. Both Trackio and
 W&B receive ladder metrics through the usual MuZero host tracker.
+MuZero places anchor-dependent ratings, scores and rungs under
+`eval/ladder/<session-id>/...`. Each factory invocation gets a new session, so
+resuming a tracker cannot connect a restarted ladder to an earlier reference
+scale. The random-opponent metrics remain comparable across sessions. AlphaZero
+keeps its existing metric names and ladder behavior.
 
 Match helpers retain the original AlphaZero behavior, including both colors,
 zero Gumbel exploration, game/search budgets, and treating games unfinished at
@@ -295,9 +300,12 @@ diagnostics, not MoHex match results or a proof of playing strength.
 With Trackio or W&B enabled, the same probe also logs interactive Plotly opening
 logit and real/latent value heatmaps, top/bottom move highlights, numeric tables
 including reply logits and legality, and head-output histograms. Trackio uses
-HTML figures; W&B uses Plotly objects. Without a tracker, scalars still appear in
-JSON logs and no chart files are written. `--diagnostic-period 0` disables
-all these probes. The fixed opening suite does not advance training RNG or
+HTML figures; W&B uses Plotly objects. Without tracking, or when the tracker is
+skipping an already-logged resume cycle, the host skips these diagnostics,
+including chart construction and the compression probe. Training metrics still
+print normally. `--diagnostic-period 0` also disables these probes.
+`model/opening_values_softmax_entropy` describes entropy over softmaxed opening
+values, not uncertainty of the scalar value head. The fixed suite does not advance training RNG or
 modify games, replay, or optimizer state. Historical episode/replay histograms
 are not copied because they describe the old episodic collector.
 
@@ -307,7 +315,7 @@ Plotly figures, histogram arrays, and optional local file paths. The host passes
 these fields explicitly to the tracker; neither side imports the other.
 Notebook callers can use `diagnostics.hex.board_figure(table, title)` directly.
 The tracker handles only backend conversion and publication. Explicit file
-publication uploads to W&B; Trackio retains the local originals. Checkpoint
+publication uses the selected W&B or Trackio backend. Checkpoint
 files are never automatically uploaded.
 
 Chess uses three tables and three interactive figures: `chess/search`,
@@ -335,7 +343,24 @@ not change decisions or policy targets. Ordinary AlphaZero and MuZero training
 do not retain these arrays. The diagnostic search uses an independent fixed RNG.
 After completed ACPL evaluations, the MuZero host passes `games.pgn`,
 `manifest.json`, and `summary.json` to generic tracker file publication. ACPL
-itself remains independent of tracking; Trackio keeps those files locally.
+itself remains independent of tracking. Both backends retain the complete PGN
+as a versioned artifact, with `latest` and `cycle-N` aliases. Local Trackio stores
+the artifact in its local storage; this does not require a remote upload.
+
+ACPL returns `(state, AcplResult)` with scalar `metrics` and explicit local `files`;
+the host does not reconstruct filenames from evaluator state.
+Completed ACPL evaluations also log `acpl/games_viewer`, a self-contained HTML viewer
+with a game selector, move navigation, board flip, raw PGN text, and download
+buttons for one game or the complete PGN. Every game is included. The original
+file is attached unchanged; comments and variations remain in the downloadable
+PGN, while the board viewer follows the mainline. FEN starting positions are
+supported. The viewer needs no external scripts or network connection.
+
+For notebook use, `diagnostics.chess_games.games_html(pgn_text)` returns the
+same HTML document; display it with `IPython.display.HTML` or write it to a file.
+No model, tracker, or factory is needed. The host builds it only when an ACPL
+evaluation completes and tracking is enabled, then passes plain HTML to the
+generic tracker. This work runs on CPU and does not alter training state.
 
 Chess observations stay packed through self-play, consumption, and replay.
 Only sampled training roots (and future targets when self-consistency is enabled)
@@ -360,6 +385,12 @@ before warmup. Temporary arrays and optimizer storage require additional room.
 MuZero search honors AlphaZero's root-temperature option. `--num-iters` now has
 AlphaZero's meaning for both defaults and explicit overrides: a fresh run executes
 `num_iters // cycle_n_selfplay` training cycles (Hex5: 34,000 / 20 = 1,700).
+TODO (deferred): compute the remaining MuZero training budget from the saved
+cycle, with `final_cycle = num_iters // cycle_n_selfplay`, rather than subtracting
+optimizer updates from a self-play-step budget. Keep warmup separate and leave
+AlphaZero behavior unchanged. Revisit storing cycle in `RunnerState` separately.
+The current resume behavior below remains unchanged until this is implemented.
+
 Buffer warmup uses `replay_buffer_warmup_steps // cycle_n_selfplay` cycles, with
 frozen optimizer and LR counters. `--replay-buffer-warmup-steps` overrides that
 step budget; there is no MuZero-specific warmup option. Both divisions round
@@ -441,9 +472,31 @@ At save points, training metrics are logged first. The tracker waits up to 30
 seconds for local Trackio to persist them, then saves regardless; timeout or
 database errors produce a warning. Checkpoint timings and evaluation results
 follow afterward and can still be lost on an abrupt interruption.
+The persistence check uses a read-only SQLite connection with its lock timeout
+limited to the remaining wait budget and a query deadline. Import/setup/schema
+errors also fall back to saving. This acknowledges a recorded step, not every
+media file or artifact. Filesystem stalls are outside SQLite's timeout control.
+W&B's pre-save `commit=False` submits a pending row; it does not guarantee durable
+history before evaluation. W&B resumes still start a new run. Neither backend
+is transactional with checkpoints, and skipped old steps do not repair missing
+evaluation fields. These ordering and no-checkpoint-upload rules describe MuZero;
+AlphaZero retains its existing host-loop policies.
 `make_tracker` always returns a tracker; when disabled its methods do nothing.
 `log_training` handles chart conversion and W&B row semantics internally, keeping
 backend choices and optional-tracker branches out of the host loop.
+`tracker.should_log(cycle)` uses the original resume cutoff, so additional
+evaluation metrics can still be logged at a cycle already logged by this process.
+
+`ckpt.inspect_checkpoint(path)` reads configuration and metadata for either
+compressed directories or legacy safetensors. Resume compatibility is checked
+before CLI assembly and again before a restore can release initial arrays.
+Legacy files have no tracker identity, so they start a new Trackio run unless
+`--trackio-run` explicitly selects one. Saved configuration is not automatically
+merged with CLI overrides; incompatible settings are rejected early.
+For notebooks, `model, params, config = ckpt.load_model(path)` loads the saved
+architecture and only its parameters, from either full or partial checkpoints.
+It never loads optimizer state or experience buffers. Exporting a separate
+inference file remains a future feature.
 
 These replace the flat MuZero options `--save`, `--resume`, `--ckpt-period`, and
 `--[no-]muzero-checkpoint-replay`. AlphaZero's CLI is unchanged. This grouping

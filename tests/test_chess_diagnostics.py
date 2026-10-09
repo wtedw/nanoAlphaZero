@@ -11,7 +11,6 @@ import numpy as np
 import pytest
 
 from nanoalphazero.diagnostics import DiagnosticOutput, make_diagnostics_fn
-from nanoalphazero.eval.acpl import acpl_files
 from nanoalphazero.tracking import TrainingTracker
 from nanoalphazero.diagnostics.chess import (
     SEARCH, VALUES, REPLIES, chess_figures, make_chess_probe, opening_suite,
@@ -62,6 +61,25 @@ def test_search_diagnostics_leave_decision_and_targets_unchanged(rescale, mixed,
     for action in np.flatnonzero(visited[0]):
         assert float(d["child_value"][0, action]) == pytest.approx(action * .1)
     assert float(diagnostic.action_weights[0, -1]) == 0
+
+
+def test_diagnostic_search_preserves_rng_dependent_multiple_roots():
+    def recurrent(params, keys, actions, latent):
+        noise = jax.vmap(jax.random.uniform)(keys)
+        return RecurrentFnOutput(
+            reward=noise * .1, discount=jnp.full(actions.shape, -.9),
+            value=actions * .1 + noise, prior_logits=latent[:, :1] + jnp.arange(6.)), latent + noise[:, None]
+
+    root = RootFnOutput(prior_logits=jnp.arange(18.).reshape(3, 6),
+                        value=jnp.array([.1, .4, -.2]), embedding=jnp.zeros((3, 2)))
+    def search(seed, diagnostics):
+        return jax.jit(lambda: gumbel_muzero_policy_1sh(
+            {}, jax.random.PRNGKey(seed), root, recurrent, num_root_considered=4,
+            num_survivors=2, use_bnk=True, num_k_actions=3, return_diagnostics=diagnostics))()
+    normal, diagnostic = search(4, False), search(4, True)
+    for name in ("action", "action_weights", "visit_counts", "bnk_k_indices", "bnk_action_weights"):
+        np.testing.assert_array_equal(getattr(normal, name), getattr(diagnostic, name))
+    assert not np.array_equal(normal.action_weights, search(5, False).action_weights)
 
 
 @pytest.fixture(scope="module")
@@ -130,19 +148,6 @@ def test_only_three_tables_three_interactive_charts(chess_probe_result, monkeypa
         assert logs[name].to_json()
     assert len(logs[SEARCH].layout.updatemenus[0].buttons) == 11
     assert len(logs[REPLIES].layout.updatemenus[0].buttons) == 20
-
-
-def test_acpl_files_only_for_completed_evaluation_on_host_zero(tmp_path, monkeypatch):
-    for name in ("games.pgn", "manifest.json", "summary.json"):
-        (tmp_path / name).write_text("test")
-    state = SimpleNamespace(last_output=str(tmp_path))
-    assert acpl_files(state, {}) == {}
-    monkeypatch.setattr(jax, "process_index", lambda: 1)
-    assert acpl_files(state, {"acpl/games": 2}) == {}
-    monkeypatch.setattr(jax, "process_index", lambda: 0)
-    files = acpl_files(state, {"acpl/games": 2})
-    assert set(files) == {"games.pgn", "manifest.json", "summary.json"}
-    assert all(path.read_text() == "test" for path in files.values())
 
 
 def test_unsupported_game_is_lazy_noop():

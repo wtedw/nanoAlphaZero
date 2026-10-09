@@ -25,7 +25,7 @@ class LadderState:
     elo_cycles: tuple = (0,)
 
 
-def make_ladder(config, *, env, policy_fn, chart_fn=None):
+def make_ladder(config, *, env, policy_fn, chart_fn=None, separate_sessions=False):
     """Return ladder_fn(state, cycle, params) -> (LadderState, metrics).
 
     policy_fn uses the common run_mcts_fn signature. The ladder owns scheduling,
@@ -35,6 +35,9 @@ def make_ladder(config, *, env, policy_fn, chart_fn=None):
     chart_fn optionally renders rating history; neither tracker is imported here.
     """
     config = dict(config)
+    if separate_sessions:
+        import uuid
+        session = uuid.uuid4().hex[:8]
     period = config.get("eval_period", 100)
     promote_score = config.get("eval_promote_score", 0.75)
     patience = config.get("eval_promote_patience", 2)
@@ -76,6 +79,12 @@ def make_ladder(config, *, env, policy_fn, chart_fn=None):
             "eval/ladder_elo": float(live_elo),
             "eval/rung": int(state.rung),
         }
+        if separate_sessions:
+            # A fresh anchor history has a new reference scale, even when the
+            # tracker resumes the same run. Never join its curve to an old one.
+            for old, new in (("ladder_elo", "elo"), ("rung", "rung"),
+                             ("score_vs_anchor", "score_vs_anchor"), ("elo_vs_anchor", "elo_vs_anchor")):
+                metrics[f"eval/ladder/{session}/{new}"] = metrics.pop(f"eval/{old}")
         print(f"  [eval] ladder Elo: {live_elo:+.0f}  (rung {state.rung} @ "
               f"{state.anchor_elo:+.0f}, +{float(delta_anchor):.0f} over anchor)", flush=True)
         qualifying = (state.qualifying_deltas + (float(delta_anchor),)

@@ -665,7 +665,8 @@ def test_host_threads_ladder_state_and_logs_metrics(config, assembly, monkeypatc
     from nanoalphazero.eval import ladder
 
     calls = []
-    def make_ladder(cfg, *, env, policy_fn):
+    def make_ladder(cfg, *, env, policy_fn, separate_sessions):
+        assert separate_sessions
         assert env is algorithm.env and policy_fn is algorithm.run_mcts_fn
         def ladder_fn(state, cycle, params):
             calls.append((state, cycle))

@@ -21,8 +21,8 @@ def test_batch_counts_distinguish_windows_positions_and_padding():
     )
     metrics = training_batch_metrics(batch)
     expected = dict(n_is_valid=1, n_is_invalid=1, n_policy_valid=1,
-                    n_value_valid=2, n_reward_valid=1, n_reward_pos=0,
-                    n_reward_neg=1, n_reward_zero=1)
+                    n_value_valid=2, n_reward_valid=1, n_value_pos=0,
+                    n_value_neg=1, n_value_zero=1)
     assert {name.removeprefix("train_batch/"): int(value) for name, value in metrics.items()} == expected
     empty = empty_training_metrics(True)
     assert set(metrics) <= set(empty)

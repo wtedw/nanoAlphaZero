@@ -177,28 +177,37 @@ def save(path, payload, config, *, metadata=None):
 
 def metadata(path):
     """Read host metadata without allocating model or buffer arrays."""
+    return inspect_checkpoint(path).get("metadata", {})
+
+
+def inspect_checkpoint(path):
+    """Read the published manifest under the checkpoint's shared lock."""
     root = Path(path)
     with _lock(root, exclusive=False):
         manifest = json.loads((_generation(root) / "manifest.json").read_text())
         if manifest["format"] != FORMAT:
             raise ValueError("Unsupported compressed checkpoint format")
-        return manifest.get("metadata", {})
+        return manifest
 
 
-def load(path, template):
+def load(path, template, *, field_prefix=None):
     root = Path(path)
     with _lock(root, exclusive=False):
         directory = _generation(root)
         manifest = json.loads((directory / "manifest.json").read_text())
         expected, tree = jax.tree_util.tree_flatten_with_path(template)
         mode = "full" if "runner_state" in template else "partial"
-        if manifest["format"] != FORMAT or manifest["mode"] != mode:
+        if manifest["format"] != FORMAT or (field_prefix is None and manifest["mode"] != mode):
             raise ValueError("Compressed checkpoint format or mode does not match")
-        if [f["path"] for f in manifest["fields"]] != [jax.tree_util.keystr(k) for k, _ in expected]:
+        fields = manifest["fields"]
+        if field_prefix is not None:
+            fields = [{**f, "path": f["path"][len(field_prefix):]} for f in fields
+                      if f["path"].startswith(field_prefix + "[")]
+        if [f["path"] for f in fields] != [jax.tree_util.keystr(k) for k, _ in expected]:
             raise ValueError("Checkpoint state structure does not match the template")
         decompressor = zstd.ZstdDecompressor()
         leaves = []
-        for (_, example), field in zip(expected, manifest["fields"]):
+        for (_, example), field in zip(expected, fields):
             typed_key = hasattr(example, "dtype") and jax.dtypes.issubdtype(example.dtype, jax.dtypes.prng_key)
             if typed_key:
                 example = (jax.eval_shape(jax.random.key_data, example)

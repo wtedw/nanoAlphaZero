@@ -50,6 +50,8 @@ def restore_checkpoint(path, *, state, config, mode="full"):
         raise ValueError(f"Unknown checkpoint mode: {mode}")
     if path is None:
         return state, 0
+    from nanoalphazero.ckpt.inspection import validate_resume_config
+    validate_resume_config(path, config, mode)
     resume = path
     include_replay = mode == "full"
     placement = jax.tree.map(lambda x: x.sharding, state)
@@ -62,28 +64,9 @@ def restore_checkpoint(path, *, state, config, mode="full"):
         )
         for leaf in jax.tree.leaves(state):
             leaf.delete()
-    saved, saved_config = load_payload(
+    saved, _ = load_payload(
         resume, template
     )
-    # Older checkpoints predate the layout setting. Partial checkpoints
-    # rebuild buffers, so their layout and self-play capacity may change.
-    saved_config.setdefault("buffer_layout", "original")
-    resume_config = {"buffer_layout": "original", **config}
-    if not include_replay:
-        resume_config.update(
-            selfplay_buffer_max_len=saved_config["selfplay_buffer_max_len"],
-            buffer_layout=saved_config["buffer_layout"],
-        )
-    # Evaluation can be enabled or reconfigured without changing training state.
-    # Saving and logging options do not change the resumed training computation.
-    ignored = {"acpl", "ckpt_period", "enable_trackio", "enable_wandb"}
-    saved_training_config = {key: value for key, value in saved_config.items() if key not in ignored}
-    resume_training_config = {key: value for key, value in resume_config.items() if key not in ignored}
-    if saved_training_config != resume_training_config:
-        raise ValueError(
-            "MuZero resume requires identical resolved configuration "
-            "except selfplay_buffer_max_len and buffer_layout for partial checkpoints"
-        )
     start_cycle = int(saved["cycle"])
     if include_replay:
         state = saved["runner_state"]

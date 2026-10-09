@@ -90,7 +90,7 @@ def test_disabled_factory_has_no_engine_or_opening_dependencies(monkeypatch):
     monkeypatch.setattr(runner, "load_openings", lambda *a: pytest.fail("disabled"))
     eval_acpl_fn, state = make_acpl({"env_id": "hex", "acpl": {"stockfish_path": "/missing"}}, env=None, policy_fn=None)
     following, metrics = eval_acpl_fn(state, 10, None)
-    assert following is state and metrics == {}
+    assert following is state and metrics.metrics == {} and metrics.files == {}
 
 
 def test_failed_games_do_not_bias_average_or_hide_coverage():
@@ -132,8 +132,11 @@ def test_recording_padding_artifacts_and_schedule(tmp_path, monkeypatch):
     monkeypatch.setattr(runner, "score_fens", lambda positions, *a: scoring.centipawn_losses(positions, [0] * (len(positions) - 1)))
     eval_acpl_fn, state = make_acpl(config, env=env, policy_fn=policy, data_sharding=DATA_PARALLEL_SHARDING)
     skipped, metrics = eval_acpl_fn(state, 1, {})
-    assert skipped is state and metrics == {}
-    following, metrics = eval_acpl_fn(state, 2, {})
+    assert skipped is state and metrics.metrics == {} and metrics.files == {}
+    following, result = eval_acpl_fn(state, 2, {})
+    metrics = result.metrics
+    assert set(result.files) == {"games.pgn", "manifest.json", "summary.json"}
+    assert all(p.is_file() for p in result.files.values())
     assert state.runs == 0 and following.runs == 1
     assert metrics["acpl/games"] == metrics["acpl/analyzed_games"] == 1
     path = Path(following.last_output)
@@ -143,7 +146,7 @@ def test_recording_padding_artifacts_and_schedule(tmp_path, monkeypatch):
     assert len(json.loads((path / "game-000000.fens.json").read_text())) == 27
     assert (path / "games.pgn").read_text().count('[Result "*"]') == 1
     repeated, metrics = eval_acpl_fn(following, 2, {})
-    assert repeated is following and metrics == {}
+    assert repeated is following and metrics.metrics == {} and metrics.files == {}
 
 
 def test_last_move_checkmate_is_recorded_without_reset():

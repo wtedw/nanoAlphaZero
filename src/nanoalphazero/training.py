@@ -478,8 +478,8 @@ def run_alphazero(config, ckpt_path=None, hex_eval_engine_pool=None):
             ladder_state, cycle_n, runner_state.model_ts.params,
         )
         online_metrics.update(ladder_metrics)
-        acpl_state, acpl_metrics = eval_acpl_fn(acpl_state, cycle_n, runner_state.model_ts.params)
-        online_metrics.update(acpl_metrics)
+        acpl_state, acpl_result = eval_acpl_fn(acpl_state, cycle_n, runner_state.model_ts.params)
+        online_metrics.update(acpl_result.metrics)
 
         if hex_evaluator is not None:
             online_metrics.update(hex_evaluator.run_if_due(

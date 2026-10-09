@@ -6,7 +6,7 @@ import optax
 
 BATCH_COUNTS = (
     "n_is_valid", "n_is_invalid", "n_policy_valid", "n_value_valid",
-    "n_reward_valid", "n_reward_pos", "n_reward_neg", "n_reward_zero",
+    "n_reward_valid", "n_value_pos", "n_value_neg", "n_value_zero",
 )
 NORMS = ("grad_norm", "param_norm", "update_norm")
 OUTCOMES = ("selfplay/p1_wins", "selfplay/p2_wins", "selfplay/p_just_tied")
@@ -20,9 +20,9 @@ def training_batch_metrics(batch):
         n_policy_valid=jnp.sum(batch.policy_mask),
         n_value_valid=jnp.sum(batch.value_mask),
         n_reward_valid=jnp.sum(batch.reward_mask),
-        n_reward_pos=jnp.sum(batch.value_mask & (batch.reward > 0)),
-        n_reward_neg=jnp.sum(batch.value_mask & (batch.reward < 0)),
-        n_reward_zero=jnp.sum(batch.value_mask & (batch.reward == 0)),
+        n_value_pos=jnp.sum(batch.value_mask & (batch.reward > 0)),
+        n_value_neg=jnp.sum(batch.value_mask & (batch.reward < 0)),
+        n_value_zero=jnp.sum(batch.value_mask & (batch.reward == 0)),
     )
     return {f"train_batch/{name}": value.astype(jnp.float32) for name, value in counts.items()}
 

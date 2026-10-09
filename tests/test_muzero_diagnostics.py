@@ -50,6 +50,8 @@ def test_head_tables_match_historical_predictions(tmp_path):
                 else:
                     assert value == expected
     for name, expected in old_metrics.items():
+        if name == "model/value_head_empty_board_entropy":
+            name = "model/opening_values_softmax_entropy"
         assert metrics[name] == pytest.approx(expected, abs=1e-5)
     for a, b in zip(jax.tree.leaves(before), jax.tree.leaves(params), strict=True):
         np.testing.assert_array_equal(a, b)
@@ -93,7 +95,13 @@ def test_tracker_chart_adapters(backend, monkeypatch):
 
 @pytest.mark.parametrize("period,expected", [(0, []), (3, [1, 3, 5])])
 @pytest.mark.parametrize("game", ["hex", "chess"])
-def test_host_diagnostic_cadence(period, expected, monkeypatch, game):
+@pytest.mark.parametrize("resume_step", [None, 0, 3])
+def test_host_diagnostic_cadence(period, expected, monkeypatch, game, resume_step):
+    import nanoalphazero.tracking as tracking
+    tracker = TrainingTracker(Mock() if resume_step is not None else None,
+                              last_step=resume_step or -1)
+    monkeypatch.setattr(tracking, "make_tracker", lambda *a, **k: tracker)
+    expected = [step for step in expected if resume_step is not None and step > resume_step]
     if game == "hex":
         import nanoalphazero.diagnostics.hex as diagnostics
     else:

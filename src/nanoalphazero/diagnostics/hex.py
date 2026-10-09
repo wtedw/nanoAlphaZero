@@ -120,9 +120,7 @@ def make_muzero_head_probe(model, env, config):
         value_entropy, _ = entropy(after_value)
         metrics = {
             "model/init_board_value": float(initial_value),
-            # Historical name: entropy of softmax across opening values, not
-            # entropy of a categorical value head (this model has scalar values).
-            "model/value_head_empty_board_entropy": value_entropy,
+            "model/opening_values_softmax_entropy": value_entropy,
             "model/policy_head_empty_board_entropy": policy_entropy,
             "params-logits/init_logits_norm": float(np.linalg.norm(logits)),
             "params-logits/init_logits_std": float(np.std(logits)),

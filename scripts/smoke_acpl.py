@@ -84,7 +84,8 @@ def main():
     print(json.dumps({"setup_seconds": time.perf_counter() - started,
                       "devices": [str(d) for d in jax.devices()], "checkpoint": str(args.checkpoint)}), flush=True)
     for cycle in range(1, args.repeats + 1):
-        acpl_state, metrics = eval_acpl_fn(acpl_state, cycle, params)
+        acpl_state, result = eval_acpl_fn(acpl_state, cycle, params)
+        metrics = result.metrics
         assert metrics["acpl/games"] == args.games and metrics["acpl/failed_games"] == 0
         print(json.dumps({"cycle": cycle, "state": asdict(acpl_state), **metrics}), flush=True)
 

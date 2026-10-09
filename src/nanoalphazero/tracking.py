@@ -15,9 +15,13 @@ class TrainingTracker:
     def __post_init__(self):
         self.resume_step = self.last_step
 
+    def should_log(self, cycle):
+        """Allow new cycles, including multiple writes within the same cycle."""
+        return self.run is not None and cycle > self.resume_step
+
     def log_training(self, metrics, *, step, tables=None, histograms=None, figures=None):
         """Record training results, leaving room for later evaluation metrics."""
-        if self.run is None or step <= self.resume_step:
+        if not self.should_log(step):
             return
         media = {}
         if tables or histograms or figures:
@@ -25,33 +29,38 @@ class TrainingTracker:
             media = media_logs(tables or {}, histograms or {}, figures or {}, backend)
         self.log({**metrics, **media}, step=step, commit=False)
 
-    def log(self, metrics, *, step, commit=True):
-        if self.run is None:
+    def log(self, metrics, *, step, commit=True, html=None):
+        if not self.should_log(step):
             return
         # A crash may follow logging but precede the next checkpoint. Recomputed
         # cycles still train, but do not append duplicate rows to this run.
         # Multiple calls may add different metrics at the current cycle. Only
         # cycles persisted by the previous process are skipped wholesale.
-        if step > self.resume_step:
-            if "trackio" in self.metadata:
-                if metrics:
-                    self.run.log(metrics, step=step)
-            else:
-                # W&B requires the training row to remain open until later
-                # checkpoint/evaluation metrics for this step are available.
-                self.run.log(metrics, step=step, commit=commit)
-            self.last_step = max(self.last_step, step)
+        if html:
+            import importlib
+            backend = importlib.import_module("trackio" if "trackio" in self.metadata else "wandb")
+            metrics = {**metrics, **{name: backend.Html(document, inject=False)
+                                    for name, document in html.items()}}
+        if "trackio" in self.metadata:
+            if metrics:
+                self.run.log(metrics, step=step)
+        else:
+            # W&B requires the training row to remain open until later
+            # checkpoint/evaluation metrics for this step are available.
+            self.run.log(metrics, step=step, commit=commit)
+        self.last_step = max(self.last_step, step)
 
     def log_files(self, name, files, *, step, kind="diagnostics", metadata=None):
-        """Publish explicit local files to W&B; Trackio keeps the local originals.
+        """Publish explicit local files through the active backend.
 
         This never discovers or uploads checkpoints. Callers choose each file.
         """
-        if self.run is None or "trackio" in self.metadata or step <= self.resume_step or not files:
+        if not self.should_log(step) or not files:
             return
-        import wandb
+        import importlib
+        backend = importlib.import_module("trackio" if "trackio" in self.metadata else "wandb")
 
-        artifact = wandb.Artifact(
+        artifact = backend.Artifact(
             f"{name}-{self.run.id}", type=kind, metadata={"cycle": step, **(metadata or {})},
         )
         for filename, path in files.items():
@@ -68,29 +77,46 @@ class TrainingTracker:
         identity = self.metadata.get("trackio")
         if identity is None or self.last_step < 0:
             return
-        from trackio.sqlite_storage import SQLiteStorage
-
         deadline = time.monotonic() + timeout
-        while True:
+        while time.monotonic() < deadline:
             try:
-                persisted = SQLiteStorage.get_max_step_for_run(
-                    identity["project"], identity["name"], run_id=identity["id"],
-                )
+                persisted = _persisted_step(identity, deadline)
             except Exception as exc:
                 print(f"Trackio persistence check failed: {exc}; continuing with checkpoint save",
                       file=sys.stderr, flush=True)
                 return
             if persisted is not None and persisted >= self.last_step:
                 return
-            if time.monotonic() >= deadline:
-                print(f"Trackio has not persisted training cycle {self.last_step} after {timeout:g}s; "
-                      "continuing with checkpoint save", file=sys.stderr, flush=True)
-                return
-            time.sleep(0.05)
+            time.sleep(max(0, min(0.05, deadline - time.monotonic())))
+        print(f"Trackio has not persisted training cycle {self.last_step} after {timeout:g}s; "
+              "continuing with checkpoint save", file=sys.stderr, flush=True)
 
     def finish(self):
         if self.run is not None:
             self.run.finish()
+
+
+def _persisted_step(identity, deadline):
+    """Read local acknowledgement with bounded SQLite locking and query time.
+
+    Trackio's public reader has a fixed connection timeout. Keep this small
+    schema-dependent adapter here; schema/setup failures fall back to saving.
+    """
+    import sqlite3
+    from contextlib import closing
+    from trackio.sqlite_storage import SQLiteStorage
+
+    path = SQLiteStorage.get_project_db_path(identity["project"])
+    if not path.exists():
+        return None
+    uri = path.resolve().as_uri() + "?mode=ro"
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return None
+    with closing(sqlite3.connect(uri, uri=True, timeout=remaining)) as connection:
+        connection.set_progress_handler(lambda: int(time.monotonic() >= deadline), 1000)
+        return connection.execute("SELECT MAX(step) FROM metrics WHERE run_id = ?",
+                                  (identity["id"],)).fetchone()[0]
 
 
 def make_tracker(config, *, resume=None, trackio_run=None):

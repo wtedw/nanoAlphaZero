@@ -157,13 +157,13 @@ def test_training_log_wait_precedes_checkpoint_even_on_timeout(assembly, monkeyp
         "project": "test", "name": "test", "id": "test",
     }})
     backend.log.side_effect = lambda *args, **kwargs: events.append("log")
-    monkeypatch.setattr(SQLiteStorage, "get_max_step_for_run",
+    monkeypatch.setattr(tracking, "_persisted_step",
                         lambda *a, **k: None if flush_times_out else 1)
     original_flush = tracker.flush
 
     def flush():
         events.append("flush")
-        original_flush(timeout=0)
+        original_flush(timeout=0.02)
 
     tracker.flush = flush
     monkeypatch.setattr(tracking, "make_tracker", lambda *a, **k: tracker)
@@ -223,6 +223,7 @@ os.kill(os.getpid(), signal.SIGKILL)
 
 @pytest.mark.parametrize("read_error", [False, True])
 def test_trackio_wait_is_best_effort(monkeypatch, capsys, read_error):
+    import nanoalphazero.tracking as tracking
     from nanoalphazero.tracking import TrainingTracker
     from trackio.sqlite_storage import SQLiteStorage
 
@@ -230,9 +231,9 @@ def test_trackio_wait_is_best_effort(monkeypatch, capsys, read_error):
         if read_error:
             raise OSError("database unavailable")
         return None
-    monkeypatch.setattr(SQLiteStorage, "get_max_step_for_run", read)
+    monkeypatch.setattr(tracking, "_persisted_step", read)
     tracker = TrainingTracker(None, {"trackio": {"project": "test", "name": "test", "id": "test"}}, 200)
-    tracker.flush(timeout=0)
+    tracker.flush(timeout=0.01)
     assert "continuing with checkpoint save" in capsys.readouterr().err
 
 
@@ -247,3 +248,54 @@ def test_same_cycle_extra_metrics_are_logged():
     assert [call.args[0] for call in run.log.call_args_list] == [
         {"loss": 0.25}, {"checkpoint/seconds": 1.0},
     ]
+
+
+@pytest.mark.parametrize("resume_step", [-1, 1])
+def test_host_acpl_count_and_viewer_are_distinct(assembly, monkeypatch, tmp_path, resume_step):
+    import nanoalphazero.tracking as tracking
+    from nanoalphazero.eval import acpl
+    from nanoalphazero.diagnostics import chess_games
+
+    path = tmp_path / "games.pgn"
+    path.write_text("1. e4 *")
+    result = acpl.AcplResult({"acpl/games": 1}, {"games.pgn": path})
+    monkeypatch.setattr(acpl, "make_acpl", lambda *a, **k: (lambda *a: (None, result), None))
+    render = Mock(return_value="<html>games</html>")
+    monkeypatch.setattr(chess_games, "games_html", render)
+    api, run = Mock(), Mock()
+    monkeypatch.setitem(sys.modules, "trackio", api)
+    tracker = tracking.TrainingTracker(run, {"trackio": {}}, last_step=resume_step)
+    monkeypatch.setattr(tracking, "make_tracker", lambda *a, **k: tracker)
+    state = SimpleNamespace(model_ts=SimpleNamespace(step=0, params={}))
+    compiled = Mock(return_value=(state, {"selfplay_buffer/error_count": 0, "loss": 0.5}))
+    compiled.memory_analysis.return_value = None
+    run_fn = Mock()
+    run_fn.lower.return_value.compile.return_value = compiled
+    config = dict(replay_buffer_warmup_steps=0, cycle_n_selfplay=1, num_iters=1,
+                  diagnostic_period=0, eval_period=0)
+    algorithm = SimpleNamespace(config=config, runner_state=state, run_fn=run_fn,
+                                env=None, run_mcts_fn=None, data_sharding=None)
+    assembly.run_muzero(algorithm)
+    if resume_step < 1:
+        logs = run.log.call_args.args[0]
+        assert logs["acpl/games"] == 1
+        assert logs["acpl/games_viewer"] is api.Html.return_value
+        render.assert_called_once()
+    else:
+        render.assert_not_called()
+        run.log.assert_not_called()
+        api.Artifact.assert_not_called()
+
+
+def test_cli_rejects_resume_config_before_assembly(assembly, monkeypatch, tmp_path):
+    import jax.numpy as jnp
+    from nanoalphazero import ckpt
+
+    path = tmp_path / "checkpoint.safetensors"
+    ckpt.save_muzero_checkpoint(path, {"cycle": jnp.int32(1)}, {"conv_width": 99})
+    build = Mock(side_effect=AssertionError("must not allocate model or buffers"))
+    monkeypatch.setattr(assembly, "make_muzero", build)
+    with pytest.raises(ValueError, match="identical resolved configuration"):
+        assembly.main(["--env", "ttt", "--platform", "cpu", "--ckpt.resume", str(path),
+                       "--ckpt.mode", "partial"])
+    build.assert_not_called()
