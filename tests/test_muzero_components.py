@@ -390,6 +390,36 @@ def test_exploit_unroll_training_is_default(config, enabled):
     assert int(jnp.sum(samples.policy_mask[:, 0, 1:])) == 6
 
 
+@pytest.mark.parametrize("exploit_only", [True, False])
+def test_exploration_without_value_keeps_windows_and_masks(config, assembly, exploit_only):
+    cfg = {**config, "exp_self_consistency": True,
+           "exp_train_on_exploit_unroll_states": exploit_only,
+           "exp_train_on_exploration_without_value": True}
+    buffer, state = make_buffer(cfg)
+    for step in range(4):
+        state = append(buffer, state, transition(
+            cfg, step, step, exploration=True, terminal=step == 3, reward=float(step == 3)))
+    assert int(state.num_valid_consumable) == 8
+    state, samples, _ = jax.jit(buffer.consume)(state)
+    batch = jax.tree.map(lambda x: x[:, 0], samples)
+    remaining = 3 - np.asarray(batch.ep_step)
+    real = np.arange(4)[None, :] <= remaining[:, None]
+    np.testing.assert_array_equal(batch.policy_mask, real)
+    np.testing.assert_array_equal(batch.value_mask, ~real)  # only absorbing tail values
+    np.testing.assert_array_equal(batch.reward_mask, np.ones((2, 3), bool))
+    model, variables = make_muzero_model(cfg, jax.random.PRNGKey(3))
+    objective = jax.jit(jax.value_and_grad(
+        lambda params, sample: assembly.muzero_loss(model, params, sample, self_consistency_weight=1.),
+        has_aux=True))
+    expected = objective(variables["params"], batch)
+    changed = batch.replace(reward=batch.reward + jnp.where(batch.value_mask, 0, 100))
+    assert_trees_equal(expected, objective(variables["params"], changed))
+    assert float(expected[0][1]["consistency/n_valid"]) == np.sum(real[:, 1:])
+    changed = batch.replace(transition_reward=batch.transition_reward + 10)
+    assert float(objective(variables["params"], changed)[0][1]["loss_r"]) > float(expected[0][1]["loss_r"])
+    assert sum(float(jnp.sum(x * x)) for x in jax.tree.leaves(expected[1]["dynamics"])) > 0
+
+
 def test_masked_exploration_losses_keep_rollout_gradients(config, assembly):
     cfg = {**config, "exp_self_consistency": True}
     buffer, state = make_buffer(cfg)

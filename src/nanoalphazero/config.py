@@ -138,7 +138,7 @@ def get_hex_config(board_size=4):
     REPLAY_BUFFER_TOTAL_SIZE = 2_048_000
     # ------------------------------------------------------------
 
-    selfplay_buffer_len = game_max_steps + 50
+    selfplay_buffer_len = game_max_steps + 60
     replay_buffer_len = REPLAY_BUFFER_TOTAL_SIZE // batch_size
     buffer_warmup_steps = (selfplay_buffer_len + replay_buffer_len) * 1
 
@@ -570,6 +570,7 @@ def get_muzero_config(env="hex4", **overrides):
         algorithm="muzero", env=env, seed=0,
         buffer_layout="original",
         exp_train_on_exploit_unroll_states=True,
+        exp_train_on_exploration_without_value=False,
         muzero_network="spatial", muzero_unroll_steps=5, muzero_discount=1.0,
         muzero_remat_blocks=env == "chess", muzero_remat_unroll=env == "chess",
         muzero_memory_fraction=0.75,

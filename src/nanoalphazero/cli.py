@@ -383,6 +383,8 @@ class MuZeroArgs:
     self_consistency_weight: float | None = None
     # Train direct losses only at exploit states across the K+1 unroll.
     exp_train_on_exploit_unroll_states: bool = True
+    # Include exploration policy/reward/consistency losses, but mask exploration values.
+    exp_train_on_exploration_without_value: bool = False
     # MuZero replay storage only; self-play retains its original layout.
     buffer_layout: Literal["original", "features"] | None = None
     selfplay_buffer_max_len: int | None = None

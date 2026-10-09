@@ -46,6 +46,14 @@ host forwards the combined cycle metrics to Trackio or W&B.
 
 ### Training metrics
 
+`--exp-train-on-exploration-without-value` enables policy, immediate-reward,
+and (when enabled separately) consistency losses at exploration positions.
+Real exploration positions still have masked value loss; absorbing value tails
+retain their zero targets. This takes precedence over
+`--[no-]exp-train-on-exploit-unroll-states`. Fully exploratory completed windows
+become eligible for replay. The new flag is off by default and does not change
+AlphaZero. Self-consistency still requires `--exp-self-consistency`.
+
 MuZero replay windows retain root `row_id`, `col_id`, `game_id`,
 `global_step_id`, and `ep_step`. The cycle returns
 `(state, (scalar_metrics, array_metrics))`: scalars are reduced across optimizer
@@ -417,8 +425,8 @@ their configs do not satisfy the current strict resume-config check. Historical
 artifacts are preserved; convert old command budgets explicitly before new runs.
 MuZero still learns latent transitions and rewards and trains unroll samples,
 so matching these settings does not make it identical to AlphaZero.
-Hex self-play storage inherits AlphaZero's `game_max_steps + 50` capacity
-(66 for Hex4, 75 for Hex5). The former 512-slot minimum is removed.
+Hex self-play storage inherits AlphaZero's `game_max_steps + 60` capacity
+(76 for Hex4, 85 for Hex5). The former 512-slot minimum is removed.
 Random selection may retain a fresh remainder across cycles. Ring evictions
 count dropped data instead of stopping training:
 `selfplay_buffer/dropped_pending_count` counts discarded positions awaiting a
