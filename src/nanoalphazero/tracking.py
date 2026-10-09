@@ -15,14 +15,14 @@ class TrainingTracker:
     def __post_init__(self):
         self.resume_step = self.last_step
 
-    def log_training(self, metrics, *, step, tables=None, histograms=None):
+    def log_training(self, metrics, *, step, tables=None, histograms=None, figures=None):
         """Record training results, leaving room for later evaluation metrics."""
         if self.run is None or step <= self.resume_step:
             return
         media = {}
-        if tables or histograms:
+        if tables or histograms or figures:
             backend = "trackio" if "trackio" in self.metadata else "wandb"
-            media = head_diagnostic_logs(tables or {}, histograms or {}, backend)
+            media = media_logs(tables or {}, histograms or {}, figures or {}, backend)
         self.log({**metrics, **media}, step=step, commit=False)
 
     def log(self, metrics, *, step, commit=True):
@@ -41,6 +41,22 @@ class TrainingTracker:
                 # checkpoint/evaluation metrics for this step are available.
                 self.run.log(metrics, step=step, commit=commit)
             self.last_step = max(self.last_step, step)
+
+    def log_files(self, name, files, *, step, kind="diagnostics", metadata=None):
+        """Publish explicit local files to W&B; Trackio keeps the local originals.
+
+        This never discovers or uploads checkpoints. Callers choose each file.
+        """
+        if self.run is None or "trackio" in self.metadata or step <= self.resume_step or not files:
+            return
+        import wandb
+
+        artifact = wandb.Artifact(
+            f"{name}-{self.run.id}", type=kind, metadata={"cycle": step, **(metadata or {})},
+        )
+        for filename, path in files.items():
+            artifact.add_file(str(path), name=filename)
+        self.run.log_artifact(artifact, aliases=["latest", f"cycle-{step}"])
 
     def flush(self, timeout=30.0):
         """Best-effort wait for local Trackio's writer; never block saving on failure.
@@ -111,25 +127,13 @@ def make_tracker(config, *, resume=None, trackio_run=None):
     return TrainingTracker()
 
 
-def head_diagnostic_logs(tables, histograms, backend):
-    """Wrap numeric diagnostics for the selected tracker, without importing the other."""
+def media_logs(tables, histograms, figures, backend):
+    """Wrap ordinary media for one backend, without knowing their game or origin."""
     import importlib
-    from nanoalphazero.eval.muzero import board_figure
 
     tracker = importlib.import_module(backend)
     logs = {name: tracker.Table(**table) for name, table in tables.items()}
     logs.update({name: tracker.Histogram(values) for name, values in histograms.items()})
-    for table_key, chart_key, title, logits in (
-        ("model/values_after_black_moves_table", "model/values_after_black_moves_heatmap",
-         "Value After Each Black Opening (White perspective)", False),
-        ("model/logits_heatmap_top_k_table", "model/logits_heatmap_top_k",
-         "Opening Policy Logits (Top-k Highlighted)", True),
-        ("muzero/model/latent_values_after_black_moves_table",
-         "muzero/model/latent_values_after_black_moves_heatmap",
-         "Learned-Latent Value After Each Black Opening (White perspective)", False),
-    ):
-        if table_key not in tables:
-            continue
-        figure = board_figure(tables[table_key], title, logits)
-        logs[chart_key] = tracker.Plotly(figure) if backend == "wandb" else tracker.Html(figure)
+    for name, figure in figures.items():
+        logs[name] = tracker.Plotly(figure) if backend == "wandb" else tracker.Html(figure)
     return logs

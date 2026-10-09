@@ -460,7 +460,8 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
                       "compiled_memory": compiled_memory}), flush=True)
     tracker = make_tracker(config, resume=resume, trackio_run=trackio_run)
     try:
-        head_probe = None
+        from nanoalphazero.diagnostics import DiagnosticOutput, make_diagnostics_fn
+        diagnose_fn = None
         ladder_fn, ladder_state = make_ladder(
             config, env=algorithm.env, policy_fn=algorithm.run_mcts_fn,
         )
@@ -490,15 +491,13 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
             metrics = {name: float(value) for name, value in jax.device_get(metrics).items()}
             # device_get synchronizes execution; exclude diagnostics and disk I/O.
             metrics["timing/cycle_seconds"] = time.monotonic() - started
-            tables, histograms = {}, {}
+            diagnostic = DiagnosticOutput()
             period = config.get("diagnostic_period", 50)
             if period and (cycle == start_cycle + 1 or cycle % period == 0 or cycle == cycles):
-                if config.get("env_id", "").startswith("hex"):
-                    from nanoalphazero.eval.muzero import make_muzero_head_probe
-                    if head_probe is None:
-                        head_probe = make_muzero_head_probe(algorithm.model, algorithm.env, config)
-                    head_metrics, tables, histograms = head_probe(state.model_ts.params)
-                    metrics.update(head_metrics)
+                if diagnose_fn is None:
+                    diagnose_fn = make_diagnostics_fn(algorithm.model, algorithm.env, config)
+                diagnostic = diagnose_fn(state.model_ts.params)
+                metrics.update(diagnostic.scalar_metrics)
                 if algorithm.compression_probe is not None:
                     # Inspection has an independent key and never advances training RNG.
                     probe = algorithm.compression_probe(
@@ -513,7 +512,8 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
                     if all(name in stats for stats in memory):
                         metrics[f"memory/{name}_max"] = max(stats[name] for stats in memory)
             check(metrics)
-            tracker.log_training(metrics, step=cycle, tables=tables, histograms=histograms)
+            tracker.log_training(metrics, step=cycle, tables=diagnostic.tables,
+                                 histograms=diagnostic.histograms, figures=diagnostic.figures)
             extra_metrics = {}
             # Persist the completed training cycle before potentially long evaluations.
             if checkpoint_path and (cycle == start_cycle + 1 or (
@@ -534,6 +534,7 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
             metrics.update(extra_metrics)
             print(json.dumps({"cycle": cycle, **metrics}), flush=True)
             tracker.log(extra_metrics, step=cycle)
+            tracker.log_files("model-diagnostics", diagnostic.files, step=cycle)
         if checkpoint_path and n_cycles == 0:
             ckpt.save_checkpoint(
                 checkpoint_path, state=state, cycle=cycle, config=config, mode=checkpoint_mode,

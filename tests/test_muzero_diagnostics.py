@@ -65,7 +65,7 @@ def test_head_tables_match_historical_predictions(tmp_path):
 @pytest.mark.parametrize("backend", ["wandb", "trackio"])
 def test_tracker_chart_adapters(backend, monkeypatch):
     import sys
-    from nanoalphazero.eval.muzero import board_table
+    from nanoalphazero.diagnostics.hex import board_table, hex_figures
 
     tracker = Mock()
     monkeypatch.setitem(sys.modules, backend, tracker)
@@ -78,7 +78,7 @@ def test_tracker_chart_adapters(backend, monkeypatch):
     run = Mock()
     experiment = TrainingTracker(run, {"trackio": {}} if backend == "trackio" else {})
     experiment.log_training({"loss": 0.5}, step=3, tables=tables,
-                            histograms={"distribution": np.arange(16)})
+                            histograms={"distribution": np.arange(16)}, figures=hex_figures(tables))
     logs = run.log.call_args.args[0]
     assert len(logs) == 8
     assert logs["loss"] == 0.5
@@ -93,7 +93,7 @@ def test_tracker_chart_adapters(backend, monkeypatch):
 
 @pytest.mark.parametrize("period,expected", [(0, []), (3, [1, 3, 5])])
 def test_host_diagnostic_cadence(period, expected, monkeypatch):
-    import nanoalphazero.eval.muzero as diagnostics
+    import nanoalphazero.diagnostics.hex as diagnostics
 
     path = Path(__file__).resolve().parents[1] / "muzero.py"
     spec = importlib.util.spec_from_file_location("muzero_diagnostic_runner", path)

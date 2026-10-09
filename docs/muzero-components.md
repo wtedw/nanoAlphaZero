@@ -25,7 +25,7 @@ entirety. Both host loops now use the extracted shared strength ladder.
 | `buffers.py` | Extended records, completed returns, sequence gathering, storage budget |
 | `muzero_metrics.py` | Component metric selection, batch counts, norms, and cycle reductions |
 | `eval/hex/training.py` | Shared Hex match evaluator and MuZero evaluation adapter |
-| `eval/muzero.py` | Fixed-opening head diagnostics and board figures |
+| `diagnostics/` | Game-specific model probes and independently callable Plotly charts |
 | `tracking.py` | Tracker setup/resume, chart adapters, metric-row handling, and best-effort persistence wait |
 | `eval/ladder.py` | Shared explicit-state ladder against random play and frozen past selves |
 | `eval/matches.py` | Shared forced openings and color-swapped batched matches |
@@ -300,6 +300,15 @@ JSON logs and no chart files are written. `--diagnostic-period 0` disables
 all these probes. The fixed opening suite does not advance training RNG or
 modify games, replay, or optimizer state. Historical episode/replay histograms
 are not copied because they describe the old episodic collector.
+
+`diagnostics.make_diagnostics_fn(model, env, config)` returns a reusable
+`diagnose_fn(params)`. Its `DiagnosticOutput` holds plain scalar metrics, tables,
+Plotly figures, histogram arrays, and optional local file paths. The host passes
+these fields explicitly to the tracker; neither side imports the other.
+Notebook callers can use `diagnostics.hex.board_figure(table, title)` directly.
+The tracker handles only backend conversion and publication. Explicit file
+publication uploads to W&B; Trackio retains the local originals. Checkpoint
+files are never automatically uploaded.
 
 Chess observations stay packed through self-play, consumption, and replay.
 Only sampled training roots (and future targets when self-consistency is enabled)
