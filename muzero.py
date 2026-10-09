@@ -429,7 +429,7 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
     from nanoalphazero import ckpt
     from nanoalphazero.eval.ladder import make_ladder
     from nanoalphazero.eval.acpl import make_acpl
-    from nanoalphazero.tracking import make_muzero_logger
+    from nanoalphazero.tracking import make_tracker
 
     config = algorithm.config
     state, start_cycle = ckpt.restore_checkpoint(
@@ -447,7 +447,6 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
         if not all(np.isfinite(value) for value in metrics.values()):
             raise RuntimeError("Nonfinite MuZero training metrics")
 
-    run = None
     # Compile the entire persistent cycle before spending time on warmup.
     # Warmup is a dynamic boolean, so the same executable also covers training.
     print("Compiling MuZero cycle", flush=True)
@@ -459,7 +458,7 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
     )}
     print(json.dumps({"compile_seconds": time.monotonic() - started,
                       "compiled_memory": compiled_memory}), flush=True)
-    run = make_muzero_logger(config, resume=resume, trackio_run=trackio_run)
+    tracker = make_tracker(config, resume=resume, trackio_run=trackio_run)
     try:
         head_probe = None
         ladder_fn, ladder_state = make_ladder(
@@ -491,18 +490,15 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
             metrics = {name: float(value) for name, value in jax.device_get(metrics).items()}
             # device_get synchronizes execution; exclude diagnostics and disk I/O.
             metrics["timing/cycle_seconds"] = time.monotonic() - started
-            diagnostic_logs = {}
+            tables, histograms = {}, {}
             period = config.get("diagnostic_period", 50)
             if period and (cycle == start_cycle + 1 or cycle % period == 0 or cycle == cycles):
                 if config.get("env_id", "").startswith("hex"):
-                    from nanoalphazero.eval.muzero import make_muzero_head_probe, head_diagnostic_logs
+                    from nanoalphazero.eval.muzero import make_muzero_head_probe
                     if head_probe is None:
                         head_probe = make_muzero_head_probe(algorithm.model, algorithm.env, config)
                     head_metrics, tables, histograms = head_probe(state.model_ts.params)
                     metrics.update(head_metrics)
-                    if run is not None:
-                        backend = "trackio" if config.get("enable_trackio", False) else "wandb"
-                        diagnostic_logs = head_diagnostic_logs(tables, histograms, backend)
                 if algorithm.compression_probe is not None:
                     # Inspection has an independent key and never advances training RNG.
                     probe = algorithm.compression_probe(
@@ -517,32 +513,34 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
                     if all(name in stats for stats in memory):
                         metrics[f"memory/{name}_max"] = max(stats[name] for stats in memory)
             check(metrics)
+            tracker.log_training(metrics, step=cycle, tables=tables, histograms=histograms)
+            extra_metrics = {}
             # Persist the completed training cycle before potentially long evaluations.
             if checkpoint_path and (cycle == start_cycle + 1 or (
                 config.get("ckpt_period") and cycle % config["ckpt_period"] == 0
             ) or cycle == cycles):
+                tracker.flush()
                 checkpoint_metrics = ckpt.save_checkpoint(
                     checkpoint_path, state=state, cycle=cycle, config=config, mode=checkpoint_mode,
-                    metadata=run.metadata if run is not None else None,
+                    metadata=tracker.metadata,
                 )
-                metrics.update({f"checkpoint/{key}": value for key, value in checkpoint_metrics.items()})
+                extra_metrics.update({f"checkpoint/{key}": value for key, value in checkpoint_metrics.items()})
             ladder_state, ladder_metrics = ladder_fn(ladder_state, cycle, state.model_ts.params)
-            metrics.update(ladder_metrics)
+            extra_metrics.update(ladder_metrics)
             acpl_state, acpl_metrics = eval_acpl_fn(acpl_state, cycle, state.model_ts.params)
-            metrics.update(acpl_metrics)
+            extra_metrics.update(acpl_metrics)
             if evaluator is not None:
-                metrics.update(evaluator.run(cycle, state, force=cycle == cycles))
+                extra_metrics.update(evaluator.run(cycle, state, force=cycle == cycles))
+            metrics.update(extra_metrics)
             print(json.dumps({"cycle": cycle, **metrics}), flush=True)
-            if run is not None:
-                run.log({**metrics, **diagnostic_logs}, step=cycle)
+            tracker.log(extra_metrics, step=cycle)
         if checkpoint_path and n_cycles == 0:
             ckpt.save_checkpoint(
                 checkpoint_path, state=state, cycle=cycle, config=config, mode=checkpoint_mode,
-                metadata=run.metadata if run is not None else None,
+                metadata=tracker.metadata,
             )
     finally:
-        if run is not None:
-            run.finish()
+        tracker.finish()
     return state
 
 

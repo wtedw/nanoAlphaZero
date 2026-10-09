@@ -25,7 +25,8 @@ entirety. Both host loops now use the extracted shared strength ladder.
 | `buffers.py` | Extended records, completed returns, sequence gathering, storage budget |
 | `muzero_metrics.py` | Component metric selection, batch counts, norms, and cycle reductions |
 | `eval/hex/training.py` | Shared Hex match evaluator and MuZero evaluation adapter |
-| `eval/muzero.py` | Fixed-opening head diagnostics and tracker chart adapters |
+| `eval/muzero.py` | Fixed-opening head diagnostics and board figures |
+| `tracking.py` | Tracker setup/resume, chart adapters, metric-row handling, and best-effort persistence wait |
 | `eval/ladder.py` | Shared explicit-state ladder against random play and frozen past selves |
 | `eval/matches.py` | Shared forced openings and color-swapped batched matches |
 | `eval/acpl/` | Shared chess self-play scored by Stockfish; explicit evaluation state |
@@ -90,7 +91,7 @@ Existing AlphaZero settings and metric names remain: `eval_period` (cycles),
 `eval_vs_random_max_elo`, and the six `eval/*` score/rating metrics. MuZero inherits
 the game defaults and exposes `--ladder-period N`; use 0 to disable the ladder.
 These settings are independent of MoHex and head diagnostics. Both Trackio and
-W&B receive ladder metrics through the usual MuZero host logger.
+W&B receive ladder metrics through the usual MuZero host tracker.
 
 Match helpers retain the original AlphaZero behavior, including both colors,
 zero Gumbel exploration, game/search budgets, and treating games unfinished at
@@ -399,7 +400,14 @@ change or be omitted. With `--enable-trackio`, checkpoint metadata automatically
 selects the original local Trackio run using `resume="must"`. Use
 `--trackio-run NAME` to explicitly select an existing run. The local tracking
 database must remain available. Recomputed cycles already present in that run
-are skipped by the logger, while training continues normally.
+are skipped by the tracker, while training continues normally.
+At save points, training metrics are logged first. The tracker waits up to 30
+seconds for local Trackio to persist them, then saves regardless; timeout or
+database errors produce a warning. Checkpoint timings and evaluation results
+follow afterward and can still be lost on an abrupt interruption.
+`make_tracker` always returns a tracker; when disabled its methods do nothing.
+`log_training` handles chart conversion and W&B row semantics internally, keeping
+backend choices and optional-tracker branches out of the host loop.
 
 These replace the flat MuZero options `--save`, `--resume`, `--ckpt-period`, and
 `--[no-]muzero-checkpoint-replay`. AlphaZero's CLI is unchanged. This grouping

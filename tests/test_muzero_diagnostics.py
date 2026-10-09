@@ -11,7 +11,8 @@ import pytest
 
 from nanoalphazero.config import get_muzero_config
 from nanoalphazero.core import make_env
-from nanoalphazero.eval.muzero import make_muzero_head_probe, head_diagnostic_logs
+from nanoalphazero.eval.muzero import make_muzero_head_probe
+from nanoalphazero.tracking import TrainingTracker
 from nanoalphazero.model import make_muzero_model
 
 
@@ -74,8 +75,15 @@ def test_tracker_chart_adapters(backend, monkeypatch):
         "model/values_after_black_moves_table", "model/logits_heatmap_top_k_table",
         "muzero/model/latent_values_after_black_moves_table",
     )}
-    logs = head_diagnostic_logs(tables, {"distribution": np.arange(16)}, backend)
-    assert len(logs) == 7
+    run = Mock()
+    experiment = TrainingTracker(run, {"trackio": {}} if backend == "trackio" else {})
+    experiment.log_training({"loss": 0.5}, step=3, tables=tables,
+                            histograms={"distribution": np.arange(16)})
+    logs = run.log.call_args.args[0]
+    assert len(logs) == 8
+    assert logs["loss"] == 0.5
+    assert run.log.call_args.kwargs == ({"step": 3} if backend == "trackio" else
+                                       {"step": 3, "commit": False})
     wrapper = tracker.Plotly if backend == "wandb" else tracker.Html
     assert wrapper.call_count == 3
     figure = wrapper.call_args.args[0]
@@ -112,9 +120,9 @@ def test_host_diagnostic_cadence(period, expected, monkeypatch):
     run_fn.lower.return_value.compile.return_value = compiled
     algorithm = SimpleNamespace(
         config=dict(env_id="hex", num_iters=5, cycle_n_selfplay=1,
-                    replay_buffer_warmup_steps=0, diagnostic_period=period),
+                    replay_buffer_warmup_steps=0, diagnostic_period=period, eval_period=0),
         runner_state=state, run_fn=run_fn, model=None, env=None,
-        data_sharding=None, compression_probe=None,
+        data_sharding=None, compression_probe=None, run_mcts_fn=None,
     )
     assert assembly.run_muzero(algorithm) is state
     assert observed == expected

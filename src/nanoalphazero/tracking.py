@@ -1,26 +1,83 @@
-"""MuZero host logging and local Trackio continuation, independent of training state."""
+"""Experiment tracking and local Trackio continuation, independent of training state."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+import time
+import sys
 
 
 @dataclass
-class TrainingLogger:
-    run: object
-    metadata: dict
+class TrainingTracker:
+    run: object | None = None
+    metadata: dict = field(default_factory=dict)
     last_step: int = -1
+    resume_step: int = field(init=False)
 
-    def log(self, metrics, *, step):
+    def __post_init__(self):
+        self.resume_step = self.last_step
+
+    def log_training(self, metrics, *, step, tables=None, histograms=None):
+        """Record training results, leaving room for later evaluation metrics."""
+        if self.run is None or step <= self.resume_step:
+            return
+        media = {}
+        if tables or histograms:
+            backend = "trackio" if "trackio" in self.metadata else "wandb"
+            media = head_diagnostic_logs(tables or {}, histograms or {}, backend)
+        self.log({**metrics, **media}, step=step, commit=False)
+
+    def log(self, metrics, *, step, commit=True):
+        if self.run is None:
+            return
         # A crash may follow logging but precede the next checkpoint. Recomputed
         # cycles still train, but do not append duplicate rows to this run.
-        if step > self.last_step:
-            self.run.log(metrics, step=step)
-            self.last_step = step
+        # Multiple calls may add different metrics at the current cycle. Only
+        # cycles persisted by the previous process are skipped wholesale.
+        if step > self.resume_step:
+            if "trackio" in self.metadata:
+                if metrics:
+                    self.run.log(metrics, step=step)
+            else:
+                # W&B requires the training row to remain open until later
+                # checkpoint/evaluation metrics for this step are available.
+                self.run.log(metrics, step=step, commit=commit)
+            self.last_step = max(self.last_step, step)
+
+    def flush(self, timeout=30.0):
+        """Best-effort wait for local Trackio's writer; never block saving on failure.
+
+        Trackio has no public flush API. Check the database acknowledgement rather
+        than manipulating its private queues, which may already be in flight.
+        W&B remains asynchronous; this wait applies only to local Trackio.
+        """
+        identity = self.metadata.get("trackio")
+        if identity is None or self.last_step < 0:
+            return
+        from trackio.sqlite_storage import SQLiteStorage
+
+        deadline = time.monotonic() + timeout
+        while True:
+            try:
+                persisted = SQLiteStorage.get_max_step_for_run(
+                    identity["project"], identity["name"], run_id=identity["id"],
+                )
+            except Exception as exc:
+                print(f"Trackio persistence check failed: {exc}; continuing with checkpoint save",
+                      file=sys.stderr, flush=True)
+                return
+            if persisted is not None and persisted >= self.last_step:
+                return
+            if time.monotonic() >= deadline:
+                print(f"Trackio has not persisted training cycle {self.last_step} after {timeout:g}s; "
+                      "continuing with checkpoint save", file=sys.stderr, flush=True)
+                return
+            time.sleep(0.05)
 
     def finish(self):
-        self.run.finish()
+        if self.run is not None:
+            self.run.finish()
 
 
-def make_muzero_logger(config, *, resume=None, trackio_run=None):
+def make_tracker(config, *, resume=None, trackio_run=None):
     if config.get("enable_trackio", False):
         try:
             import trackio
@@ -47,8 +104,32 @@ def make_muzero_logger(config, *, resume=None, trackio_run=None):
             last_step = previous if previous is not None else -1
         metadata = {"trackio": {"project": project, "name": run.name, "id": run.id}}
         print(f"Trackio run: {run.name} ({run.id}); last logged cycle: {last_step}", flush=True)
-        return TrainingLogger(run, metadata, last_step)
+        return TrainingTracker(run, metadata, last_step)
     if config.get("enable_wandb", False):
         import wandb
-        return TrainingLogger(wandb.init(project="nanoAlphaZero-muzero", config=config), {})
-    return None
+        return TrainingTracker(wandb.init(project="nanoAlphaZero-muzero", config=config), {})
+    return TrainingTracker()
+
+
+def head_diagnostic_logs(tables, histograms, backend):
+    """Wrap numeric diagnostics for the selected tracker, without importing the other."""
+    import importlib
+    from nanoalphazero.eval.muzero import board_figure
+
+    tracker = importlib.import_module(backend)
+    logs = {name: tracker.Table(**table) for name, table in tables.items()}
+    logs.update({name: tracker.Histogram(values) for name, values in histograms.items()})
+    for table_key, chart_key, title, logits in (
+        ("model/values_after_black_moves_table", "model/values_after_black_moves_heatmap",
+         "Value After Each Black Opening (White perspective)", False),
+        ("model/logits_heatmap_top_k_table", "model/logits_heatmap_top_k",
+         "Opening Policy Logits (Top-k Highlighted)", True),
+        ("muzero/model/latent_values_after_black_moves_table",
+         "muzero/model/latent_values_after_black_moves_heatmap",
+         "Learned-Latent Value After Each Black Opening (White perspective)", False),
+    ):
+        if table_key not in tables:
+            continue
+        figure = board_figure(tables[table_key], title, logits)
+        logs[chart_key] = tracker.Plotly(figure) if backend == "wandb" else tracker.Html(figure)
+    return logs

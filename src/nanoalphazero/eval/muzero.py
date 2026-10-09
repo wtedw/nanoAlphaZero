@@ -134,24 +134,3 @@ def make_muzero_head_probe(model, env, config):
         return metrics, tables, histograms
 
     return probe
-
-
-def head_diagnostic_logs(tables, histograms, backend):
-    """Wrap numeric diagnostics for the selected tracker, without importing the other."""
-    import importlib
-
-    tracker = importlib.import_module(backend)
-    logs = {name: tracker.Table(**table) for name, table in tables.items()}
-    logs.update({name: tracker.Histogram(values) for name, values in histograms.items()})
-    for table_key, chart_key, title, logits in (
-        ("model/values_after_black_moves_table", "model/values_after_black_moves_heatmap",
-         "Value After Each Black Opening (White perspective)", False),
-        ("model/logits_heatmap_top_k_table", "model/logits_heatmap_top_k",
-         "Opening Policy Logits (Top-k Highlighted)", True),
-        ("muzero/model/latent_values_after_black_moves_table",
-         "muzero/model/latent_values_after_black_moves_heatmap",
-         "Learned-Latent Value After Each Black Opening (White perspective)", False),
-    ):
-        figure = board_figure(tables[table_key], title, logits)
-        logs[chart_key] = tracker.Plotly(figure) if backend == "wandb" else tracker.Html(figure)
-    return logs

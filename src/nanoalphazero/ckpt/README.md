@@ -99,9 +99,15 @@ With `--enable-trackio`, new checkpoints record the project, run name, and ID.
 Resume uses Trackio's `resume="must"` and checks that the ID still matches. The
 local Trackio database must still exist; the checkpoint does not archive it.
 `--trackio-run NAME` explicitly selects an existing run. Already-persisted cycles
-are not logged again if training resumes from an earlier checkpoint. Trackio
-logging is asynchronous: an abrupt kill can lose the last queued metrics even
-when training state was saved. W&B run continuation is not implemented here.
+are not logged again if training resumes from an earlier checkpoint. Training
+metrics are logged before a save, and the host waits for the local Trackio
+database to acknowledge that cycle before publishing its checkpoint. This wait
+is best-effort: after 30 seconds, or if the persistence check fails, the tracker
+prints a warning and checkpoint saving proceeds anyway. A SIGKILL test covers
+the successful-write case; timeout tests verify saving still proceeds.
+Checkpoint timings and evaluation results are logged afterward; an abrupt kill
+may still lose these later results. This is a local Trackio barrier, not a W&B
+upload guarantee. W&B run continuation is not implemented here.
 
 ## Rectangular chunks (prototype v2)
 
