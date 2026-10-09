@@ -428,7 +428,7 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
     import numpy as np
     from nanoalphazero import ckpt
     from nanoalphazero.eval.ladder import make_ladder
-    from nanoalphazero.eval.acpl import make_acpl
+    from nanoalphazero.eval.acpl import make_acpl, acpl_files
     from nanoalphazero.tracking import make_tracker
 
     config = algorithm.config
@@ -535,6 +535,8 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
             print(json.dumps({"cycle": cycle, **metrics}), flush=True)
             tracker.log(extra_metrics, step=cycle)
             tracker.log_files("model-diagnostics", diagnostic.files, step=cycle)
+            tracker.log_files("acpl-games", acpl_files(acpl_state, acpl_metrics), step=cycle,
+                              kind="evaluation-games", metadata=acpl_metrics)
         if checkpoint_path and n_cycles == 0:
             ckpt.save_checkpoint(
                 checkpoint_path, state=state, cycle=cycle, config=config, mode=checkpoint_mode,

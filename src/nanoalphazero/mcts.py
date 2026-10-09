@@ -95,6 +95,9 @@ class PolicyOutput:
     bnk_k_indices: Optional[Any] = None
     bnk_action_weights: Optional[Any] = None
 
+    # Only populated by a separately compiled diagnostic search.
+    diagnostics: Optional[Any] = None
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Inlined helpers from mctx._src.action_selection
@@ -284,6 +287,7 @@ def gumbel_muzero_policy_1sh(
     epsilon: chex.Numeric = 1e-8,
     use_bnk: bool = False,
     num_k_actions: Optional[int] = None,
+    return_diagnostics: bool = False,
 ) -> PolicyOutput:
     """
     Sequential-Halving BFS (2 rungs).
@@ -514,6 +518,22 @@ def gumbel_muzero_policy_1sh(
         bnk_k_indices = None
         bnk_action_weights = None
 
+    diagnostics = None
+    if return_diagnostics:
+        mixed = jax.vmap(lambda value, q, visits, priors: _compute_mixed_value(
+            value, qvalues=q, visit_counts=visits, prior_probs=priors))(
+            root.value, q_root, visit_root, jax.nn.softmax(root.prior_logits))
+        baseline = mixed if use_mixed_value else root.value
+        raw_completed = jnp.where(visit_root > 0, q_root, baseline[:, None])
+        diagnostics = dict(
+            prior_logit=root.prior_logits, gumbel=root_gumbel,
+            backed_up_q=q_root, completed_q=raw_completed,
+            transformed_q=completed_q, advantage=raw_completed - baseline[:, None],
+            final_score=final_score, search_logit=search_logits,
+            child_value=jnp.sum(mask1 * layer1_out.value[:, :, None], axis=1),
+            raw_value=root.value, mixed_value=mixed,
+        )
+
     return PolicyOutput(
         # --- decision & training targets ---
         action=best_a,  # int32  [B]
@@ -522,6 +542,7 @@ def gumbel_muzero_policy_1sh(
         # BNK compressed fields (populated when use_bnk=True)
         bnk_k_indices=bnk_k_indices,  # [B, K1] or None
         bnk_action_weights=bnk_action_weights,  # [B, K1] or None
+        diagnostics=diagnostics,
     )
 
 
@@ -661,8 +682,8 @@ def compress_muzero_policy(output, num_actions):
     ), mass[..., 0]
 
 
-def make_muzero_mcts(config, wenv, model, data_sharding=None):
-    """Use the unchanged search engine with learned hypothetical transitions."""
+def make_muzero_mcts(config, wenv, model, data_sharding=None, *, return_diagnostics=False):
+    """Use shared search with learned transitions and optional inspection output."""
     def recurrent(params, keys, action, latent):
         latent, reward, logits, value = model.apply(
             {"params": params}, latent, action, method=model.recurrent
@@ -697,6 +718,7 @@ def make_muzero_mcts(config, wenv, model, data_sharding=None):
             value_scale=config.get("mcts_value_scale", 1.0),
             maxvisit_init=config.get("mcts_maxvisit_init", 50.0),
             rescale_values=config.get("mcts_rescale_values", False),
+            return_diagnostics=return_diagnostics,
         )
         if config.get("exp_bnk_action_weights", False):
             output, _ = compress_muzero_policy(output, config["mcts_num_k_actions"])

@@ -30,6 +30,14 @@ def make_diagnostics_fn(model, env, config):
             if isinstance(x, jax.Array) and not x.is_fully_addressable else x,
             params,
         )
+        if config.get("env_id") == "chess":
+            from nanoalphazero.diagnostics.chess import make_chess_probe, chess_figures
+
+            if probe is None:
+                probe = make_chess_probe(model, env, config)
+            metrics, tables = probe(params)
+            return DiagnosticOutput(metrics, {f"{name}_table": table for name, table in tables.items()},
+                                    chess_figures(tables))
         if config.get("env_id", "").startswith("hex"):
             from nanoalphazero.diagnostics.hex import make_muzero_head_probe, hex_figures
 

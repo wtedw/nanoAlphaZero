@@ -310,6 +310,33 @@ The tracker handles only backend conversion and publication. Explicit file
 publication uploads to W&B; Trackio retains the local originals. Checkpoint
 files are never automatically uploaded.
 
+Chess uses three tables and three interactive figures: `chess/search`,
+`chess/opening_model`, and `chess/reply_policy` (table keys have `_table` appended).
+The fixed 20-opening suite compares observed and imagined successor values,
+rewards, and all 400 legal Black replies. Successor values use Black's perspective;
+root search Q and rewards use White's. Reply probabilities are normalized over
+real legal moves, with illegal probability mass reported separately in the table.
+`diagnostics.chess.search_figure`, `value_figure`, and `policy_figure` each accept
+a plain table and return a Plotly figure, without a tracker or model.
+
+```python
+from nanoalphazero.diagnostics import make_diagnostics_fn
+from nanoalphazero.diagnostics.chess import value_figure
+
+diagnose_fn = make_diagnostics_fn(model, env, config)
+output = diagnose_fn(params)
+value_figure(output.tables["chess/opening_model_table"]).show()
+```
+
+The search panel exposes priors, fixed Gumbel noise, completed/transformed Q,
+advantages, final scores, child values, policy weights, and visits. This uses an
+opt-in `return_diagnostics` output from shared search; it defaults off and does
+not change decisions or policy targets. Ordinary AlphaZero and MuZero training
+do not retain these arrays. The diagnostic search uses an independent fixed RNG.
+After completed ACPL evaluations, the MuZero host passes `games.pgn`,
+`manifest.json`, and `summary.json` to generic tracker file publication. ACPL
+itself remains independent of tracking; Trackio keeps those files locally.
+
 Chess observations stay packed through self-play, consumption, and replay.
 Only sampled training roots (and future targets when self-consistency is enabled)
 decode. Unroll gathering reads required transition fields directly and never

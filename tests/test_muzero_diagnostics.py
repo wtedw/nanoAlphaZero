@@ -92,8 +92,12 @@ def test_tracker_chart_adapters(backend, monkeypatch):
 
 
 @pytest.mark.parametrize("period,expected", [(0, []), (3, [1, 3, 5])])
-def test_host_diagnostic_cadence(period, expected, monkeypatch):
-    import nanoalphazero.diagnostics.hex as diagnostics
+@pytest.mark.parametrize("game", ["hex", "chess"])
+def test_host_diagnostic_cadence(period, expected, monkeypatch, game):
+    if game == "hex":
+        import nanoalphazero.diagnostics.hex as diagnostics
+    else:
+        import nanoalphazero.diagnostics.chess as diagnostics
 
     path = Path(__file__).resolve().parents[1] / "muzero.py"
     spec = importlib.util.spec_from_file_location("muzero_diagnostic_runner", path)
@@ -110,16 +114,17 @@ def test_host_diagnostic_cadence(period, expected, monkeypatch):
 
     def probe(params):
         observed.append(cycle)
-        return {"model/init_board_value": 0.0}, {}, {}
+        result = ({"model/init_board_value": 0.0}, {})
+        return (*result, {}) if game == "hex" else result
 
     factory = Mock(return_value=probe)
-    monkeypatch.setattr(diagnostics, "make_muzero_head_probe", factory)
+    monkeypatch.setattr(diagnostics, "make_muzero_head_probe" if game == "hex" else "make_chess_probe", factory)
     compiled = Mock(side_effect=run_cycle)
     compiled.memory_analysis.return_value = None
     run_fn = Mock()
     run_fn.lower.return_value.compile.return_value = compiled
     algorithm = SimpleNamespace(
-        config=dict(env_id="hex", num_iters=5, cycle_n_selfplay=1,
+        config=dict(env_id=game, num_iters=5, cycle_n_selfplay=1,
                     replay_buffer_warmup_steps=0, diagnostic_period=period, eval_period=0),
         runner_state=state, run_fn=run_fn, model=None, env=None,
         data_sharding=None, compression_probe=None, run_mcts_fn=None,
