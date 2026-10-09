@@ -193,7 +193,7 @@ def main():
     collect = collect.lower(state).compile()
     print(json.dumps({"compile_seconds": time.perf_counter() - started}), flush=True)
     for cycle in range(1, args.max_cycles + 1):
-        state, metrics = collect(state)
+        state, (metrics, _) = collect(state)
         metrics = {k: float(v) for k, v in jax.device_get(metrics).items()}
         assert metrics["selfplay_buffer/error_count"] == 0, metrics
         assert int(state.model_ts.n_updates) == updates

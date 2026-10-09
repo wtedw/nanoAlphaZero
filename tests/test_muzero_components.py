@@ -279,6 +279,8 @@ def test_ring_wrap_and_consumed_starts_keep_chronology(config):
                                                  reward=float(t == 9), game_id=3))
     starts = jax.tree.map(lambda x: x[:, 6:7], state.experience)
     samples, missing = gather_muzero_training_samples(state.experience, starts, 3)
+    for name in ("row_id", "col_id", "game_id", "global_step_id", "ep_step"):
+        np.testing.assert_array_equal(getattr(samples, name), getattr(starts, name)[:, 0])
     assert int(state.overwritten_count) == int(state.missing_count) == int(missing) == 0
     np.testing.assert_array_equal(samples.action, [[0, 1, 2]] * 2)
     np.testing.assert_array_equal(samples.reward, [[-1, 1, -1, 1]] * 2)
@@ -547,7 +549,9 @@ def test_hex_defaults_match_alphazero_budget_and_warmup():
         original = CONFIG_FACTORIES[env]()
         actual = get_muzero_config(env)
         assert actual["num_iters"] == original["num_iters"]
-        assert actual["selfplay_buffer_max_len"] >= 512
+        for key in ("selfplay_buffer_min_len", "selfplay_buffer_max_len",
+                    "replay_buffer_min_len", "replay_buffer_max_len", "replay_buffer_total_size"):
+            assert actual[key] == original[key]
         assert actual["replay_buffer_warmup_steps"] == original["replay_buffer_warmup_steps"]
         assert "muzero_warmup_cycles" not in actual
         for key in ("learning_rate", "lr_warmup_steps", "conv_width", "conv_depth",
@@ -620,7 +624,10 @@ def test_cycle_and_checkpoint_continuation(config, assembly, tmp_path):
     from nanoalphazero.ckpt import save_muzero_checkpoint, load_muzero_checkpoint
 
     algorithm = assembly.make_muzero(config, jax.random.PRNGKey(0))
-    state, metrics = algorithm.run_fn(algorithm.runner_state, jnp.bool_(False))
+    state, (metrics, arrays) = algorithm.run_fn(algorithm.runner_state, jnp.bool_(False))
+    assert arrays["row_id"].shape == (config["cycle_n_train"], config["train_batch_size"])
+    assert bool(jnp.all(arrays["valid"]))
+    assert bool(jnp.all(arrays["row_id"] >= 1))
     assert int(metrics["selfplay_buffer/error_count"]) == 0
     assert int(state.model_ts.n_updates) == 1
     assert float(metrics["train_batch/n_is_valid"]) == config["train_batch_size"]
@@ -704,7 +711,8 @@ def test_training_metrics_preserve_optimizer_update(config, assembly):
 def test_games_continue_across_short_cycles(config, assembly):
     config = {**config, "cycle_n_selfplay": 3, "num_exploratory_moves": 4}
     algorithm = assembly.make_muzero(config, jax.random.PRNGKey(0))
-    state, metrics = algorithm.run_fn(algorithm.runner_state, jnp.bool_(True))
+    state, (metrics, arrays) = algorithm.run_fn(algorithm.runner_state, jnp.bool_(True))
+    assert not bool(jnp.any(arrays["valid"]))
     # Tic-tac-toe cannot terminate in three plies. No new game may replace it.
     np.testing.assert_array_equal(state.selfplay_state.ep_step, 3)
     assert int(state.selfplay_state.step_count) == 3
@@ -714,7 +722,7 @@ def test_games_continue_across_short_cycles(config, assembly):
     for _ in range(3):
         key, move_key = jax.random.split(key)
         expected_games, _, _ = algorithm.selfplay_fn(move_key, expected_games, state.model_ts.params)
-    state, metrics = algorithm.run_fn(state, jnp.bool_(True))
+    state, (metrics, _) = algorithm.run_fn(state, jnp.bool_(True))
     assert_trees_equal(state.selfplay_state, expected_games)
     np.testing.assert_array_equal(state.rng, key)
     assert int(state.selfplay_state.step_count) == 6
@@ -726,7 +734,7 @@ def test_error_blocks_optimizer_updates(config, assembly, error):
     algorithm = assembly.make_muzero(config, jax.random.PRNGKey(0))
     state = algorithm.runner_state
     state = state._replace(selfplay_buffer_state=state.selfplay_buffer_state.replace(**{error: jnp.int32(1)}))
-    following, metrics = algorithm.run_fn(state, jnp.bool_(False))
+    following, (metrics, _) = algorithm.run_fn(state, jnp.bool_(False))
     assert int(metrics["selfplay_buffer/error_count"]) >= 1
     assert int(following.model_ts.n_updates) == 0
 
@@ -739,7 +747,7 @@ def test_evictions_allow_optimizer_updates(config, assembly, tmp_path):
     algorithm = assembly.make_muzero(config, jax.random.PRNGKey(0))
     state = algorithm.runner_state
     for _ in range(3):
-        state, metrics = algorithm.run_fn(state, jnp.bool_(False))
+        state, (metrics, _) = algorithm.run_fn(state, jnp.bool_(False))
         assert int(metrics["selfplay_buffer/error_count"]) == 0
         assert all(np.isfinite(value) for value in metrics.values())
     assert int(state.model_ts.n_updates) == 3

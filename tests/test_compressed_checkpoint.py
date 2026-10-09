@@ -149,7 +149,7 @@ def test_full_muzero_next_cycle(tmp_path, env):
     algorithm = module.make_muzero(config, jax.random.PRNGKey(0))
     state = algorithm.runner_state
     for _ in range(cycles):
-        state, metrics = algorithm.run_fn(state, jnp.bool_(False))
+        state, (metrics, _) = algorithm.run_fn(state, jnp.bool_(False))
         assert int(metrics['selfplay_buffer/error_count']) == 0
     assert int(state.model_ts.n_updates) == cycles
     payload = {'runner_state': state, 'cycle': jnp.int32(cycles)}

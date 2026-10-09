@@ -513,6 +513,12 @@ class MuZeroTrainingSample:
     board_bool: Optional[ArrayLike] = None
     board_float: Optional[ArrayLike] = None
     k_indices: Optional[ArrayLike] = None
+    # Root provenance, retained through replay (one scalar per window).
+    row_id: Optional[ArrayLike] = None
+    col_id: Optional[ArrayLike] = None
+    game_id: Optional[ArrayLike] = None
+    global_step_id: Optional[ArrayLike] = None
+    ep_step: Optional[ArrayLike] = None
 
 
 @chex.dataclass(frozen=True)
@@ -546,6 +552,8 @@ def get_dummy_muzero_training_sample(config):
         return jnp.zeros((length, *value.shape), value.dtype)
 
     return MuZeroTrainingSample(
+        row_id=record.row_id, col_id=record.col_id, game_id=record.game_id,
+        global_step_id=record.global_step_id, ep_step=record.ep_step,
         observation=observations("observation"),
         board_bool=observations("board_bool"), board_float=observations("board_float"),
         k_indices=None if record.k_indices is None else jnp.broadcast_to(record.k_indices, (k + 1, *record.k_indices.shape)),
@@ -619,6 +627,8 @@ def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions
         return jnp.concatenate((root, future), axis=1)
 
     sample = MuZeroTrainingSample(
+        row_id=starts.row_id, col_id=starts.col_id, game_id=starts.game_id,
+        global_step_id=starts.global_step_id, ep_step=starts.ep_step,
         observation=observations("observation"),
         board_bool=observations("board_bool"), board_float=observations("board_float"),
         k_indices=None if experience.k_indices is None else jnp.where(real[..., None], gather("k_indices"), 0),

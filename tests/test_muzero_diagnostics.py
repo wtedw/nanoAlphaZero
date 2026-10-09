@@ -100,6 +100,7 @@ def test_host_diagnostic_cadence(period, expected, monkeypatch, game, resume_ste
     import nanoalphazero.tracking as tracking
     tracker = TrainingTracker(Mock() if resume_step is not None else None,
                               last_step=resume_step or -1)
+    tracker.log_training = Mock()
     monkeypatch.setattr(tracking, "make_tracker", lambda *a, **k: tracker)
     expected = [step for step in expected if resume_step is not None and step > resume_step]
     if game == "hex":
@@ -118,7 +119,9 @@ def test_host_diagnostic_cadence(period, expected, monkeypatch, game, resume_ste
     def run_cycle(state, warmup):
         nonlocal cycle
         cycle += 1
-        return state, {"selfplay_buffer/error_count": 0, "total_loss": 1.0}
+        arrays = {name: [[cycle]] for name in ("row_id", "col_id", "game_id", "ep_step", "age")}
+        arrays["valid"] = [[True]]
+        return state, ({"selfplay_buffer/error_count": 0, "total_loss": 1.0}, arrays)
 
     def probe(params):
         observed.append(cycle)
@@ -140,3 +143,6 @@ def test_host_diagnostic_cadence(period, expected, monkeypatch, game, resume_ste
     assert assembly.run_muzero(algorithm) is state
     assert observed == expected
     assert factory.call_count == bool(expected)
+    histogram_steps = [call.kwargs["step"] for call in tracker.log_training.call_args_list
+                       if "train_batch/sampled_game_ids_distribution" in call.kwargs["histograms"]]
+    assert histogram_steps == expected

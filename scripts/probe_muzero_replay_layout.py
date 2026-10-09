@@ -294,7 +294,8 @@ def main(argv=None):
             extra = jax.random.fold_in(jax.random.PRNGKey(args.seed), iteration)
         started = time.monotonic()
         if args.mode == 'cycle':
-            state, metrics = executable(state, extra)
+            state, (metrics, arrays) = executable(state, extra)
+            jax.block_until_ready(arrays)
         elif args.operation == 'sample':
             metrics = executable(state, extra, batch)
         else:

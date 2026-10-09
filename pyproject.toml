@@ -44,6 +44,7 @@ requires = ["uv_build>=0.9.26,<0.10.0"]
 build-backend = "uv_build"
 
 [tool.uv.sources]
+trackio = { path = "../trackio", editable = true }
 pgx1 = { git = "https://github.com/wtedw/pgx1.git", rev = "fa313c84338d93ab96fc02bc7c658364bf43098f" }
 mctx = { git = "https://github.com/wtedw/mctx", rev = "6cf1a39" }
 flashbax = { git = "https://github.com/instadeepai/flashbax.git", rev = "e0199d7bb232c622a19d3c28f9d6b34eb8215eab" }

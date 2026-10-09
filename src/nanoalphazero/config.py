@@ -138,7 +138,7 @@ def get_hex_config(board_size=4):
     REPLAY_BUFFER_TOTAL_SIZE = 2_048_000
     # ------------------------------------------------------------
 
-    selfplay_buffer_len = game_max_steps + 20
+    selfplay_buffer_len = game_max_steps + 50
     replay_buffer_len = REPLAY_BUFFER_TOTAL_SIZE // batch_size
     buffer_warmup_steps = (selfplay_buffer_len + replay_buffer_len) * 1
 
@@ -581,18 +581,6 @@ def get_muzero_config(env="hex4", **overrides):
     # Keep disabled configs/checkpoints unchanged; only the experiment adds keys.
     if config.get("exp_self_consistency", False):
         config.setdefault("self_consistency_weight", 1.0)
-    # Completed games may wait through a collection phase before consumption.
-    # Extra headroom reduces evictions before completed starts are consumed.
-    if "selfplay_buffer_max_len" not in overrides:
-        config["selfplay_buffer_max_len"] = (
-            4 * config["game_max_steps"] + config["cycle_n_selfplay"]
-            + config["muzero_unroll_steps"]
-        )
-        if env.startswith("hex"):
-            # Random fresh-start selection can leave a small remainder across
-            # several cycles. Keep the empirically tested 512-slot default;
-            # evictions are now counted rather than stopping training.
-            config["selfplay_buffer_max_len"] = max(512, config["selfplay_buffer_max_len"])
     config["selfplay_buffer_add_batch_size"] = config["selfplay_batch_size"]
     config["selfplay_buffer_sample_batch_size"] = config["selfplay_batch_size"]
     config["replay_buffer_add_batch_size"] = config["selfplay_buffer_consume_size"]

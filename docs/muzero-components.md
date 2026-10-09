@@ -46,6 +46,19 @@ host forwards the combined cycle metrics to Trackio or W&B.
 
 ### Training metrics
 
+MuZero replay windows retain root `row_id`, `col_id`, `game_id`,
+`global_step_id`, and `ep_step`. The cycle returns
+`(state, (scalar_metrics, array_metrics))`: scalars are reduced across optimizer
+batches; provenance arrays retain `[cycle_n_train, train_batch_size]` entries.
+At diagnostic cadence the host logs sampled row/column/game IDs, episode steps,
+and sample age (current self-play step minus the root's global step) as histograms.
+Each usable window contributes one root, including exploratory roots with
+supervised future positions. Warmup and skipped updates contribute nothing.
+Row IDs identify original self-play lanes; column IDs retain AlphaZero's
+`global_step_id % (game_max_steps * 4)` convention, not physical replay slots.
+These extra replay fields change the full-checkpoint schema; older full saves
+do not contain this provenance.
+
 - Self-play wins/draws sum all events in a cycle. `selfplay/ep_term_step_*`
   describes games completed during that cycle: min/max across finishes and an
   average weighted by finish count, or -1 when none finished. As in AlphaZero,
@@ -373,8 +386,8 @@ TPU performance and compiled placement still need runtime verification.
 There are no inherited research limits on model width, search budget, or W&B.
 Established game defaults apply. Replay capacity counts sequence items, so its
 memory cost is higher than AlphaZero's position replay. Size it deliberately
-before a full run. `selfplay_buffer_max_len` defaults to extra headroom for
-completed games waiting until the cycle drain. Chess defaults to 4,096,000
+before a full run. `selfplay_buffer_max_len` inherits the AlphaZero game default,
+without extra cycle/unroll headroom. Chess defaults to 4,096,000
 replay items and block/unroll rematerialization. Warmup uses the inherited
 AlphaZero replay-warmup setting. These settings do not imply that every TPU fits.
 Before allocating buffers the assembly reports their logical and per-device
@@ -404,10 +417,10 @@ their configs do not satisfy the current strict resume-config check. Historical
 artifacts are preserved; convert old command budgets explicitly before new runs.
 MuZero still learns latent transitions and rewards and trains unroll samples,
 so matching these settings does not make it identical to AlphaZero.
-Hex self-play storage has a 512-slot minimum by default: the shorter Hex5 ring
-hit the former overwrite guard in runtime testing. Random selection may retain a
-fresh remainder across cycles. Capacity defaults remain unchanged, but ring
-evictions now count dropped data instead of stopping training:
+Hex self-play storage inherits AlphaZero's `game_max_steps + 50` capacity
+(66 for Hex4, 75 for Hex5). The former 512-slot minimum is removed.
+Random selection may retain a fresh remainder across cycles. Ring evictions
+count dropped data instead of stopping training:
 `selfplay_buffer/dropped_pending_count` counts discarded positions awaiting a
 game outcome, and `selfplay_buffer/dropped_completed_count` counts discarded
 completed starts not yet consumed. Both are cumulative counts across all lanes;
@@ -439,8 +452,9 @@ layout requires conversion and is not implemented. Resume a features checkpoint
 with `--buffer-layout features` again. Checkpoints without a layout
 setting use `original`. Compact checkpoints can resume with either layout.
 Under the former overwrite guard, the 552-slot chess capacity failed a real run
-after warmup, despite passing short memory probes. The default capacity remains
-2073 slots with N=20, K=5; monitor drop counts when reducing capacity.
+after warmup, despite passing short memory probes. With evictions now counted
+rather than fatal, the default inherits AlphaZero's 532 slots; monitor
+pending and completed drop rates when sizing buffers.
 A bounded TPU recovery check with b10c256, batches of 4096, replay length 128,
 and consistency enabled passed 76 warmup plus 32 training cycles: 2160 self-play
 steps crossed the larger ring's first wrap with zero buffer errors. The compact

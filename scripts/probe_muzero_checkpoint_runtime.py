@@ -48,7 +48,7 @@ def main():
     print(json.dumps(report), flush=True)
     for _ in range(config["replay_buffer_warmup_steps"] // config["cycle_n_selfplay"]):
         state, _ = cycle(state, jnp.bool_(True))
-    state, metrics = cycle(state, jnp.bool_(False))
+    state, (metrics, _) = cycle(state, jnp.bool_(False))
     jax.block_until_ready(state)
     assert float(metrics["selfplay_buffer/error_count"]) == 0
     assert int(state.model_ts.n_updates) > 0
@@ -57,19 +57,22 @@ def main():
         report[name] = ckpt.save_checkpoint(path, state=state, cycle=1, config=algorithm.config)
         print(json.dumps({name: report[name]}), flush=True)
     report["stored_bytes"] = sum(p.stat().st_size for p in path.rglob("*") if p.is_file())
-    expected, expected_metrics = cycle(state, jnp.bool_(False))
+    expected, (expected_metrics, expected_arrays) = cycle(state, jnp.bool_(False))
     expected_hash = digest(expected)
     expected_metrics = jax.device_get(expected_metrics)
+    expected_arrays = jax.device_get(expected_arrays)
     # Restore owns/deletes these arrays; no duplicate full state remains on TPU.
     tick = time.monotonic()
     restored, start = ckpt.restore_checkpoint(path, state=expected, config=algorithm.config)
     report["restore_seconds"] = time.monotonic() - tick
     print(json.dumps({"restore_seconds": report["restore_seconds"]}), flush=True)
     assert start == 1
-    actual, actual_metrics = cycle(restored, jnp.bool_(False))
+    actual, (actual_metrics, actual_arrays) = cycle(restored, jnp.bool_(False))
     assert digest(actual) == expected_hash
     for key, value in expected_metrics.items():
         np.testing.assert_array_equal(value, np.asarray(actual_metrics[key]))
+    for key, value in expected_arrays.items():
+        np.testing.assert_array_equal(value, np.asarray(actual_arrays[key]))
     report.update(next_cycle_exact=True, updates=int(actual.model_ts.n_updates),
                   errors=float(actual_metrics["selfplay_buffer/error_count"]))
     (args.output / "report.json").write_text(json.dumps(report, indent=2) + "\n")

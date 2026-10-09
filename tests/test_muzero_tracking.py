@@ -20,6 +20,23 @@ def assembly():
     return module
 
 
+def test_persistence_wait_handles_database_before_schema(tmp_path, monkeypatch):
+    import sqlite3
+    import time
+    from trackio.sqlite_storage import SQLiteStorage
+    from nanoalphazero.tracking import _persisted_step
+
+    path = tmp_path / "initializing.db"
+    monkeypatch.setattr(SQLiteStorage, "get_project_db_path", lambda project: path)
+    with sqlite3.connect(path) as db:
+        identity = {"project": "test", "id": "run"}
+        assert _persisted_step(identity, time.monotonic() + 1) is None
+        db.execute("CREATE TABLE metrics (run_id TEXT, step INTEGER)")
+        db.execute("INSERT INTO metrics VALUES ('run', 200)")
+        db.commit()
+        assert _persisted_step(identity, time.monotonic() + 1) == 200
+
+
 def test_trackio_flags():
     assert parse_muzero_args([]).enable_trackio is None
     for flag in ("--enabled-trackio", "--enable-trackio"):
@@ -103,7 +120,7 @@ def test_host_tracking(assembly, monkeypatch, trackio_enabled, wandb_enabled, ba
     )
     state = SimpleNamespace(model_ts=SimpleNamespace(step=0, params={}))
     metrics = {"selfplay_buffer/error_count": 0, "loss": 0.5}
-    compiled = Mock(return_value=(state, metrics))
+    compiled = Mock(return_value=(state, (metrics, {"valid": []})))
     compiled.memory_analysis.return_value = None
     if fails:
         compiled.side_effect = RuntimeError("cycle failed")
@@ -180,7 +197,7 @@ def test_training_log_wait_precedes_checkpoint_even_on_timeout(assembly, monkeyp
     monkeypatch.setattr(ckpt, "save_checkpoint", save)
     monkeypatch.setattr(acpl, "make_acpl", lambda *a, **k: (evaluate, None))
     state = SimpleNamespace(model_ts=SimpleNamespace(step=0, params={}))
-    compiled = Mock(return_value=(state, {"selfplay_buffer/error_count": 0, "loss": 0.5}))
+    compiled = Mock(return_value=(state, ({"selfplay_buffer/error_count": 0, "loss": 0.5}, {"valid": []})))
     compiled.memory_analysis.return_value = None
     run_fn = Mock()
     run_fn.lower.return_value.compile.return_value = compiled
@@ -267,7 +284,7 @@ def test_host_acpl_count_and_viewer_are_distinct(assembly, monkeypatch, tmp_path
     tracker = tracking.TrainingTracker(run, {"trackio": {}}, last_step=resume_step)
     monkeypatch.setattr(tracking, "make_tracker", lambda *a, **k: tracker)
     state = SimpleNamespace(model_ts=SimpleNamespace(step=0, params={}))
-    compiled = Mock(return_value=(state, {"selfplay_buffer/error_count": 0, "loss": 0.5}))
+    compiled = Mock(return_value=(state, ({"selfplay_buffer/error_count": 0, "loss": 0.5}, {"valid": []})))
     compiled.memory_analysis.return_value = None
     run_fn = Mock()
     run_fn.lower.return_value.compile.return_value = compiled

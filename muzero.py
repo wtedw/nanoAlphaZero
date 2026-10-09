@@ -300,7 +300,10 @@ def make_muzero(config, rng, data_sharding=None):
     from nanoalphazero.core import make_env, RunnerState, DATA_PARALLEL_SHARDING
     from nanoalphazero.mcts import make_muzero_mcts, make_muzero_compression_probe
     from nanoalphazero.model import make_muzero_model
-    from nanoalphazero.muzero_metrics import aggregate_selfplay_metrics, empty_training_metrics
+    from nanoalphazero.muzero_metrics import (
+        aggregate_selfplay_metrics, empty_training_metrics,
+        training_batch_arrays, empty_training_arrays,
+    )
 
     config = dict(config)
     if config.get("enable_sharding", False):
@@ -342,7 +345,7 @@ def make_muzero(config, rng, data_sharding=None):
 
     @partial(jax.jit, donate_argnums=(0,))
     def run_fn(state, is_warmup=False):
-        """RunnerState -> updated RunnerState, cycle metrics.
+        """RunnerState -> updated RunnerState, (scalar metrics, sampled-root arrays).
 
         Collect N real steps per lane, drain completed windows, then perform M
         optimizer steps when replay is ready and this is not warmup.
@@ -387,16 +390,20 @@ def make_muzero(config, rng, data_sharding=None):
             batch = replay_buffer.sample(state.replay_buffer_state, key).experience
             batch = jax.tree.map(lambda x: x[:, 0], batch)
             model_ts, metrics = train_fn(state.model_ts, batch, is_warmup)
-            return state._replace(model_ts=model_ts, rng=rng), metrics
+            arrays = training_batch_arrays(batch, state.selfplay_state.step_count)
+            return state._replace(model_ts=model_ts, rng=rng), (metrics, arrays)
 
         def train_cycle(state):
-            state, metrics = jax.lax.scan(train_step, state, None, length=config["cycle_n_train"])
-            return state, jax.tree.map(lambda x: jnp.mean(x), metrics)
+            state, (metrics, arrays) = jax.lax.scan(train_step, state, None, length=config["cycle_n_train"])
+            return state, (jax.tree.map(lambda x: jnp.mean(x), metrics), arrays)
 
         ready = replay_buffer.can_sample(state.replay_buffer_state) & (errors == 0) & ~jnp.asarray(is_warmup)
         empty_metrics = empty_training_metrics(config.get("exp_self_consistency", False))
-        state, metrics = jax.lax.cond(ready, train_cycle, lambda s: (s, empty_metrics), state)
-        return state, {
+        empty_arrays = empty_training_arrays(config)
+        state, (metrics, arrays) = jax.lax.cond(
+            ready, train_cycle, lambda s: (s, (empty_metrics, empty_arrays)), state,
+        )
+        return state, ({
             **metrics, **aggregate_selfplay_metrics(selfplay_stack), "drain/n_slices": n_slices,
             "drain/remaining_fresh": buffered.num_valid_consumable,
             "selfplay_buffer/error_count": errors,
@@ -408,7 +415,7 @@ def make_muzero(config, rng, data_sharding=None):
             "runner_state/n_updates": state.model_ts.n_updates,
             "runner_state/n_selfplay_steps": state.selfplay_state.step_count,
             "train/ready": ready,
-        }
+        }, arrays)
 
     return MuZeroAlgorithm(
         config=config, env=env, model=model, run_fn=run_fn, runner_state=runner_state,
@@ -430,6 +437,7 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
     from nanoalphazero.eval.ladder import make_ladder
     from nanoalphazero.eval.acpl import make_acpl
     from nanoalphazero.tracking import make_tracker
+    from nanoalphazero.muzero_metrics import training_batch_histograms
 
     config = algorithm.config
     state, start_cycle = ckpt.restore_checkpoint(
@@ -476,7 +484,7 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
         )
         for warmup in range(num_warmup_cycles):
             started = time.monotonic()
-            state, metrics = run_cycle(state, jnp.bool_(True))
+            state, (metrics, _) = run_cycle(state, jnp.bool_(True))
             check(jax.device_get(metrics))
             print(json.dumps({"warmup_cycle": warmup + 1,
                               "timing/cycle_seconds": time.monotonic() - started}), flush=True)
@@ -487,11 +495,12 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
         cycle = start_cycle
         for cycle in range(start_cycle + 1, cycles + 1):
             started = time.monotonic()
-            state, metrics = run_cycle(state, jnp.bool_(False))
+            state, (metrics, array_metrics) = run_cycle(state, jnp.bool_(False))
             metrics = {name: float(value) for name, value in jax.device_get(metrics).items()}
             # device_get synchronizes execution; exclude diagnostics and disk I/O.
             metrics["timing/cycle_seconds"] = time.monotonic() - started
             diagnostic = DiagnosticOutput()
+            batch_histograms = {}
             period = config.get("diagnostic_period", 50)
             if tracker.should_log(cycle) and period and (
                 cycle == start_cycle + 1 or cycle % period == 0 or cycle == cycles
@@ -499,6 +508,7 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
                 if diagnose_fn is None:
                     diagnose_fn = make_diagnostics_fn(algorithm.model, algorithm.env, config)
                 diagnostic = diagnose_fn(state.model_ts.params)
+                batch_histograms = training_batch_histograms(jax.device_get(array_metrics))
                 metrics.update(diagnostic.scalar_metrics)
                 if algorithm.compression_probe is not None:
                     # Inspection has an independent key and never advances training RNG.
@@ -515,7 +525,8 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
                         metrics[f"memory/{name}_max"] = max(stats[name] for stats in memory)
             check(metrics)
             tracker.log_training(metrics, step=cycle, tables=diagnostic.tables,
-                                 histograms=diagnostic.histograms, figures=diagnostic.figures)
+                                 histograms={**batch_histograms, **diagnostic.histograms},
+                                 figures=diagnostic.figures)
             extra_metrics = {}
             # Persist the completed training cycle before potentially long evaluations.
             if checkpoint_path and (cycle == start_cycle + 1 or (

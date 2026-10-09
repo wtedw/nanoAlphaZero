@@ -247,8 +247,8 @@ def test_enabled_cycle_checkpoint_continuation(runner, tmp_path, sharded, layout
             pytest.skip("Requires four devices")
         cfg["enable_sharding"] = True
     algorithm = runner.make_muzero(cfg, jax.random.PRNGKey(0))
-    state, metrics = algorithm.run_fn(algorithm.runner_state, True)
-    state, metrics = algorithm.run_fn(state, False)
+    state, (metrics, _) = algorithm.run_fn(algorithm.runner_state, True)
+    state, (metrics, _) = algorithm.run_fn(state, False)
     assert float(metrics["selfplay_buffer/error_count"]) == 0
     assert int(state.model_ts.n_updates) == 1
     assert float(metrics["consistency/n_valid"]) > 0

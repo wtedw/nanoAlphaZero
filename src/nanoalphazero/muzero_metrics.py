@@ -10,6 +10,38 @@ BATCH_COUNTS = (
 )
 NORMS = ("grad_norm", "param_norm", "update_norm")
 OUTCOMES = ("selfplay/p1_wins", "selfplay/p2_wins", "selfplay/p_just_tied")
+SAMPLE_FIELDS = ("row_id", "col_id", "game_id", "global_step_id", "ep_step")
+
+
+def training_batch_arrays(batch, selfplay_step):
+    """Root provenance from the actual optimizer batch, not a diagnostic resample."""
+    arrays = {name: getattr(batch, name) for name in SAMPLE_FIELDS}
+    arrays["valid"] = jnp.any(batch.policy_mask, axis=-1)
+    arrays["age"] = selfplay_step.astype(jnp.int32) - batch.global_step_id.astype(jnp.int32)
+    return arrays
+
+
+def empty_training_arrays(config):
+    """Fixed scan output shape for warmup/unready cycles; valid masks hide padding."""
+    from nanoalphazero.buffers import get_dummy_muzero_training_sample
+
+    dummy = get_dummy_muzero_training_sample(config)
+    shape = (config["cycle_n_train"], config["train_batch_size"])
+    arrays = {name: jnp.zeros(shape, getattr(dummy, name).dtype) for name in SAMPLE_FIELDS}
+    return {**arrays, "valid": jnp.zeros(shape, bool), "age": jnp.zeros(shape, jnp.int32)}
+
+
+def training_batch_histograms(arrays):
+    """Flatten sampled roots across optimizer batches, excluding non-training slots."""
+    import numpy as np
+
+    valid = np.asarray(arrays["valid"]).reshape(-1)
+    if not np.any(valid):
+        return {}
+    names = {"row_id": "sampled_row_ids", "col_id": "sampled_col_ids",
+             "game_id": "sampled_game_ids", "ep_step": "ep_step", "age": "sample_age"}
+    return {f"train_batch/{label}_distribution": np.asarray(arrays[field]).reshape(-1)[valid]
+            for field, label in names.items()}
 
 
 def training_batch_metrics(batch):

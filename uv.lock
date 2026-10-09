@@ -855,7 +855,7 @@ requires-dist = [
     { name = "python-chess", specifier = "==1.999" },
     { name = "safetensors", specifier = "==0.8.0" },
     { name = "scipy", specifier = "==1.16.3" },
-    { name = "trackio", marker = "extra == 'trackio'", specifier = ">=0.19,<1" },
+    { name = "trackio", marker = "extra == 'trackio'", editable = "../trackio" },
     { name = "tyro", specifier = ">=1.0.16" },
     { name = "wandb", specifier = "==0.21.0" },
     { name = "zstandard", specifier = ">=0.23,<1" },
@@ -1770,8 +1770,7 @@ wheels = [
 
 [[package]]
 name = "trackio"
-version = "0.40.0"
-source = { registry = "https://pypi.org/simple" }
+source = { editable = "../trackio" }
 dependencies = [
     { name = "brotli" },
     { name = "gradio-client" },
@@ -1783,9 +1782,33 @@ dependencies = [
     { name = "starlette" },
     { name = "uvicorn", extra = ["standard"] },
 ]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/8f/60/69c8baac61bab8be099d54bc227cc5db845f7f2deaa69a3105e45fbca8c5/trackio-0.40.0-py3-none-any.whl", hash = "sha256:d3815222da697432cd4232f254b5b2b60aaa1e5b87bfff8f41101807b3fe7bc1", size = 3087146, upload-time = "2026-09-30T22:15:30.049Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "brotli", specifier = ">=1.0.0,<2.0.0" },
+    { name = "gradio-client", specifier = ">=2.0.0,<3.0.0" },
+    { name = "huggingface-hub", specifier = ">=1.10.0,<2" },
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.0.0,<2.0.0" },
+    { name = "numpy", specifier = "<3.0.0" },
+    { name = "nvidia-ml-py", marker = "extra == 'gpu'", specifier = ">=12.0.0" },
+    { name = "orjson", specifier = ">=3.0,<4.0.0" },
+    { name = "pillow", specifier = "<13.0.0" },
+    { name = "playwright", marker = "extra == 'dev'", specifier = "==1.60.0" },
+    { name = "psutil", marker = "extra == 'apple-gpu'", specifier = ">=5.9.0" },
+    { name = "psutil", marker = "extra == 'cpu'", specifier = ">=5.9.0" },
+    { name = "psutil", marker = "extra == 'gpu'", specifier = ">=5.9.0" },
+    { name = "pyarrow", marker = "extra == 'spaces'", specifier = ">=21.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0,<9.0.0" },
+    { name = "pytest-playwright", marker = "extra == 'dev'", specifier = ">=0.7.0,<1.0.0" },
+    { name = "python-multipart", specifier = ">=0.0.9,<1.0.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = "==0.9.3" },
+    { name = "starlette", specifier = "<2.0.0" },
+    { name = "tbparse", marker = "extra == 'tensorboard'", specifier = "==0.0.9" },
+    { name = "tensorboardx", marker = "extra == 'tensorboard'", specifier = ">=2.0.0,<3.0.0" },
+    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0,<1.0.0" },
 ]
+provides-extras = ["apple-gpu", "cpu", "dev", "gpu", "mcp", "spaces", "tensorboard"]
 
 [[package]]
 name = "typeguard"

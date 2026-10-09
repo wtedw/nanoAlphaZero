@@ -115,6 +115,11 @@ def _persisted_step(identity, deadline):
         return None
     with closing(sqlite3.connect(uri, uri=True, timeout=remaining)) as connection:
         connection.set_progress_handler(lambda: int(time.monotonic() >= deadline), 1000)
+        # A new project's file can appear before its writer creates the schema.
+        if connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='metrics'"
+        ).fetchone() is None:
+            return None
         return connection.execute("SELECT MAX(step) FROM metrics WHERE run_id = ?",
                                   (identity["id"],)).fetchone()[0]
 
