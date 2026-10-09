@@ -420,52 +420,21 @@ def make_muzero(config, rng, data_sharding=None):
     )
 
 
-def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None, evaluator=None):
+def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
+               evaluator=None, checkpoint_mode="full", trackio_run=None):
     """Compile once, warm up replay, then run and monitor persistent cycles."""
     import jax
     import jax.numpy as jnp
     import numpy as np
-    from nanoalphazero.checkpoint import (
-        save_muzero_checkpoint, load_muzero_checkpoint, muzero_checkpoint_payload,
-    )
+    from nanoalphazero import ckpt
     from nanoalphazero.eval.ladder import make_ladder
     from nanoalphazero.eval.acpl import make_acpl
+    from nanoalphazero.tracking import make_muzero_logger
 
     config = algorithm.config
-    state = algorithm.runner_state
-    start_cycle = 0
-    include_replay = config.get("muzero_checkpoint_replay", True)
-    if resume is not None:
-        payload, saved_config = load_muzero_checkpoint(
-            resume, muzero_checkpoint_payload(state, 0, include_replay)
-        )
-        # Older checkpoints predate the layout setting. Compact checkpoints
-        # rebuild buffers, so their layout and self-play capacity may change.
-        saved_config.setdefault("buffer_layout", "original")
-        resume_config = {"buffer_layout": "original", **config}
-        if not include_replay:
-            resume_config.update(
-                selfplay_buffer_max_len=saved_config["selfplay_buffer_max_len"],
-                buffer_layout=saved_config["buffer_layout"],
-            )
-        # Evaluation can be enabled or reconfigured without changing training state.
-        saved_training_config = {key: value for key, value in saved_config.items() if key != "acpl"}
-        resume_training_config = {key: value for key, value in resume_config.items() if key != "acpl"}
-        if saved_training_config != resume_training_config:
-            raise ValueError(
-                "MuZero resume requires identical resolved configuration "
-                "except selfplay_buffer_max_len and buffer_layout for compact checkpoints"
-            )
-        start_cycle = int(payload["cycle"])
-        if include_replay:
-            state = payload["runner_state"]
-        else:
-            state = state._replace(model_ts=payload["model_ts"], rng=payload["rng"])
-            print("Compact checkpoint restored; restarting games and warming up empty buffers", flush=True)
-        if algorithm.data_sharding is not None:
-            # Restore the original placement, including replicated scalar counters.
-            placement = jax.tree.map(lambda x: x.sharding, algorithm.runner_state)
-            state = jax.device_put(state, placement)
+    state, start_cycle = ckpt.restore_checkpoint(
+        resume, state=algorithm.runner_state, config=config, mode=checkpoint_mode,
+    )
 
     def check(metrics):
         if int(metrics["selfplay_buffer/error_count"]):
@@ -490,20 +459,7 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None, 
     )}
     print(json.dumps({"compile_seconds": time.monotonic() - started,
                       "compiled_memory": compiled_memory}), flush=True)
-    if config.get("enable_trackio", False):
-        try:
-            import trackio
-        except ModuleNotFoundError as exc:
-            if exc.name != "trackio":
-                raise
-            raise RuntimeError(
-                "Trackio logging requires the optional dependency: "
-                "uv run --extra trackio python muzero.py --enabled-trackio"
-            ) from exc
-        run = trackio.init(project="nanoAlphaZero-muzero", config=config)
-    elif config.get("enable_wandb", False):
-        import wandb
-        run = wandb.init(project="nanoAlphaZero-muzero", config=config)
+    run = make_muzero_logger(config, resume=resume, trackio_run=trackio_run)
     try:
         head_probe = None
         ladder_fn, ladder_state = make_ladder(
@@ -515,16 +471,15 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None, 
         )
         if evaluator is not None:
             evaluator.run(start_cycle, state, force=True)
-        if resume is None or not include_replay:
-            num_warmup_cycles = (
-                config.get("replay_buffer_warmup_steps", 100) // config["cycle_n_selfplay"]
-            )
-            for warmup in range(num_warmup_cycles):
-                started = time.monotonic()
-                state, metrics = run_cycle(state, jnp.bool_(True))
-                check(jax.device_get(metrics))
-                print(json.dumps({"warmup_cycle": warmup + 1,
-                                  "timing/cycle_seconds": time.monotonic() - started}), flush=True)
+        num_warmup_cycles = 0 if resume is not None and checkpoint_mode == "full" else (
+            config.get("replay_buffer_warmup_steps", 100) // config["cycle_n_selfplay"]
+        )
+        for warmup in range(num_warmup_cycles):
+            started = time.monotonic()
+            state, metrics = run_cycle(state, jnp.bool_(True))
+            check(jax.device_get(metrics))
+            print(json.dumps({"warmup_cycle": warmup + 1,
+                              "timing/cycle_seconds": time.monotonic() - started}), flush=True)
         # Match AlphaZero's host-loop budget, including its step counter on resume.
         budget = config["num_iters"] if num_iters is None else num_iters
         n_cycles = max(0, (budget - int(state.model_ts.step)) // config["cycle_n_selfplay"])
@@ -562,6 +517,15 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None, 
                     if all(name in stats for stats in memory):
                         metrics[f"memory/{name}_max"] = max(stats[name] for stats in memory)
             check(metrics)
+            # Persist the completed training cycle before potentially long evaluations.
+            if checkpoint_path and (cycle == start_cycle + 1 or (
+                config.get("ckpt_period") and cycle % config["ckpt_period"] == 0
+            ) or cycle == cycles):
+                checkpoint_metrics = ckpt.save_checkpoint(
+                    checkpoint_path, state=state, cycle=cycle, config=config, mode=checkpoint_mode,
+                    metadata=run.metadata if run is not None else None,
+                )
+                metrics.update({f"checkpoint/{key}": value for key, value in checkpoint_metrics.items()})
             ladder_state, ladder_metrics = ladder_fn(ladder_state, cycle, state.model_ts.params)
             metrics.update(ladder_metrics)
             acpl_state, acpl_metrics = eval_acpl_fn(acpl_state, cycle, state.model_ts.params)
@@ -571,15 +535,10 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None, 
             print(json.dumps({"cycle": cycle, **metrics}), flush=True)
             if run is not None:
                 run.log({**metrics, **diagnostic_logs}, step=cycle)
-            if checkpoint_path and (cycle == start_cycle + 1 or (
-                config.get("ckpt_period") and cycle % config["ckpt_period"] == 0
-            )):
-                save_muzero_checkpoint(
-                    checkpoint_path, muzero_checkpoint_payload(state, cycle, include_replay), config
-                )
-        if checkpoint_path:
-            save_muzero_checkpoint(
-                checkpoint_path, muzero_checkpoint_payload(state, cycle, include_replay), config
+        if checkpoint_path and n_cycles == 0:
+            ckpt.save_checkpoint(
+                checkpoint_path, state=state, cycle=cycle, config=config, mode=checkpoint_mode,
+                metadata=run.metadata if run is not None else None,
             )
     finally:
         if run is not None:
@@ -596,7 +555,7 @@ def main(argv=None):
     if args.platform:
         os.environ["JAX_PLATFORMS"] = args.platform
     overrides = {name: value for name, value in vars(args).items()
-                 if value is not None and name not in ("env", "ckpt", "acpl", "platform", "ladder_period")
+                 if value is not None and name not in ("env", "ckpt", "acpl", "platform", "ladder_period", "trackio_run")
                  and not name.startswith("hex_eval_")}
     if args.acpl.period:
         from nanoalphazero.eval.acpl.config import acpl_config_dict
@@ -605,8 +564,6 @@ def main(argv=None):
         overrides["eval_period"] = args.ladder_period
     if args.ckpt.every is not None:
         overrides["ckpt_period"] = args.ckpt.every
-    if args.ckpt.mode is not None:
-        overrides["muzero_checkpoint_replay"] = args.ckpt.mode == "full"
     config = get_muzero_config(args.env, **overrides)
     pool = None
     try:
@@ -621,7 +578,8 @@ def main(argv=None):
         evaluator = (MuZeroHexEvaluator(algorithm, pool, args.hex_eval_period, args.hex_eval_output)
                      if pool is not None else None)
         run_muzero(algorithm, checkpoint_path=args.ckpt.save,
-                   resume=args.ckpt.resume, evaluator=evaluator)
+                   resume=args.ckpt.resume, evaluator=evaluator, checkpoint_mode=args.ckpt.mode,
+                   trackio_run=args.trackio_run)
     finally:
         if pool is not None:
             pool.close()

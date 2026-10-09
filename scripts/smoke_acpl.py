@@ -43,7 +43,8 @@ def main():
     from nanoalphazero.core import make_env, DATA_PARALLEL_SHARDING, REPLICATED_SHARDING
     from nanoalphazero.model import make_model, make_muzero_model
     from nanoalphazero.mcts import make_mcts, make_muzero_mcts
-    from nanoalphazero.checkpoint import load_checkpoint, apply_checkpoint_model_config, load_muzero_checkpoint
+    from nanoalphazero.checkpoint import load_checkpoint, apply_checkpoint_model_config
+    from nanoalphazero.ckpt import load_muzero_checkpoint
     from nanoalphazero.eval.acpl import make_acpl, AcplConfig
     from nanoalphazero.eval.acpl.config import acpl_config_dict
 

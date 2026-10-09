@@ -29,7 +29,7 @@ entirety. Both host loops now use the extracted shared strength ladder.
 | `eval/ladder.py` | Shared explicit-state ladder against random play and frozen past selves |
 | `eval/matches.py` | Shared forced openings and color-swapped batched matches |
 | `eval/acpl/` | Shared chess self-play scored by Stockfish; explicit evaluation state |
-| `checkpoint.py` | Full persistent-state snapshots |
+| `ckpt/` | MuZero save/restore API, full/partial state handling, safetensors and compressed storage |
 | `cli.py` | Root script arguments; existing entry points unchanged |
 
 `make_muzero()` returns the top-level `MuZeroAlgorithm` dataclass, exposing
@@ -99,6 +99,17 @@ Metrics describe the evaluated rung before any promotion; qualifying deltas are
 averaged to set the next rung height. Ratings are relative ladder estimates,
 not externally calibrated chess Elo. AlphaZero keeps its ASCII rating chart.
 Existing imports of match helpers from `training.py` and `core.py` still work.
+
+### Compressed checkpoints
+
+Use `--ckpt.save artifacts/run.ckpt`
+to save a full snapshot to a compressed checkpoint directory. Resume with
+`--ckpt.resume artifacts/run.ckpt` and the same training
+configuration. All CLI saves are compressed. Full checkpoints are the default
+and restore games/buffers without warmup. Use `--ckpt.mode partial` to deliberately
+omit games and buffers. The rectangular compressed format is prototype v2;
+v1 compressed directories are not migrated. Scheduled and final-cycle saves happen before evaluation. See
+[storage, memory, and durability details](../src/nanoalphazero/ckpt/README.md).
 
 ### Chess ACPL
 
@@ -340,17 +351,19 @@ its retained suffix receives correct returns at termination; discarded prefix
 positions are not needed for those returns. Missing transitions within a sampled
 window and unsupported environment truncation remain fatal errors.
 
-Full checkpoints use `nanoalphazero.muzero.persistent.v4` and include environment
+Full checkpoints include environment
 state, both buffers, optimizer, model parameters, RNG, and cycle number. They
-support exact continuation. Chess defaults to compact checkpoints using
+support exact continuation. MuZero training defaults to full compressed snapshots.
+Legacy full safetensors checkpoints use `nanoalphazero.muzero.persistent.v4`;
+legacy partial safetensors checkpoints use
 `nanoalphazero.muzero.compact.v1`: parameters, optimizer, RNG, and cycle only.
 The v4 format records position-level exploration masks and window-based start
 eligibility, alongside the unified observation sequence and pending-drop counter.
 Older full checkpoints are rejected: v1/v2 have different state layouts, and v3
 replay lacks exploration flags needed to reconstruct the new masks. Compact v1
 checkpoints remain compatible because they rebuild both buffers on resume.
-Compact resume starts fresh games and buffers and reruns warmup; it is not exact
-trajectory continuation. Compact checkpoints allow changing
+Partial resume starts fresh games and buffers and reruns warmup; it is not exact
+trajectory continuation. Partial checkpoints allow changing
 `selfplay_buffer_max_len` and `buffer_layout` when rebuilding buffers; all other
 resolved settings must match. Full checkpoints require identical configuration.
 Full checkpoints retain their selected layout; switching a full checkpoint's
@@ -379,16 +392,22 @@ MuZero groups checkpoint CLI options under `--ckpt.*`:
 | `--ckpt.save PATH` | Save to this path; omit to disable saving. |
 | `--ckpt.resume PATH` | Restore this checkpoint; does not enable saving. |
 | `--ckpt.every N` | Save every N training cycles; defaults to the game's checkpoint period. Zero disables periodic saves, but first/final saves remain. |
-| `--ckpt.mode compact\|full` | Snapshot contents for saving and restoring; defaults to compact for chess, full otherwise. Must match the checkpoint when resuming. |
+| `--ckpt.mode full\|partial` | Defaults to full, including games/buffers. Partial rebuilds them on resume. All CLI saves use compressed directories. |
+
+Resume without saving by providing only `--ckpt.resume`; checkpoint cadence can
+change or be omitted. With `--enable-trackio`, checkpoint metadata automatically
+selects the original local Trackio run using `resume="must"`. Use
+`--trackio-run NAME` to explicitly select an existing run. The local tracking
+database must remain available. Recomputed cycles already present in that run
+are skipped by the logger, while training continues normally.
 
 These replace the flat MuZero options `--save`, `--resume`, `--ckpt-period`, and
 `--[no-]muzero-checkpoint-replay`. AlphaZero's CLI is unchanged. This grouping
-preserves checkpoint formats, configuration matching, and save timing.
+preserves checkpoint formats and configuration matching. Saves now precede evaluation.
 
-Run chess with `uv run python muzero.py --env chess --ckpt.save artifacts/chess.safetensors`.
+Run chess with `uv run python muzero.py --env chess --ckpt.save artifacts/chess.ckpt`.
 Saving remains opt-in; the first cycle, periodic cycles (50 for chess), and final
-cycle update that path. Add `--ckpt.mode full` for full snapshots,
-`--mcts-num-k-actions N` to set target support, or `--no-exp-bnk-action-weights`
+cycle update that path. Add `--mcts-num-k-actions N` to set target support, or `--no-exp-bnk-action-weights`
 for dense targets. `--replay-buffer-total-size` counts unroll items;
 `--selfplay-buffer-max-len` counts transitions per lane. An explicit
 `--replay-buffer-max-len` overrides the capacity calculation.
@@ -407,10 +426,10 @@ MoHex adapter (the engine pool starts before JAX initializes):
 ```bash
 uv run python muzero.py --env hex4 --platform tpu --num-iters 5000 \
   --replay-buffer-warmup-steps 20 --muzero-unroll-steps 3 --no-enable-wandb \
-  --ckpt.mode compact --ckpt.every 50 \
+  --ckpt.every 50 \
   --hex-eval-period 50 --hex-eval-engine-path /path/to/mohex \
   --hex-eval-output artifacts/hex4-NEW/mohex \
-  --ckpt.save artifacts/hex4-NEW/latest.safetensors
+  --ckpt.save artifacts/hex4-NEW/latest.ckpt
 ```
 
 The evaluation directory must be new. Baseline, scheduled, and final evaluations
@@ -451,7 +470,7 @@ self-play wrapper equivalence, research model/loss/search equivalence,
 checkpoint continuation, and blocking optimizer updates on buffer errors.
 Chess coverage includes a 512-step packed/sparse collection-drain-training cycle,
 packed/decoded loss and gradient equivalence, dense/sparse KL gradients, full
-padding action support, storage estimates, and compact/full checkpoint modes.
+padding action support, storage estimates, and partial/full checkpoint modes.
 Then run the complete CPU suite using the repository instructions. These
 checks establish logic only; they do not validate TPU performance.
 

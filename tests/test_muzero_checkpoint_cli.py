@@ -15,10 +15,10 @@ from nanoalphazero.config import get_muzero_config
 @pytest.mark.parametrize(
     "env,options,expected_mode,expected_period",
     [
-        ("chess", [], False, None),
-        ("hex4", [], True, None),
-        ("hex4", ["--ckpt.mode", "compact", "--ckpt.every", "400", "--ladder-period", "0"], False, 400),
-        ("chess", ["--ckpt.mode", "full", "--ckpt.every", "0"], True, 0),
+        ("chess", [], "full", None),
+        ("hex4", [], "full", None),
+        ("hex4", ["--ckpt.every", "400", "--ladder-period", "0"], "full", 400),
+        ("chess", ["--ckpt.mode", "partial", "--ckpt.every", "0"], "partial", 0),
     ],
 )
 def test_checkpoint_options_reach_runner(monkeypatch, env, options, expected_mode, expected_period):
@@ -40,26 +40,28 @@ def test_checkpoint_options_reach_runner(monkeypatch, env, options, expected_mod
     monkeypatch.setattr(module, "run_muzero", run)
     module.main([
         "--env", env, "--platform", "cpu",
-        "--ckpt.save", "artifacts/output.safetensors",
+        "--ckpt.save", "artifacts/output.ckpt",
         "--ckpt.resume", "artifacts/input.safetensors", *options,
     ])
     config = captured["config"]
-    assert config["muzero_checkpoint_replay"] is expected_mode
+    assert "muzero_checkpoint_replay" not in config
+    assert captured["checkpoint_mode"] == expected_mode
     assert config["ckpt_period"] == (
         get_muzero_config(env)["ckpt_period"] if expected_period is None else expected_period
     )
     assert "ckpt" not in config
     assert "ladder_period" not in config
     assert config["eval_period"] == (0 if "--ladder-period" in options else get_muzero_config(env)["eval_period"])
-    assert captured["checkpoint_path"] == Path("artifacts/output.safetensors")
+    assert captured["checkpoint_path"] == Path("artifacts/output.ckpt")
     assert captured["resume"] == Path("artifacts/input.safetensors")
+    assert not hasattr(parse_muzero_args([]).ckpt, "compression")
 
 
 def test_resume_does_not_enable_saving():
     args = parse_muzero_args(["--ckpt.resume", "artifacts/input.safetensors"])
     assert args.ckpt.save is None
     assert args.ckpt.every is None
-    assert args.ckpt.mode is None
+    assert args.ckpt.mode == "full"
 
 
 def test_checkpoint_help_without_jax():
@@ -78,5 +80,6 @@ assert "jax" not in sys.modules
         capture_output=True, text=True, check=True,
     )
     assert "ckpt options" in result.stdout
+    assert "--ckpt.compression" not in result.stdout
     for name in ("save", "resume", "every", "mode"):
         assert f"--ckpt.{name}" in result.stdout

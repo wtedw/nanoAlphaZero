@@ -337,14 +337,14 @@ MuZeroEnv = Literal[tuple(CONFIG_FACTORIES)]
 class MuZeroCheckpointArgs:
     """Checkpoint output, restoration, and snapshot contents."""
 
-    # Output safetensors path. Omit to disable saving.
+    # Output compressed checkpoint directory. Omit to disable saving.
     save: Path | None = None
     # Restore a checkpoint. Does not enable saving.
     resume: Path | None = None
     # Period in training cycles; 0 disables periodic saves. First/final saves remain.
     every: int | None = None
-    # Compact restarts games/buffers; full restores them. Default: chess compact, others full.
-    mode: Literal["compact", "full"] | None = None
+    # Full preserves games/buffers; partial restarts them (also for older compact snapshots).
+    mode: Literal["full", "partial"] = "full"
 
 
 @dataclass
@@ -405,6 +405,8 @@ class MuZeroArgs:
     enable_trackio: Annotated[
         bool | None, tyro.conf.arg(aliases=["--enabled-trackio"])
     ] = None
+    # Resume this existing local Trackio run; checkpoint identity is used otherwise.
+    trackio_run: str | None = None
     muzero_remat_blocks: bool | None = None
     muzero_remat_unroll: bool | None = None
     exp_bnk_action_weights: bool | None = None

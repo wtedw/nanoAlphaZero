@@ -572,7 +572,6 @@ def get_muzero_config(env="hex4", **overrides):
         exp_train_on_exploit_unroll_states=True,
         muzero_network="spatial", muzero_unroll_steps=5, muzero_discount=1.0,
         muzero_remat_blocks=env == "chess", muzero_remat_unroll=env == "chess",
-        muzero_checkpoint_replay=env != "chess",
         muzero_memory_fraction=0.75,
         enable_wandb=False,
     )

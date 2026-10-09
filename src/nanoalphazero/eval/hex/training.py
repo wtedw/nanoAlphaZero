@@ -168,7 +168,7 @@ class MuZeroHexEvaluator:
         (self.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
     def run(self, cycle, state, *, force=False):
-        from nanoalphazero.checkpoint import save_muzero_checkpoint, muzero_checkpoint_payload
+        from nanoalphazero.ckpt import save_muzero_checkpoint, muzero_checkpoint_payload
 
         if not force and cycle % self.period:
             return {}
@@ -198,7 +198,7 @@ class MuZeroHexEvaluator:
         save_muzero_checkpoint(
             self.output / f"cycle-{cycle:06d}.safetensors",
             muzero_checkpoint_payload(state, cycle, False),
-            {**self.algorithm.config, "muzero_checkpoint_replay": False},
+            self.algorithm.config,
         )
         return {**metrics, "mohex/both_modes_passed": int(success),
                 "mohex/consecutive_passes": self.streak}

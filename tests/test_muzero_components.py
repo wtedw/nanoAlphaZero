@@ -107,7 +107,7 @@ def test_muzero_mohex_cadence_and_success(config, assembly, tmp_path, monkeypatc
     from types import SimpleNamespace
     from nanoalphazero.eval.hex.training import MuZeroHexEvaluator
     from nanoalphazero.eval.hex.training import HexTrainingEvaluator
-    import nanoalphazero.checkpoint as checkpoint
+    import nanoalphazero.ckpt as checkpoint
 
     algorithm = assembly.make_muzero(config, jax.random.PRNGKey(7))
     engine = tmp_path / "engine"
@@ -134,7 +134,7 @@ def test_muzero_mohex_cadence_and_success(config, assembly, tmp_path, monkeypatc
     assert evaluator.run(12, state, force=True)["mohex/consecutive_passes"] == 0
     assert calls == [5, 5, 10, 10, 12, 12]
     assert len(saved) == 3
-    assert all(row[2]["muzero_checkpoint_replay"] is False for row in saved)
+    assert all("runner_state" not in row[1] for row in saved)
     rows = [json.loads(line) for line in (tmp_path / "results/scores.jsonl").read_text().splitlines()]
     assert [row["both_modes_passed"] for row in rows] == [True, True, False]
 
@@ -567,13 +567,16 @@ def test_host_uses_alphazero_step_budgets(config, assembly, tmp_path):
     algorithm = assembly.make_muzero(cfg, jax.random.PRNGKey(0))
     path = tmp_path / "budget.safetensors"
     state = run_muzero(algorithm, checkpoint_path=path)
+    assert (path / "LATEST").is_file()  # Host saves are compressed by default.
     # Floor both budgets to complete N=10 self-play cycles, like AlphaZero.
     # Two warmup cycles collect without updating; two training cycles update M=3.
     assert int(state.selfplay_state.step_count) == 40
     assert int(state.model_ts.n_updates) == 6
     assert int(state.model_ts.step) == 6
-    fresh = assembly.make_muzero(cfg, jax.random.PRNGKey(0))
+    generation = (path / "LATEST").read_bytes()
+    fresh = assembly.make_muzero({**cfg, "ckpt_period": 200}, jax.random.PRNGKey(0))
     restored = run_muzero(fresh, resume=path)
+    assert (path / "LATEST").read_bytes() == generation  # Resume-only never saves.
     # Preserve AlphaZero's existing resume formula even when N != M:
     # (25 - 6 optimizer steps) // 10 = one more cycle, without repeating warmup.
     assert int(restored.selfplay_state.step_count) == 50
@@ -614,7 +617,7 @@ def test_muzero_root_temperature_matches_alphazero(config, monkeypatch, enabled)
 
 
 def test_cycle_and_checkpoint_continuation(config, assembly, tmp_path):
-    from nanoalphazero.checkpoint import save_muzero_checkpoint, load_muzero_checkpoint
+    from nanoalphazero.ckpt import save_muzero_checkpoint, load_muzero_checkpoint
 
     algorithm = assembly.make_muzero(config, jax.random.PRNGKey(0))
     state, metrics = algorithm.run_fn(algorithm.runner_state, jnp.bool_(False))
@@ -635,6 +638,27 @@ def test_cycle_and_checkpoint_continuation(config, assembly, tmp_path):
     continued, _ = algorithm.run_fn(state, jnp.bool_(False))
     restored, _ = algorithm.run_fn(loaded["runner_state"], jnp.bool_(False))
     assert_trees_equal(continued, restored)
+
+
+def test_compressed_checkpoint_precedes_failing_evaluation(config, assembly, tmp_path, monkeypatch):
+    from nanoalphazero.eval import acpl
+    from nanoalphazero.ckpt import load_muzero_checkpoint, muzero_checkpoint_payload
+
+    config = {**config, "num_iters": 10, "replay_buffer_warmup_steps": 0, "eval_period": 0}
+    algorithm = assembly.make_muzero(config, jax.random.PRNGKey(0))
+
+    def fail(*args):
+        raise RuntimeError("evaluation interrupted")
+
+    monkeypatch.setattr(acpl, "make_acpl", lambda *args, **kwargs: (fail, None))
+    path = tmp_path / "before-eval.ckpt"
+    with pytest.raises(RuntimeError, match="evaluation interrupted"):
+        assembly.run_muzero(algorithm, checkpoint_path=path)
+    # Build a fresh template because run_cycle donates its initial arrays.
+    fresh = assembly.make_muzero(config, jax.random.PRNGKey(1))
+    restored, _ = load_muzero_checkpoint(path, muzero_checkpoint_payload(fresh.runner_state, 0, True))
+    assert int(restored["cycle"]) == 1
+    assert int(restored["runner_state"].model_ts.n_updates) == 1
 
 
 def test_host_threads_ladder_state_and_logs_metrics(config, assembly, monkeypatch, capsys):
@@ -707,7 +731,7 @@ def test_error_blocks_optimizer_updates(config, assembly, error):
 
 
 def test_evictions_allow_optimizer_updates(config, assembly, tmp_path):
-    from nanoalphazero.checkpoint import save_muzero_checkpoint, load_muzero_checkpoint
+    from nanoalphazero.ckpt import save_muzero_checkpoint, load_muzero_checkpoint
 
     # T=4 forces eviction before tic-tac-toe can finish (at least five plies).
     config = {**config, "selfplay_buffer_max_len": 4, "selfplay_buffer_min_len": 1}
@@ -814,7 +838,7 @@ def test_packed_sparse_sequences_keep_storage_and_full_padding_space(chess_confi
 def test_chess_packed_sparse_cycle_and_checkpoint(chess_config, assembly, tmp_path, sharded):
     from nanoalphazero.buffers import combine_observation_vmap, muzero_storage_spec
     run_muzero = assembly.run_muzero
-    from nanoalphazero.checkpoint import (
+    from nanoalphazero.ckpt import (
         save_muzero_checkpoint, load_muzero_checkpoint, muzero_checkpoint_payload,
     )
 
@@ -872,24 +896,25 @@ def test_chess_packed_sparse_cycle_and_checkpoint(chess_config, assembly, tmp_pa
 
 @pytest.mark.parametrize("capacity", [16, 32])
 @pytest.mark.parametrize("layout", ["original", "features"])
-def test_compact_resume_restarts_buffers_and_runs_warmup(config, assembly, tmp_path, capacity, layout):
-    from nanoalphazero.checkpoint import (
+def test_partial_resume_restarts_buffers_and_runs_warmup(config, assembly, tmp_path, capacity, layout):
+    from nanoalphazero.ckpt import (
         save_muzero_checkpoint, muzero_checkpoint_payload,
     )
     run_muzero = assembly.run_muzero
 
-    config = {**config, "muzero_checkpoint_replay": False, "replay_buffer_warmup_steps": 10}
+    config = {**config, "replay_buffer_warmup_steps": 10}
     algorithm = assembly.make_muzero(config, jax.random.PRNGKey(0))
     state, _ = algorithm.run_fn(algorithm.runner_state, jnp.bool_(False))
     payload = muzero_checkpoint_payload(state, 1, False)
     path = tmp_path / "compact.safetensors"
     # Compact checkpoints written before the flag also support switching layout.
     saved_config = {key: value for key, value in algorithm.config.items() if key != "buffer_layout"}
+    saved_config["ckpt_period"] = 200  # Save cadence can change on resume.
     save_muzero_checkpoint(path, payload, saved_config)
     resumed_config = {**config, "selfplay_buffer_max_len": capacity, "buffer_layout": layout,
                       "acpl": {"period": 0, "output": str(tmp_path / "new-acpl")}}
     fresh = assembly.make_muzero(resumed_config, jax.random.PRNGKey(0))
-    restored = run_muzero(fresh, num_iters=1, resume=path)
+    restored = run_muzero(fresh, num_iters=1, resume=path, checkpoint_mode="partial")
     assert int(restored.model_ts.n_updates) == int(state.model_ts.n_updates)
     assert int(restored.selfplay_state.step_count) == config["cycle_n_selfplay"]
     assert int(restored.selfplay_buffer_state.overwritten_count) == 0
@@ -902,7 +927,7 @@ def test_compact_resume_restarts_buffers_and_runs_warmup(config, assembly, tmp_p
     # Storage recovery must not silently change optimization semantics.
     fresh.config["learning_rate"] *= 2
     with pytest.raises(ValueError, match="identical resolved configuration"):
-        run_muzero(fresh, num_iters=1, resume=path)
+        run_muzero(fresh, num_iters=1, resume=path, checkpoint_mode="partial")
 
 
 def test_chess_storage_estimates_and_defaults(chess_config):
@@ -912,7 +937,7 @@ def test_chess_storage_estimates_and_defaults(chess_config):
     assert defaults["exp_bnk_action_weights"]
     assert defaults["mcts_num_k_actions"] == 128
     assert defaults["muzero_remat_blocks"] and defaults["muzero_remat_unroll"]
-    assert not defaults["muzero_checkpoint_replay"]
+    assert "muzero_checkpoint_replay" not in defaults
     assert defaults["replay_buffer_total_size"] == 4096000
     packed = estimate_muzero_storage(chess_config)
     dense_policy = estimate_muzero_storage({**chess_config, "exp_bnk_action_weights": False})

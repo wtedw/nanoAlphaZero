@@ -73,7 +73,7 @@ def test_checkpoint_observation_layout_version(tmp_path, legacy_key):
     import json
     from safetensors import safe_open
     from safetensors.numpy import save_file
-    from nanoalphazero.checkpoint import save_muzero_checkpoint, load_muzero_checkpoint
+    from nanoalphazero.ckpt import save_muzero_checkpoint, load_muzero_checkpoint
 
     full = {"runner_state": {"observation": jnp.ones((2, 1, 3), jnp.bool_)}, "cycle": jnp.int32(0)}
     path = tmp_path / "full.safetensors"
@@ -239,7 +239,7 @@ def test_packed_future_observations_match_dense_loss(runner):
 @pytest.mark.parametrize("sharded", [False, True])
 @pytest.mark.parametrize("layout", ["original", "features"])
 def test_enabled_cycle_checkpoint_continuation(runner, tmp_path, sharded, layout):
-    from nanoalphazero.checkpoint import save_muzero_checkpoint, load_muzero_checkpoint, muzero_checkpoint_payload
+    from nanoalphazero.ckpt import save_muzero_checkpoint, load_muzero_checkpoint, muzero_checkpoint_payload
 
     cfg = config(exp_self_consistency=True, buffer_layout=layout)
     if sharded:
