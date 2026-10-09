@@ -523,6 +523,9 @@ inference file remains a future feature.
 These replace the flat MuZero options `--save`, `--resume`, `--ckpt-period`, and
 `--[no-]muzero-checkpoint-replay`. AlphaZero's CLI is unchanged. This grouping
 preserves checkpoint formats and configuration matching. Saves now precede evaluation.
+Restore detects whether the source contains full or partial state. `--ckpt.mode`
+controls future saves, so an old partial snapshot can warm fresh buffers and
+then produce full checkpoints with the default mode.
 
 Run chess with `uv run python muzero.py --env chess --ckpt.save artifacts/chess.ckpt`.
 Saving remains opt-in; the first cycle, periodic cycles (50 for chess), and final

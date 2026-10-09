@@ -969,6 +969,28 @@ def test_partial_resume_restarts_buffers_and_runs_warmup(config, assembly, tmp_p
         run_muzero(fresh, num_iters=1, resume=path, checkpoint_mode="partial")
 
 
+def test_partial_resume_can_save_full_checkpoint(config, assembly, tmp_path):
+    from nanoalphazero.ckpt import (
+        save_muzero_checkpoint, muzero_checkpoint_payload, inspect_checkpoint,
+        load_muzero_checkpoint,
+    )
+    cfg = {**config, "eval_period": 0, "diagnostic_period": 0}
+    source = assembly.make_muzero(cfg, jax.random.PRNGKey(0))
+    state, _ = source.run_fn(source.runner_state, jnp.bool_(False))
+    partial_path = tmp_path / "partial.safetensors"
+    save_muzero_checkpoint(partial_path, muzero_checkpoint_payload(state, 1, False), source.config)
+    fresh = assembly.make_muzero(cfg, jax.random.PRNGKey(0))
+    full_path = tmp_path / "latest.ckpt"
+    resumed = assembly.run_muzero(fresh, num_iters=20, resume=partial_path,
+                                  checkpoint_path=full_path, checkpoint_mode="full")
+    assert int(resumed.model_ts.n_updates) == int(state.model_ts.n_updates) + 1
+    assert int(resumed.selfplay_state.step_count) == 20  # fresh warmup + training
+    assert inspect_checkpoint(full_path)["mode"] == "full"
+    expected = muzero_checkpoint_payload(resumed, 2, True)
+    actual, _ = load_muzero_checkpoint(full_path, expected)
+    assert_trees_equal(actual, expected)
+
+
 def test_chess_storage_estimates_and_defaults(chess_config):
     from nanoalphazero.buffers import estimate_muzero_storage
 

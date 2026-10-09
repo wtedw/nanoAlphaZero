@@ -343,7 +343,7 @@ class MuZeroCheckpointArgs:
     resume: Path | None = None
     # Period in training cycles; 0 disables periodic saves. First/final saves remain.
     every: int | None = None
-    # Full preserves games/buffers; partial restarts them (also for older compact snapshots).
+    # Saved contents: full includes games/buffers; partial omits them. Resume detects saved mode.
     mode: Literal["full", "partial"] = "full"
 
 

@@ -440,8 +440,10 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
     from nanoalphazero.muzero_metrics import training_batch_histograms
 
     config = algorithm.config
+    # Restore the contents actually saved; future checkpoints may be fuller.
+    resume_mode = ckpt.inspect_checkpoint(resume)["mode"] if resume is not None else checkpoint_mode
     state, start_cycle = ckpt.restore_checkpoint(
-        resume, state=algorithm.runner_state, config=config, mode=checkpoint_mode,
+        resume, state=algorithm.runner_state, config=config, mode=resume_mode,
     )
 
     def check(metrics):
@@ -479,7 +481,7 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
         )
         if evaluator is not None:
             evaluator.run(start_cycle, state, force=True)
-        num_warmup_cycles = 0 if resume is not None and checkpoint_mode == "full" else (
+        num_warmup_cycles = 0 if resume is not None and resume_mode == "full" else (
             config.get("replay_buffer_warmup_steps", 100) // config["cycle_n_selfplay"]
         )
         for warmup in range(num_warmup_cycles):
@@ -584,8 +586,9 @@ def main(argv=None):
     if args.ckpt.every is not None:
         overrides["ckpt_period"] = args.ckpt.every
     config = get_muzero_config(args.env, **overrides)
-    from nanoalphazero.ckpt import validate_resume_config
-    validate_resume_config(args.ckpt.resume, config, args.ckpt.mode)
+    from nanoalphazero.ckpt import inspect_checkpoint, validate_resume_config
+    resume_mode = inspect_checkpoint(args.ckpt.resume)["mode"] if args.ckpt.resume is not None else args.ckpt.mode
+    validate_resume_config(args.ckpt.resume, config, resume_mode)
     pool = None
     try:
         # Start subprocess engines before JAX/libtpu owns accelerator resources.

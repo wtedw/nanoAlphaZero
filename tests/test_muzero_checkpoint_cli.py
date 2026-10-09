@@ -38,6 +38,10 @@ def test_checkpoint_options_reach_runner(monkeypatch, env, options, expected_mod
 
     monkeypatch.setattr(module, "make_muzero", assemble)
     monkeypatch.setattr(module, "run_muzero", run)
+    import nanoalphazero.ckpt as ckpt
+    monkeypatch.setattr(ckpt, "inspect_checkpoint", lambda path: {"mode": "partial"})
+    monkeypatch.setattr(ckpt, "validate_resume_config",
+                        lambda path, config, mode: captured.update(resume_mode=mode))
     module.main([
         "--env", env, "--platform", "cpu",
         "--ckpt.save", "artifacts/output.ckpt",
@@ -46,6 +50,7 @@ def test_checkpoint_options_reach_runner(monkeypatch, env, options, expected_mod
     config = captured["config"]
     assert "muzero_checkpoint_replay" not in config
     assert captured["checkpoint_mode"] == expected_mode
+    assert captured["resume_mode"] == "partial"
     assert config["ckpt_period"] == (
         get_muzero_config(env)["ckpt_period"] if expected_period is None else expected_period
     )
