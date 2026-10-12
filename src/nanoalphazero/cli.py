@@ -400,6 +400,8 @@ class MuZeroArgs:
     learning_rate: float | None = None
     weight_decay: float | None = None
     muzero_discount: float | None = None
+    # Outcome-only board-game values, including absorbing tails; no reward loss/search rewards.
+    muzero_predict_value_only: bool = False
     muzero_memory_fraction: float | None = None
     enable_sharding: bool | None = None
     enable_wandb: bool | None = None

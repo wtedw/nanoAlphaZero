@@ -569,7 +569,7 @@ def get_dummy_muzero_training_sample(config):
 
 def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions=None,
                                   *, self_consistency=False, train_on_exploit_unroll_states=True,
-                                  train_on_exploration_without_value=False):
+                                  train_on_exploration_without_value=False, value_only=False):
     """Gather ordered records, never extending a sequence into another game.
 
     Starts come from AlphaZero consume, which adds a singleton time axis.
@@ -612,7 +612,7 @@ def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions
         if experience.k_indices is not None:
             raise ValueError("Sparse MuZero sequences require the full action count")
         num_actions = experience.action_weights.shape[-1]
-    # Terminal tails train absorbing zero rewards/values, with no policy target.
+    # Absorbing tails use arbitrary actions and have no policy target.
     random_actions = jax.random.randint(
         jax.random.key(jnp.max(starts.global_step_id)),
         (lanes.shape[0], unroll_steps), 0, num_actions,
@@ -631,6 +631,15 @@ def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions
         future = jnp.where(mask, values, jnp.zeros((), values.dtype))
         return jnp.concatenate((root, future), axis=1)
 
+    # Keep the final outcome beyond termination, expressed for the alternating
+    # hypothetical player. The last real record is the action BEFORE termination.
+    tail_value = 0
+    if value_only:
+        last = jnp.clip(remaining, 0, unroll_steps)
+        outcome = jnp.take_along_axis(gather("reward"), last[:, None], axis=1)
+        tail_value = jnp.where((offsets - remaining[:, None]) % 2 == 0, outcome, -outcome)
+        tail_value = jnp.where(complete[:, None], tail_value, 0)
+
     sample = MuZeroTrainingSample(
         row_id=starts.row_id, col_id=starts.col_id, game_id=starts.game_id,
         global_step_id=starts.global_step_id, ep_step=starts.ep_step,
@@ -639,13 +648,13 @@ def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions
         k_indices=None if experience.k_indices is None else jnp.where(real[..., None], gather("k_indices"), 0),
         action=jnp.where(real[:, :-1], gather("action", unroll_steps), random_actions),
         action_weights=jnp.where(real[..., None], gather("action_weights"), 0),
-        reward=jnp.where(real, gather("reward"), 0),
+        reward=jnp.where(real, gather("reward"), tail_value),
         # Gather K transitions directly. Gathering K+1 then slicing the result
         # triggers an invalid TPU all-reduce-scatter rewrite at K=5.
         transition_reward=jnp.where(real[:, :-1], gather("transition_reward", unroll_steps), 0),
         policy_mask=real & allowed,
         value_mask=complete[:, None] & (~real | value_allowed),
-        reward_mask=complete[:, None] & (~real[:, :-1] | reward_allowed),
+        reward_mask=complete[:, None] & (~real[:, :-1] | reward_allowed) & ~jnp.bool_(value_only),
     )
     return sample, missing
 
@@ -769,6 +778,7 @@ def make_muzero_selfplay_buffer(config, dummy_selfplay_output, data_sharding=Non
             self_consistency=config.get("exp_self_consistency", False),
             train_on_exploit_unroll_states=config.get("exp_train_on_exploit_unroll_states", True),
             train_on_exploration_without_value=config.get("exp_train_on_exploration_without_value", False),
+            value_only=config.get("muzero_predict_value_only", False),
         )
         after = after.replace(missing_count=after.missing_count + missing)
         return after, jax.tree.map(lambda x: x[:, None], samples), metrics

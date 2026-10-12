@@ -599,3 +599,24 @@ checks establish logic only; they do not validate TPU performance.
 After confirming no other process owns the TPU, use a small explicit run to
 check compilation, stable sharding, memory, and cycle throughput before scaling
 to the game defaults. Do not start that run on the MacBook.
+# Value-only board-game experiment
+
+`--muzero-predict-value-only` disables reward loss and uses zero rewards in learned
+search. Real positions retain their completed outcome targets. Terminal and
+post-terminal positions retain that outcome too, with signs alternating for
+the hypothetical player: a winning root immediately before mate has targets
+`[1, -1, 1, -1, ...]`, rather than `[1, 0, 0, ...]`. Draws remain zero.
+This option requires `muzero_discount=1` and assumes alternating-player,
+terminal-outcome board games. Policy/consistency supervision remains masked
+after termination; padding actions remain random. No latent is forcibly reset.
+
+The reward head remains in the parameter tree but is unused by the objective
+and search (optimizer weight decay can still change its weights). Diagnostics
+show the effective zero search rewards. `loss_r` and reward-supervision counts
+are zero. The default remains the existing reward-predicting formulation.
+Checkpoint configuration records this semantic difference; ordinary resume
+does not silently convert saved targets or switch modes.
+
+This follows the distinction in [Julian Schrittwieser's clarification](https://www.julian.ac/blog/2020/12/22/muzero-intuition/#4271a1239cc6ba61ec2af4974dc781ebd95332f22cd54c41c340bc6505105a39).
+Alternating the outcome signs adapts it to this implementation's `discount=-1`
+search convention; it is not a claim to reproduce all DeepMind internals.

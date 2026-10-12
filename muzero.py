@@ -194,7 +194,7 @@ def muzero_consistency_loss(model, params, batch, predicted_latents, remat=False
     return masked_consistency_loss(prediction, target, mask)
 
 
-def muzero_loss(model, params, batch, remat=False, *, self_consistency_weight=0.0):
+def muzero_loss(model, params, batch, remat=False, *, self_consistency_weight=0.0, value_only=False):
     """Policy KL + value/reward MSE, with optional temporal consistency."""
     import jax.numpy as jnp
 
@@ -209,7 +209,8 @@ def muzero_loss(model, params, batch, remat=False, *, self_consistency_weight=0.
     kl = muzero_policy_kl(logits, batch.action_weights, batch.k_indices)
     loss_pi = mean_masked(kl, batch.policy_mask)
     loss_v = mean_masked((values - batch.reward) ** 2, batch.value_mask)
-    loss_r = mean_masked((rewards - batch.transition_reward) ** 2, batch.reward_mask)
+    loss_r = (jnp.zeros((), values.dtype) if value_only else
+              mean_masked((rewards - batch.transition_reward) ** 2, batch.reward_mask))
     total = loss_pi + loss_v + loss_r
     metrics = dict(loss_pi=loss_pi, loss_v=loss_v, loss_r=loss_r)
     if self_consistency_weight > 0:
@@ -270,6 +271,7 @@ def make_muzero_train(config, model, model_state, data_sharding=None):
                 model, params, batch, config.get("muzero_remat_unroll", False),
                 self_consistency_weight=(config.get("self_consistency_weight", 1.0)
                                          if config.get("exp_self_consistency", False) else 0.0),
+                value_only=config.get("muzero_predict_value_only", False),
             )
 
         (loss, metrics), grads = jax.value_and_grad(objective, has_aux=True)(state.params)

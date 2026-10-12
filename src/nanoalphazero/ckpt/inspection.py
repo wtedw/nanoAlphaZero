@@ -33,6 +33,7 @@ def validate_resume_config(path, config, mode="full"):
     def training_config(values):
         values = dict(values)
         values.setdefault("buffer_layout", "original")
+        values.setdefault("muzero_predict_value_only", False)
         for old in ("exp_train_on_exploratory_unroll_states", "exp_train_on_exploration"):
             if old in values:
                 values.setdefault("exp_train_on_exploit_unroll_states", not values.pop(old))

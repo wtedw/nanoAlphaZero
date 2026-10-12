@@ -228,6 +228,83 @@ def test_terminal_padding_never_uses_next_game(config, unroll_steps):
     assert bool(jnp.all(samples.reward_mask))
 
 
+@pytest.mark.parametrize("outcome", [-1., 0., 1.])
+@pytest.mark.parametrize("root_step", [0, 1])
+@pytest.mark.parametrize("start_time", [0, 15])
+def test_value_only_terminal_targets(config, outcome, root_step, start_time):
+    buffer, state = make_buffer({**config, "muzero_predict_value_only": True})
+    for t in range(start_time):
+        state = append(buffer, state, transition(config, t, 0, terminal=True, game_id=t+1))
+    state = append(buffer, state, transition(config, start_time, 0))
+    state = append(buffer, state, transition(config, start_time+1, 1, terminal=True, reward=outcome, game_id=30))
+    state = append(buffer, state, transition(config, start_time+2, 0))
+    index = (start_time+root_step) % config["selfplay_buffer_max_len"]
+    starts = jax.tree.map(lambda x: x[:, index:index+1], state.experience)
+    sample, missing = gather_muzero_training_samples(state.experience, starts, 5, value_only=True)
+    expected = [outcome * (-1)**(1-root_step-k) for k in range(6)]
+    np.testing.assert_array_equal(sample.reward, [expected]*2)
+    assert int(missing) == 0
+    assert bool(jnp.all(sample.value_mask))
+    assert not bool(jnp.any(sample.reward_mask))
+    np.testing.assert_array_equal(sample.policy_mask, [[True]*(2-root_step)+[False]*(4+root_step)]*2)
+    # Every horizon backs up the same outcome when search rewards are zero.
+    for depth in range(6):
+        np.testing.assert_array_equal((-1)**depth*sample.reward[:, depth], sample.reward[:, 0])
+
+
+def test_value_only_cycle(config, assembly):
+    from nanoalphazero.cli import parse_muzero_args
+    assert parse_muzero_args(["--muzero-predict-value-only"]).muzero_predict_value_only
+    assert not parse_muzero_args([]).muzero_predict_value_only
+    algorithm = assembly.make_muzero({**config, "muzero_predict_value_only": True}, jax.random.PRNGKey(9))
+    state = algorithm.runner_state
+    for _ in range(3):
+        state, (metrics, _) = algorithm.run_fn(state, jnp.bool_(False))
+    assert int(state.model_ts.n_updates) > 0
+    assert float(metrics["loss_r"]) == 0
+    assert float(metrics["train_batch/n_reward_valid"]) == 0
+    assert np.isfinite(float(metrics["loss_v"]))
+
+
+def test_value_only_loss_has_no_reward_gradient(config, assembly):
+    buffer, state = make_buffer(config)
+    state = append(buffer, state, transition(config, 0, 0, terminal=True, reward=1))
+    starts = jax.tree.map(lambda x: x[:, :1], state.experience)
+    batch, _ = gather_muzero_training_samples(state.experience, starts, 3, value_only=True)
+    model, variables = make_muzero_model(config, jax.random.PRNGKey(0))
+    # Even accidental nonzero reward masks must not enable reward loss in this mode.
+    batch = batch.replace(reward_mask=jnp.ones_like(batch.reward_mask))
+    (_, metrics), grads = jax.value_and_grad(
+        lambda params: assembly.muzero_loss(model, params, batch, value_only=True), has_aux=True,
+    )(variables["params"])
+    assert float(metrics["loss_r"]) == 0
+    assert all(bool(jnp.all(x == 0)) for x in jax.tree.leaves(grads["reward"]))
+    assert any(bool(jnp.any(x != 0)) for x in jax.tree.leaves(grads["prediction"]))
+
+
+def test_value_only_search_ignores_reward(config):
+    class Model:
+        initial = "initial"
+        recurrent = "recurrent"
+
+        def apply(self, variables, *args, method):
+            if method == self.initial:
+                batch = args[0].shape[0]
+                return jnp.zeros((batch,1)), jnp.zeros((batch,9)), jnp.ones(batch)
+            latent, action = args
+            depth = latent[:,0] + 1
+            # Intentionally wrong rewards must have no influence in value-only mode.
+            return depth[:,None], jnp.full(action.shape, 100.), jnp.zeros((len(action),9)), (-1.)**depth
+
+    cfg = {**config, "muzero_predict_value_only": True}
+    env = make_env(cfg)
+    state = env.init(jax.random.split(jax.random.PRNGKey(0),2))
+    fn = make_muzero_mcts(cfg, env, Model(), return_diagnostics=True)
+    result = fn(jax.random.PRNGKey(0), state, {}, 0., 2)
+    visited = np.asarray(result.visit_counts)>0
+    np.testing.assert_allclose(np.asarray(result.diagnostics["backed_up_q"])[visited], 1., atol=1e-6)
+
+
 def test_five_step_cross_device_gather(config):
     """TPU regression: gather K transitions without slicing a K+1 collective."""
     from functools import partial

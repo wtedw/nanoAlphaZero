@@ -572,6 +572,7 @@ def get_muzero_config(env="hex4", **overrides):
         exp_train_on_exploit_unroll_states=True,
         exp_train_on_exploration_without_value=False,
         muzero_network="spatial", muzero_unroll_steps=5, muzero_discount=1.0,
+        muzero_predict_value_only=False,
         muzero_remat_blocks=env == "chess", muzero_remat_unroll=env == "chess",
         muzero_memory_fraction=0.75,
         enable_wandb=False,
@@ -606,6 +607,8 @@ def validate_muzero_config(config, num_actions, device_count=1):
             raise ValueError(f"{name} must be positive")
     if not 0 < config["muzero_discount"] <= 1:
         raise ValueError("muzero_discount must be in (0, 1]")
+    if config.get("muzero_predict_value_only", False) and config["muzero_discount"] != 1:
+        raise ValueError("muzero_predict_value_only requires undiscounted board-game outcomes")
     if not 0 < config.get("muzero_memory_fraction", 0.75) <= 1:
         raise ValueError("muzero_memory_fraction must be in (0, 1]")
     if config["selfplay_buffer_max_len"] <= config["muzero_unroll_steps"]:

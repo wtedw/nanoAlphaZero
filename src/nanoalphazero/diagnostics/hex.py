@@ -88,6 +88,8 @@ def make_muzero_head_probe(model, env, config):
             {"params": params}, after_observation, method=model.initial)
         _, reward, latent_logits, latent_value = model.apply(
             {"params": params}, latent, actions, method=model.recurrent)
+        if config.get("muzero_predict_value_only", False):
+            reward = jnp.zeros_like(reward)  # Effective search reward; head is unused.
         return logits[0], value[0], after_logits, after_value, reward, latent_logits, latent_value
 
     def probe(params):
