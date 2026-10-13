@@ -69,7 +69,7 @@ def make_muzero_selfplay(config, wenv, run_mcts_fn, data_sharding=None):
         sign = jnp.where(player == following.env_state.current_player, 1.0, -1.0)
         discount = jnp.where(
             following.env_state.terminated | following.env_state.truncated,
-            0.0, sign * config["muzero_discount"],
+            0.0, sign,
         )
         output = MuZeroSelfplayOutput(
             **vars(output), transition_reward=reward[:, None], discount=discount[:, None],
@@ -188,8 +188,8 @@ def muzero_consistency_loss(model, params, batch, predicted_latents, remat=False
     prediction = model.apply(
         {"params": params}, flatten_time(predicted_latents), predict=True, method=model.project,
     )
-    # Use the target position's policy mask: exclude exploratory targets and
-    # terminal/reset tails, while allowing gradients through exploratory actions.
+    # Follow real successor policy supervision, including exploration when enabled.
+    # Terminal/reset tails never contribute; gradients can cross exploratory actions.
     mask = batch.policy_mask[:, 1:].reshape(-1)
     return masked_consistency_loss(prediction, target, mask)
 
@@ -578,8 +578,9 @@ def main(argv=None):
     if args.platform:
         os.environ["JAX_PLATFORMS"] = args.platform
     overrides = {name: value for name, value in vars(args).items()
-                 if value is not None and name not in ("env", "ckpt", "acpl", "platform", "ladder_period", "trackio_run")
+                 if value is not None and name not in ("env", "muzero", "ckpt", "acpl", "platform", "ladder_period", "trackio_run")
                  and not name.startswith("hex_eval_")}
+    overrides.update(args.muzero.overrides())
     if args.acpl.period:
         from nanoalphazero.eval.acpl.config import acpl_config_dict
         overrides["acpl"] = acpl_config_dict(args.acpl)

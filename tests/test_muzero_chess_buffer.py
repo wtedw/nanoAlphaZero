@@ -29,22 +29,22 @@ def probe():
     return module
 
 
-@pytest.mark.parametrize("sparse,exploit_only,explore_policy,discount", [
-    (False, True, False, 1.),
-    (True, True, False, .9),
-    (True, True, True, 1.),
-    (True, False, False, 1.),
-    (True, True, False, .5),
+@pytest.mark.parametrize("sparse,exploit_only,explore_policy,capacity", [
+    (False, True, False, 11),
+    (True, True, False, 11),
+    (True, True, True, 11),
+    (True, False, False, 11),
+    (True, True, False, 7),
 ])
-def test_chess_targets_through_reset_wrap_and_consume(probe, sparse, exploit_only, explore_policy, discount):
-    b, capacity, k = 9, (7 if discount == .5 else 11), 5
+def test_chess_targets_through_reset_wrap_and_consume(probe, sparse, exploit_only, explore_policy, capacity):
+    b, k = 9, 5
     cfg = get_muzero_config("chess", enable_sharding=False, selfplay_batch_size=b,
         train_batch_size=b, selfplay_buffer_consume_size=b,
         selfplay_buffer_max_len=capacity, selfplay_buffer_min_len=1,
-        replay_buffer_max_len=2, muzero_unroll_steps=k, muzero_discount=discount,
+        replay_buffer_max_len=2, muzero_unroll_steps=k, muzero_predict_value_only=False,
         exp_bnk_action_weights=sparse, mcts_num_k_actions=8,
-        num_exploratory_moves=3, exp_train_on_exploit_unroll_states=exploit_only,
-        exp_train_on_exploration_without_value=explore_policy)
+        num_exploratory_moves=3, muzero_exploration_losses=(
+            "policy-transition" if explore_policy else "none" if exploit_only else "all"))
     wrapped = make_env(cfg)
     cfg.update(game_obs_shape=list(wrapped.obs_shape), game_num_actions=4672)
     env = pgx1.make("chess", use_bitmask=True)
@@ -88,8 +88,8 @@ def test_chess_targets_through_reset_wrap_and_consume(probe, sparse, exploit_onl
     def gather_all(experience):
         starts = jax.tree.map(lambda x: x.reshape(-1, *x.shape[2:])[:, None], experience)
         return gather_muzero_training_samples(experience, starts, k, 4672,
-            self_consistency=True, train_on_exploit_unroll_states=exploit_only,
-            train_on_exploration_without_value=explore_policy)
+            self_consistency=True, exploration_losses=(
+                "policy-transition" if explore_policy else "none" if exploit_only else "all"))
     records, episodes, moves = {}, np.zeros(b, int), np.zeros(b, int)
     finished_count = checked = consumed = 0
 
@@ -149,7 +149,7 @@ def test_chess_targets_through_reset_wrap_and_consume(probe, sparse, exploit_onl
             if done:
                 for (r_lane, r_step), record in records.items():
                     if r_lane == lane and record["episode"] == episodes[lane]:
-                        record.update(end=t, **{"return": reward * (1 if record["actor"] == actor else -1) * discount**(t-r_step)})
+                        record.update(end=t, **{"return": reward * (1 if record["actor"] == actor else -1)})
                 boards[lane] = chess.Board()
                 moves[lane] = 0; episodes[lane] += 1; finished_count += 1
             else:
@@ -176,4 +176,4 @@ def test_chess_targets_through_reset_wrap_and_consume(probe, sparse, exploit_onl
     assert int(storage.missing_count) == 0
     if capacity == 7:
         assert int(storage.dropped_pending_count) > 0
-    print(f"chess oracle: games={finished_count}, checked_windows={checked}, consumed={consumed}, sparse={sparse}, discount={discount}, pending_evictions={int(storage.dropped_pending_count)}")
+    print(f"chess oracle: games={finished_count}, checked_windows={checked}, consumed={consumed}, sparse={sparse}, capacity={capacity}, pending_evictions={int(storage.dropped_pending_count)}")

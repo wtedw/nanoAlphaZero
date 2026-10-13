@@ -98,8 +98,9 @@ def main():
     model, params, config = load_model(args.checkpoint)
     if args.checkpoint.is_dir():
         assert json.loads((args.checkpoint / "LATEST").read_text())["generation"] == generation
-    assert config.get("exp_train_on_exploit_unroll_states", True)
-    assert not config.get("exp_train_on_exploration_without_value", False)
+    from nanoalphazero.muzero_config import normalize_exploration_config
+    config = normalize_exploration_config(config)
+    assert config["muzero_exploration_losses"] == "none"
     assert not config.get("exp_self_consistency", False)
 
     @jax.jit

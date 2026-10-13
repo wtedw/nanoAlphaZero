@@ -83,7 +83,7 @@ def test_checkpoint_observation_layout_version(tmp_path, legacy_key):
         assert metadata["format"] == "nanoalphazero.muzero.persistent.v4"
         tensors = {key: reader.get_tensor(key) for key in reader.keys()}
     restored, restored_config = load_muzero_checkpoint(path, full)
-    assert restored_config == {"exp_train_on_exploit_unroll_states": True}
+    assert restored_config == {"muzero_exploration_losses": "none"}
     assert_trees_equal(restored, full)
     # Even matching tensor paths must not let an old replay schema through.
     for version in (1, 2, 3):
@@ -101,7 +101,7 @@ def test_checkpoint_observation_layout_version(tmp_path, legacy_key):
         "key_impls": "{}", "config": json.dumps({legacy_key: True}),
     })
     restored, restored_config = load_muzero_checkpoint(path, compact)
-    assert restored_config == {"exp_train_on_exploit_unroll_states": False}
+    assert restored_config == {"muzero_exploration_losses": "all"}
     assert_trees_equal(restored, compact)
 
 

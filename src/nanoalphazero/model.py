@@ -762,6 +762,7 @@ class MuZero(nn.Module):
     width: int = 128
     depth: int = 2
     self_consistency: bool = False
+    predict_value_only: bool = False
 
     def setup(self):
         self.representation = MuZeroTower(self.width, self.depth)
@@ -769,7 +770,8 @@ class MuZero(nn.Module):
         self.prediction = MuZeroTower(self.width, self.depth)
         self.policy = nn.Dense(self.num_actions)
         self.value = nn.Dense(1)
-        self.reward = nn.Dense(1)
+        if not self.predict_value_only:
+            self.reward = nn.Dense(1)
         if self.self_consistency:
             self.consistency_head = MuZeroConsistencyHead(self.width)
 
@@ -792,7 +794,8 @@ class MuZero(nn.Module):
     def recurrent(self, latent, action):
         action = jax.nn.one_hot(action, self.num_actions)
         features = self.dynamics(jnp.concatenate([latent, action], axis=-1))
-        reward = jnp.tanh(self.reward(features)[..., 0])
+        reward = (jnp.zeros((features.shape[0],), features.dtype) if self.predict_value_only
+                  else jnp.tanh(self.reward(features)[..., 0]))
         latent = normalize_muzero_latent(features)
         logits, value = self.predict(latent)
         return latent, reward, logits, value
@@ -854,13 +857,51 @@ def normalize_spatial(x):
     return (x - lo) / jnp.maximum(span, 1e-5)
 
 
-def action_planes(action, height, width, num_actions, env_id):
+def chess_action_planes(action):
+    """Eight dynamics planes from PGX IDs, without consulting a board.
+
+    Source/destination use the observation's mover-relative orientation. The
+    queen flag means 'promote if this is a pawn'; ordinary pieces can share
+    that action ID. On-board validity describes geometry, not move legality.
+    """
+    source, move = action // 73, action % 73
+    file, rank = source // 8, source % 8
+    direction = jnp.clip((move - 9) // 7, 0, 7)
+    offset = (move - 9) % 7
+    distance = jnp.where(direction % 2 == 0, 7 - offset, offset + 1)
+    ray_rank = jnp.array([-1, 1, 0, 0, -1, 1, 1, -1])[direction] * distance
+    ray_file = jnp.array([0, 0, -1, 1, -1, 1, -1, 1])[direction] * distance
+    knight = jnp.clip(move - 65, 0, 7)
+    knight_rank = jnp.array([-1, 1, -2, 2, -1, 1, -2, 2])[knight]
+    knight_file = jnp.array([-2, -2, -1, -1, 2, 2, 1, 1])[knight]
+    dr = jnp.where(move < 9, 1, jnp.where(move < 65, ray_rank, knight_rank))
+    df = jnp.where(move < 9, jnp.array([0, 1, -1])[move % 3],
+                   jnp.where(move < 65, ray_file, knight_file))
+    target_file, target_rank = file + df, rank + dr
+    on_board = (target_file >= 0) & (target_file < 8) & (target_rank >= 0) & (target_rank < 8)
+    source_plane = jax.nn.one_hot(source, 64).reshape(-1, 8, 8)
+    target_plane = jax.nn.one_hot(target_file * 8 + target_rank, 64).reshape(-1, 8, 8)
+    target_plane = target_plane * on_board[:, None, None]
+    squares = jnp.rot90(jnp.stack((source_plane, target_plane), -1), k=1, axes=(1, 2))
+    # Category order: queen/default, knight, bishop, rook, none.
+    queen = (move >= 9) & (move < 65) & (rank == 6) & (dr == 1) & (jnp.abs(df) <= 1)
+    promotion = jnp.where(move < 9, 3 - move // 3, jnp.where(queen, 0, 4))
+    flags = jnp.concatenate((on_board[:, None], jax.nn.one_hot(promotion, 5)), -1)
+    flags = jnp.broadcast_to(flags[:, None, None, :], (action.shape[0], 8, 8, 6))
+    return jnp.concatenate((squares, flags), -1)
+
+
+def action_planes(action, height, width, num_actions, env_id, *, chess_encoding="from_to8"):
     """Encode the action definition, without a board or legality oracle."""
     batch = action.shape[0]
     if env_id == "connect_four":
         return jnp.broadcast_to(jax.nn.one_hot(action, width)[:, None, :, None],
                                 (batch, height, width, 1))
     if env_id == "chess":
+        if chess_encoding == "from_to8":
+            return chess_action_planes(action)
+        if chess_encoding != "planes73":
+            raise ValueError(f"Unknown MuZero chess action encoding: {chess_encoding}")
         planes = jax.nn.one_hot(action, num_actions).reshape(batch, height, width, 73)
         # Inverse of production ChessPolicyHead's final coordinate rotation.
         return jnp.rot90(planes, k=1, axes=(1, 2))
@@ -907,6 +948,8 @@ class SpatialMuZero(nn.Module):
     use_rvgl: bool = True
     remat_blocks: bool = False
     self_consistency: bool = False
+    chess_action_encoding: str = "from_to8"
+    predict_value_only: bool = False
 
     def setup(self):
         cfg = resolve_preset(f"b{self.depth}c{self.width}nbt")
@@ -916,7 +959,8 @@ class SpatialMuZero(nn.Module):
         self.representation = trunk_type(**trunk, activation=self.activation, use_rvgl=self.use_rvgl)
         self.dynamics = trunk_type(**trunk, activation=self.activation, use_rvgl=self.use_rvgl)
         self.prediction = MuZeroPrediction(self.num_actions, self.env_id, self.width, self.depth, self.activation)
-        self.reward = ValueHead(cfg["c_v1"], cfg["c_v2"], self.activation)
+        if not self.predict_value_only:
+            self.reward = ValueHead(cfg["c_v1"], cfg["c_v2"], self.activation)
         if self.self_consistency:
             self.consistency_head = MuZeroConsistencyHead(self.width)
 
@@ -933,9 +977,11 @@ class SpatialMuZero(nn.Module):
         return latent, logits, value
 
     def recurrent(self, latent, action):
-        planes = action_planes(action, latent.shape[1], latent.shape[2], self.num_actions, self.env_id)
+        planes = action_planes(action, latent.shape[1], latent.shape[2], self.num_actions, self.env_id,
+                               chess_encoding=self.chess_action_encoding)
         features, mask, mask_sum = self.dynamics(jnp.concatenate([latent, planes], -1))
-        reward = value_from_logits(self.reward(features, mask, mask_sum))
+        reward = (jnp.zeros((features.shape[0],), features.dtype) if self.predict_value_only
+                  else value_from_logits(self.reward(features, mask, mask_sum)))
         latent = normalize_spatial(features)
         logits, value = self.prediction(latent)
         return latent, reward, logits, value
@@ -958,14 +1004,18 @@ def make_muzero_model(config, rng, sharding=None):
     network = config.get("muzero_network", "spatial")
     if network == "vector":
         model = MuZero(config["game_num_actions"], config["conv_width"], config["conv_depth"],
-                       self_consistency=config.get("exp_self_consistency", False))
+                       self_consistency=config.get("exp_self_consistency", False),
+                       predict_value_only=config.get("muzero_predict_value_only", False))
     elif network == "spatial":
         model = SpatialMuZero(
             config["game_num_actions"], config["env_id"],
             config["conv_width"], config["conv_depth"],
             config.get("katago_activation", "mish"), config.get("katago_use_rvgl", True),
+            predict_value_only=config.get("muzero_predict_value_only", False),
             remat_blocks=config.get("muzero_remat_blocks", False),
             self_consistency=config.get("exp_self_consistency", False),
+            # Missing metadata identifies checkpoints from before the 8-plane encoder.
+            chess_action_encoding=config.get("muzero_chess_action_encoding", "planes73"),
         )
     else:
         raise ValueError(f"Unknown MuZero network: {network}")

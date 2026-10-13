@@ -207,7 +207,7 @@ def main(argv=None):
         replay_buffer_max_len=args.capacity, exp_self_consistency=args.consistency,
         cycle_n_selfplay=args.selfplay_steps, cycle_n_train=args.train_steps,
         muzero_unroll_steps=args.unroll,
-        exp_train_on_exploit_unroll_states=True,
+        muzero_exploration_losses="none",
     )
     env = make_env(cfg)
     cfg.update(game_obs_shape=list(env.obs_shape), game_num_actions=env.num_actions)

@@ -322,6 +322,7 @@ def bayeselo_main(argv: Sequence[str] | None = None) -> None:
 # MuZero components
 
 from dataclasses import dataclass, field
+from nanoalphazero.muzero_config import MuZeroConfig
 from typing import Annotated, Literal
 
 import tyro
@@ -354,11 +355,11 @@ class MuZeroArgs:
     env: MuZeroEnv = "hex4"
     platform: Literal["cpu", "tpu"] | None = None
 
+    muzero: MuZeroConfig = field(default_factory=MuZeroConfig)
     ckpt: MuZeroCheckpointArgs = field(default_factory=MuZeroCheckpointArgs)
     acpl: AcplConfig = field(default_factory=AcplConfig)
     # Past-self ladder period in cycles; 0 disables it. Inherits AlphaZero defaults.
     ladder_period: int | None = None
-    muzero_network: Literal["vector", "spatial"] | None = None
     hex_eval_period: int = 0
     hex_eval_engine_path: str | None = None
     hex_eval_engine_config: str = "default"
@@ -377,14 +378,9 @@ class MuZeroArgs:
     train_batch_size: int | None = None
     cycle_n_selfplay: int | None = None
     cycle_n_train: int | None = None
-    muzero_unroll_steps: int | None = None
     # Experimental EfficientZero-style temporal consistency objective.
     exp_self_consistency: bool | None = None
     self_consistency_weight: float | None = None
-    # Train direct losses only at exploit states across the K+1 unroll.
-    exp_train_on_exploit_unroll_states: bool = True
-    # Include exploration policy/reward/consistency losses, but mask exploration values.
-    exp_train_on_exploration_without_value: bool = False
     # MuZero replay storage only; self-play retains its original layout.
     buffer_layout: Literal["original", "features"] | None = None
     selfplay_buffer_max_len: int | None = None
@@ -399,10 +395,6 @@ class MuZeroArgs:
     diagnostic_period: int | None = None
     learning_rate: float | None = None
     weight_decay: float | None = None
-    muzero_discount: float | None = None
-    # Outcome-only board-game values, including absorbing tails; no reward loss/search rewards.
-    muzero_predict_value_only: bool = False
-    muzero_memory_fraction: float | None = None
     enable_sharding: bool | None = None
     enable_wandb: bool | None = None
     # Root muzero.py only. Trackio takes precedence over W&B when both are enabled.
@@ -411,8 +403,6 @@ class MuZeroArgs:
     ] = None
     # Resume this existing local Trackio run; checkpoint identity is used otherwise.
     trackio_run: str | None = None
-    muzero_remat_blocks: bool | None = None
-    muzero_remat_unroll: bool | None = None
     exp_bnk_action_weights: bool | None = None
 
 

@@ -32,12 +32,15 @@ def validate_resume_config(path, config, mode="full"):
 
     def training_config(values):
         values = dict(values)
+        # Old undiscounted checkpoints have the same return semantics.
+        if values.get("muzero_discount") == 1:
+            values.pop("muzero_discount")
         values.setdefault("buffer_layout", "original")
         values.setdefault("muzero_predict_value_only", False)
-        for old in ("exp_train_on_exploratory_unroll_states", "exp_train_on_exploration"):
-            if old in values:
-                values.setdefault("exp_train_on_exploit_unroll_states", not values.pop(old))
-        values.setdefault("exp_train_on_exploit_unroll_states", True)
+        if values.get("env_id") == "chess":
+            values.setdefault("muzero_chess_action_encoding", "planes73")
+        from nanoalphazero.muzero_config import normalize_exploration_config
+        values = normalize_exploration_config(values)
         ignored = {"acpl", "ckpt_period", "enable_trackio", "enable_wandb"}
         # CLI preflight precedes environment construction. Once assembled,
         # compare derived dimensions too, before releasing the initial state.

@@ -75,8 +75,6 @@ def load(path, template):
                 raise ValueError(f"MuZero checkpoint tensor {name} has an incompatible shape or dtype")
             leaves.append(value)
     config = json.loads(meta["config"])
-    for old_name in ("exp_train_on_exploratory_unroll_states", "exp_train_on_exploration"):
-        if old_name in config:
-            config.setdefault("exp_train_on_exploit_unroll_states", not config.pop(old_name))
-    config.setdefault("exp_train_on_exploit_unroll_states", True)
+    from nanoalphazero.muzero_config import normalize_exploration_config
+    config = normalize_exploration_config(config)
     return tree.unflatten(leaves), config

@@ -691,7 +691,7 @@ def make_muzero_mcts(config, wenv, model, data_sharding=None, *, return_diagnost
         # Built-in games alternate players in hypothetical search.
         if config.get("muzero_predict_value_only", False):
             reward = jnp.zeros_like(reward)
-        discount = -config.get("muzero_discount", 1.0)
+        discount = -1.0
         return RecurrentFnOutput(
             reward=reward, discount=jnp.full_like(value, discount),
             prior_logits=logits, value=value,

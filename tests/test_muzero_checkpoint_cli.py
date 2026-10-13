@@ -71,7 +71,7 @@ def test_resume_does_not_enable_saving():
 
 def test_value_only_resume_semantics(monkeypatch):
     import nanoalphazero.ckpt.inspection as inspection
-    config = get_muzero_config("hex4")
+    config = get_muzero_config("hex4", muzero_predict_value_only=False)
     old = {k: v for k, v in config.items() if k != "muzero_predict_value_only"}
     monkeypatch.setattr(inspection, "inspect_checkpoint",
                         lambda _: dict(mode="full", config=old))
@@ -80,11 +80,12 @@ def test_value_only_resume_semantics(monkeypatch):
         inspection.validate_resume_config("unused", {**config, "muzero_predict_value_only": True})
 
 
-def test_value_only_requires_undiscounted_outcomes():
-    from nanoalphazero.config import validate_muzero_config
-    config = get_muzero_config("hex4", muzero_predict_value_only=True, muzero_discount=0.9)
-    with pytest.raises(ValueError, match="undiscounted"):
-        validate_muzero_config(config, 16)
+def test_old_undiscounted_checkpoint_config(monkeypatch):
+    from nanoalphazero.ckpt import inspection
+    config = get_muzero_config("hex4")
+    monkeypatch.setattr(inspection, "inspect_checkpoint",
+                        lambda _: dict(mode="full", config={**config, "muzero_discount": 1.0}))
+    inspection.validate_resume_config("unused", config)
 
 
 def test_checkpoint_help_without_jax():

@@ -33,6 +33,7 @@ def config():
         selfplay_buffer_consume_size=2, selfplay_buffer_max_len=16,
         replay_buffer_max_len=4, conv_width=8, conv_depth=1,
         muzero_network="vector", muzero_unroll_steps=3,
+        muzero_predict_value_only=False, muzero_exploration_losses="none",
         cycle_n_selfplay=10, cycle_n_train=1, lr_warmup_steps=0,
         mcts_num_root_considered=2, mcts_num_survivors=1,
         num_exploratory_moves=0, replay_buffer_warmup_steps=10,
@@ -254,8 +255,8 @@ def test_value_only_terminal_targets(config, outcome, root_step, start_time):
 
 def test_value_only_cycle(config, assembly):
     from nanoalphazero.cli import parse_muzero_args
-    assert parse_muzero_args(["--muzero-predict-value-only"]).muzero_predict_value_only
-    assert not parse_muzero_args([]).muzero_predict_value_only
+    assert parse_muzero_args(["--muzero.predict-value-only"]).muzero.predict_value_only
+    assert parse_muzero_args([]).muzero.predict_value_only
     algorithm = assembly.make_muzero({**config, "muzero_predict_value_only": True}, jax.random.PRNGKey(9))
     state = algorithm.runner_state
     for _ in range(3):
@@ -264,6 +265,20 @@ def test_value_only_cycle(config, assembly):
     assert float(metrics["loss_r"]) == 0
     assert float(metrics["train_batch/n_reward_valid"]) == 0
     assert np.isfinite(float(metrics["loss_v"]))
+
+
+@pytest.mark.parametrize("network", ["vector", "spatial"])
+def test_value_only_model_omits_reward_head(config, network):
+    config = {**config, "muzero_network": network, "muzero_predict_value_only": True}
+    model, variables = make_muzero_model(config, jax.random.PRNGKey(0))
+    assert "reward" not in variables["params"]
+    obs = jnp.zeros((2, *config["game_obs_shape"]))
+    _, reward, _, value = model.apply(variables, obs, jnp.zeros(2, jnp.int32))
+    np.testing.assert_array_equal(reward, np.zeros(2))
+    assert bool(jnp.all(jnp.isfinite(value)))
+    _, baseline = make_muzero_model({**config, "muzero_predict_value_only": False},
+                                    jax.random.PRNGKey(0))
+    assert "reward" in baseline["params"]
 
 
 def test_value_only_loss_has_no_reward_gradient(config, assembly):
@@ -429,12 +444,10 @@ def test_completed_evictions_preserve_surviving_unrolls(config):
 def test_exploit_unroll_training_is_default(config, enabled):
     from nanoalphazero.cli import parse_muzero_args
 
-    assert config["exp_train_on_exploit_unroll_states"] is True
-    assert parse_muzero_args([]).exp_train_on_exploit_unroll_states is True
-    assert parse_muzero_args(["--exp-train-on-exploit-unroll-states"]).exp_train_on_exploit_unroll_states is True
-    assert parse_muzero_args(["--no-exp-train-on-exploit-unroll-states"]).exp_train_on_exploit_unroll_states is False
-    config = {**config, "exp_train_on_exploit_unroll_states": enabled, "exp_self_consistency": True,
-              "selfplay_buffer_consume_size": 6}
+    assert config["muzero_exploration_losses"] == "none"
+    assert parse_muzero_args([]).muzero.exploration_losses == "policy-transition"
+    config = {**config, "muzero_exploration_losses": "none" if enabled else "all",
+              "exp_self_consistency": True, "selfplay_buffer_consume_size": 6}
     buffer, state = make_buffer(config)
     for t in range(3):
         state = append(buffer, state, transition(config, t, t, exploration=t == 0,
@@ -470,8 +483,7 @@ def test_exploit_unroll_training_is_default(config, enabled):
 @pytest.mark.parametrize("exploit_only", [True, False])
 def test_exploration_without_value_keeps_windows_and_masks(config, assembly, exploit_only):
     cfg = {**config, "exp_self_consistency": True,
-           "exp_train_on_exploit_unroll_states": exploit_only,
-           "exp_train_on_exploration_without_value": True}
+           "muzero_exploration_losses": "policy-transition"}
     buffer, state = make_buffer(cfg)
     for step in range(4):
         state = append(buffer, state, transition(
@@ -911,6 +923,7 @@ def chess_config():
         selfplay_buffer_consume_size=2, selfplay_buffer_max_len=1024,
         selfplay_buffer_min_len=1, replay_buffer_max_len=4,
         conv_width=8, conv_depth=1, muzero_unroll_steps=2,
+        muzero_predict_value_only=False, muzero_exploration_losses="none",
         cycle_n_selfplay=512, cycle_n_train=1, lr_warmup_steps=0,
         mcts_num_root_considered=2, mcts_num_survivors=1,
         num_exploratory_moves=0, replay_buffer_warmup_steps=0,

@@ -568,8 +568,7 @@ def get_dummy_muzero_training_sample(config):
 
 
 def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions=None,
-                                  *, self_consistency=False, train_on_exploit_unroll_states=True,
-                                  train_on_exploration_without_value=False, value_only=False):
+                                  *, self_consistency=False, exploration_losses="none", value_only=False):
     """Gather ordered records, never extending a sequence into another game.
 
     Starts come from AlphaZero consume, which adds a singleton time axis.
@@ -596,17 +595,16 @@ def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions
     )
     missing = jnp.sum(real & ~matches)
     complete = valid & jnp.all(~real | matches, axis=1)
-    value_allowed = (~gather("is_exploration")
-                     if train_on_exploit_unroll_states or train_on_exploration_without_value
+    value_allowed = (~gather("is_exploration") if exploration_losses != "all"
                      else jnp.ones_like(real))
-    allowed = jnp.ones_like(real) if train_on_exploration_without_value else value_allowed
+    allowed = ~gather("is_exploration") if exploration_losses == "none" else jnp.ones_like(real)
     # A window needs at least one real supervised position, not just padding.
     complete = complete & jnp.any(real & allowed, axis=1)
     real = real & complete[:, None]
     # Rewards belong to the action at the source position. Gather K directly
     # rather than slicing a K+1 gather (the TPU gather/slice compiler workaround).
     reward_allowed = (~gather("is_exploration", unroll_steps)
-                      if train_on_exploit_unroll_states and not train_on_exploration_without_value
+                      if exploration_losses == "none"
                       else jnp.ones_like(real[:, :-1]))
     if num_actions is None:
         if experience.k_indices is not None:
@@ -730,8 +728,7 @@ def make_muzero_selfplay_buffer(config, dummy_selfplay_output, data_sharding=Non
             rewards = exp.transition_reward[:, order].T
             discounts = exp.discount[:, order].T
             supervised = completed
-            if (config.get("exp_train_on_exploit_unroll_states", True)
-                    and not config.get("exp_train_on_exploration_without_value", False)):
+            if config.get("muzero_exploration_losses", "none") == "none":
                 supervised = supervised & ~exp.is_exploration
             supervised = supervised[:, order].T
 
@@ -776,8 +773,7 @@ def make_muzero_selfplay_buffer(config, dummy_selfplay_output, data_sharding=Non
         samples, missing = gather_muzero_training_samples(
             after.experience, starts, k, config["game_num_actions"],
             self_consistency=config.get("exp_self_consistency", False),
-            train_on_exploit_unroll_states=config.get("exp_train_on_exploit_unroll_states", True),
-            train_on_exploration_without_value=config.get("exp_train_on_exploration_without_value", False),
+            exploration_losses=config.get("muzero_exploration_losses", "none"),
             value_only=config.get("muzero_predict_value_only", False),
         )
         after = after.replace(missing_count=after.missing_count + missing)
