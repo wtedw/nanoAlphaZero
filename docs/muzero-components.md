@@ -620,3 +620,32 @@ does not silently convert saved targets or switch modes.
 This follows the distinction in [Julian Schrittwieser's clarification](https://www.julian.ac/blog/2020/12/22/muzero-intuition/#4271a1239cc6ba61ec2af4974dc781ebd95332f22cd54c41c340bc6505105a39).
 Alternating the outcome signs adapts it to this implementation's `discount=-1`
 search convention; it is not a claim to reproduce all DeepMind internals.
+
+## Inspecting saved ACPL games
+
+`diagnostics/chess/acpl.py` computes exact game-behaviour metrics independently
+of the model, Stockfish, and tracking. Use a saved ACPL directory or combined PGN:
+
+```python
+from nanoalphazero.diagnostics.chess.acpl import analyze_acpl
+
+output = analyze_acpl("artifacts/my-run/acpl/cycle-.../")
+output.scalar_metrics
+output.tables["acpl/behaviour/events"]  # Missed mates and stalemating moves, with FENs.
+```
+
+The existing `DiagnosticOutput` contains scalar counts/fractions, per-game and
+event tables, and a game-length histogram. It can be passed to the generic
+tracker without a diagnostic factory. Calling it does not log or write files.
+It is not automatically run in the training loop.
+
+Mate opportunities count positions after `OpeningPlies`, not the number of
+available mating moves. Entire histories are replayed for repetition detection.
+Terminal outcomes override inaccurate PGN Result headers. Missed-mate outcome
+counts describe the eventual result for the player who missed; they do not
+establish that the miss caused that result. A zero opportunity count gives a
+zero missed-mate fraction. Both numerator and denominator are emitted.
+
+This scan does not recompute ACPL, call Stockfish to judge sacrifices or winning
+alternatives, or replay model search. Those require separate, more expensive
+probes. In particular, a repetition draw alone does not prove a missed win.

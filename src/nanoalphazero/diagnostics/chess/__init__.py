@@ -1,4 +1,4 @@
-"""Compact chess opening diagnostics: three tables and three Plotly panels.
+"""Chess opening diagnostics and notebook charts.
 
 Observed and imagined successor values use Black's perspective. Rewards and
 root Q use White's perspective. Policy comparisons normalize over real legal
