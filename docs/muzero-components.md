@@ -1,5 +1,29 @@
 # MuZero component assembly
 
+## Chess dynamics action encoding
+
+New chess models use `muzero_chess_action_encoding="from_to8"` for dynamics.
+The eight planes encode the source square, destination square, on-board target
+flag, and five broadcast promotion flags (queen/default, knight, bishop, rook,
+none), following the structure in [MuZero Appendix E](https://arxiv.org/html/1911.08265v2#A5).
+Source and destination use PGX's mover-relative observation coordinates.
+Off-board destinations have an empty destination plane and a zero on-board flag;
+that flag is not a legality test. Policy action IDs and replay storage remain unchanged.
+
+Ordinary forward moves from the seventh to eighth rank, straight or diagonally,
+set the queen/default flag: promote **if the moving piece is a pawn**. A rook or
+king can share that action ID. The encoder never inspects a board or latent.
+This conditional interpretation is our convention; the paper does not specify
+how its queen-promotion flag resolves the shared action ID.
+
+Checkpoints without this architecture setting retain `planes73`. Old models can
+be loaded for inference unchanged; resuming with resolved CLI defaults requires
+`--muzero.chess-action-encoding planes73`. The new eight-plane input changes the
+dynamics input-kernel shape, so switching an existing model to it is not an exact
+resume. Start a new run to compare the encodings.
+
+## Entry points
+
 Root `muzero.py` is the readable training entry point. `muzero-singlefile.py` is the
 historical standalone research snapshot, renamed without changing its logic.
 The two paths have different collection semantics. Do not compare results as
@@ -46,13 +70,34 @@ host forwards the combined cycle metrics to Trackio or W&B.
 
 ### Training metrics
 
-`--exp-train-on-exploration-without-value` enables policy, immediate-reward,
-and (when enabled separately) consistency losses at exploration positions.
-Real exploration positions still have masked value loss; absorbing value tails
-retain their zero targets. This takes precedence over
-`--[no-]exp-train-on-exploit-unroll-states`. Fully exploratory completed windows
-become eligible for replay. The new flag is off by default and does not change
-AlphaZero. Self-consistency still requires `--exp-self-consistency`.
+`--muzero.exploration-losses` controls supervision at **real exploratory
+self-play positions**, independently of terminal padding:
+
+| Mode | Policy | Value | Immediate reward / consistency |
+|---|---|---|---|
+| `none` | No | No | No |
+| `policy-transition` (default) | Yes | No | Yes, when enabled |
+| `all` | Yes | Yes | Yes, when enabled |
+
+Real exploit positions receive all enabled losses in every mode. Reward loss
+is absent in value-only models. Consistency requires `--exp-self-consistency`
+and is masked according to the real successor position, rather than the source.
+This option does not change AlphaZero or action selection.
+
+**Window eligibility:** a completed K-step window needs at least one real
+position with enabled supervision. `none` requires an exploit position within
+the window. The other modes admit all-exploration windows via their policy
+targets. An exploit position outside the window or in the next game cannot
+qualify it. All positions still wait for completed returns before consumption.
+
+**Terminal padding:** the final real record is the position before the ending
+action. Its terminal successor and later hypothetical successors have no policy
+or consistency supervision. Eligible windows supervise padding values in every
+mode: zero with reward prediction, alternating final outcomes in value-only
+mode. Padding reward targets are zero when reward prediction is enabled.
+Padding never makes an otherwise ineligible window eligible. An all-exploration
+game in `policy-transition` mode therefore trains real policies and padded values,
+but never real exploration values. Draw outcomes remain zero throughout.
 
 MuZero replay windows retain root `row_id`, `col_id`, `game_id`,
 `global_step_id`, and `ep_step`. The cycle returns
@@ -248,7 +293,7 @@ For example, add `--exp-self-consistency --self-consistency-weight 1.0` to the
 existing Hex5 command. No additional evaluation or logging backend is required;
 both Trackio and W&B receive the new scalar metrics through the usual host loop.
 
-By default, a completed start is eligible when at least one of its K+1 real
+With `exploration-losses=none`, a completed start is eligible when at least one of its K+1 real
 positions is non-exploratory. Exploratory roots are retained when they lead to
 exploit positions within the unroll. All-exploration windows are excluded;
 terminal padding and the next game cannot make a start eligible.
@@ -256,12 +301,12 @@ Policy and value losses are masked at each exploratory position. Reward loss
 is masked for the action taken at an exploratory source position. Consistency
 uses the future target position's mask. Actions and observations remain intact,
 so losses at later exploit positions still backpropagate through exploratory
-transitions. Absorbing zero-value/reward padding keeps its existing masks.
+transitions. Terminal padding follows the separate rules described above.
 
-`--exp-train-on-exploit-unroll-states` enables this masking and is on by
-default. Use `--no-exp-train-on-exploit-unroll-states` to train direct losses
-at exploratory positions too, including all-exploration windows. It is independent
-of `--exp-self-consistency`. This flag does not change action selection. Policy
+`--muzero.exploration-losses none` selects this stricter masking. Use
+`policy-transition` to include exploratory policy/reward/consistency losses,
+or `all` to include exploratory values too. This is independent
+of `--exp-self-consistency` and does not change action selection. Policy
 targets remain search distributions; value targets remain completed self-play
 returns, including any exploratory moves. Positions still wait for completion.
 
@@ -275,7 +320,7 @@ main text. This implementation is not an exact reproduction of that setup.
 | --- | --- | --- |
 | Reward loss | Omitted for board games without intermediate rewards. | `muzero_loss` retains immediate-reward MSE, including terminal rewards. This adds a separate transition prediction objective; many zero targets can make average reward loss small without accurate terminal predictions. |
 | Loss scaling | Appendix G describes scaling each head's loss by `1/K`. | Each head is averaged over its own unmasked positions across the batch and unroll. With all positions enabled, policy/value divide by `B*(K+1)` and reward by `B*K`. With fewer supervised positions, their individual weights increase instead of the head's contribution shrinking under a fixed denominator. |
-| Replay eligibility | Board-game states are sampled uniformly. | Replay entries are sampled uniformly after eligibility filtering. By default, windows need at least one real exploit state and direct losses at exploratory positions are masked. This changes the supervised population. |
+| Replay eligibility | Board-game states are sampled uniformly. | Replay entries are sampled uniformly after eligibility filtering. The default includes exploratory policy targets but masks real exploration values. `exploration-losses=none` instead requires a real exploit state in each window. |
 | Consistency | Not part of the original MuZero loss. | Optional `--exp-self-consistency` adds an EfficientZero-style negative cosine objective between predicted future latents and representations of actual future observations, through projection heads with a stopped target gradient. |
 
 Terminal rewards still supply value targets even when a separate reward loss is
@@ -377,7 +422,7 @@ file is attached unchanged; comments and variations remain in the downloadable
 PGN, while the board viewer follows the mainline. FEN starting positions are
 supported. The viewer needs no external scripts or network connection.
 
-For notebook use, `diagnostics.chess_games.games_html(pgn_text)` returns the
+For notebook use, `diagnostics.chess.games.games_html(pgn_text)` returns the
 same HTML document; display it with `IPython.display.HTML` or write it to a file.
 No model, tracker, or factory is needed. The host builds it only when an ACPL
 evaluation completes and tracking is enabled, then passes plain HTML to the
@@ -547,7 +592,7 @@ MoHex adapter (the engine pool starts before JAX initializes):
 
 ```bash
 uv run python muzero.py --env hex4 --platform tpu --num-iters 5000 \
-  --replay-buffer-warmup-steps 20 --muzero-unroll-steps 3 --no-enable-wandb \
+  --replay-buffer-warmup-steps 20 --muzero.unroll-steps 3 --no-enable-wandb \
   --ckpt.every 50 \
   --hex-eval-period 50 --hex-eval-engine-path /path/to/mohex \
   --hex-eval-output artifacts/hex4-NEW/mohex \
@@ -601,19 +646,22 @@ check compilation, stable sharding, memory, and cycle throughput before scaling
 to the game defaults. Do not start that run on the MacBook.
 # Value-only board-game experiment
 
-`--muzero-predict-value-only` disables reward loss and uses zero rewards in learned
+`--muzero.predict-value-only` disables reward loss and uses zero rewards in learned
 search. Real positions retain their completed outcome targets. Terminal and
 post-terminal positions retain that outcome too, with signs alternating for
 the hypothetical player: a winning root immediately before mate has targets
 `[1, -1, 1, -1, ...]`, rather than `[1, 0, 0, ...]`. Draws remain zero.
-This option requires `muzero_discount=1` and assumes alternating-player,
+Returns are undiscounted. This option assumes alternating-player,
 terminal-outcome board games. Policy/consistency supervision remains masked
 after termination; padding actions remain random. No latent is forcibly reset.
 
-The reward head remains in the parameter tree but is unused by the objective
-and search (optimizer weight decay can still change its weights). Diagnostics
+Value-only models omit the reward head entirely; their recurrent function
+returns a constant zero reward to preserve its interface. Diagnostics
 show the effective zero search rewards. `loss_r` and reward-supervision counts
-are zero. The default remains the existing reward-predicting formulation.
+are zero. Value-only with `exploration-losses=policy-transition` is the default.
+Use `--muzero.no-predict-value-only` for the reward-predicting formulation.
+Early value-only experimental checkpoints that retained a reward head have a
+different parameter tree; start a fresh value-only run with this architecture.
 Checkpoint configuration records this semantic difference; ordinary resume
 does not silently convert saved targets or switch modes.
 
@@ -621,6 +669,56 @@ This follows the distinction in [Julian Schrittwieser's clarification](https://w
 Alternating the outcome signs adapts it to this implementation's `discount=-1`
 search convention; it is not a claim to reproduce all DeepMind internals.
 
+MuZero CLI settings are grouped in `MuZeroConfig`: `--muzero.network`,
+`--muzero.unroll-steps`, `--muzero.predict-value-only`,
+`--muzero.chess-action-encoding`, `--muzero.memory-fraction`,
+`--muzero.remat-blocks`, and `--muzero.remat-unroll`. The discount option
+has been removed; player perspective still supplies the search sign.
+# Chess terminal diagnostics
+
+When tracking is enabled, the existing diagnostic cadence also evaluates the
+fixed suite in `diagnostics/chess/cases.py`. `diagnostics/chess/terminals.py`
+owns model inference and reductions; `muzero.py` does not know the cases or
+metric names. No extra diagnostic flag is needed. Existing running processes
+will pick up this code only after restart.
+
+The suite contains Fool's Mate, Scholar's Mate, the historical Qh1 missed mate,
+queen mate and its mirror, stalemate and its mirror, fifty-move draws and their
+mirror, capture to bare kings and its mirror, threefold repetition, and the
+512-ply cap. FEN-created endgames lack earlier observation history; the other
+cases replay moves or explicitly construct the step-cap boundary.
+
+Dashboard series use `chess/terminal/<case>/...`:
+
+- `root_value`, `observed_terminal_value`, `terminal_value`, and `reward`.
+- `greedy_value` / `greedy2_value` and corresponding rewards, after one/two
+  further unmasked policy-argmax actions from the terminal latent.
+- `terminal_value_error`, `reward_error`, `greedy_value_error`, and
+  `greedy2_value_error`, with targets appropriate to value-only or reward mode.
+- `q_one_step`, `q_two_step`, `q_three_step` and their absolute errors: manual
+  backups along the chosen terminal action and the greedy continuation chain.
+- `uniform_value_mae`, `top_policy_value_mae`, and matching `*_q_mae`: independent
+  one-step branches from the same terminal latent, using 32 fixed uniform action
+  IDs and the current top 8 policy actions. This is a bounded monitoring probe;
+  the offline script's 512-action estimates are a separate measurement.
+- `terminal_policy_entropy`, `search_visits`, `search_selected`, and `search_q`.
+  Search uses zero root Gumbel noise and the configured search budget. `search_q`
+  is omitted when the tested action is unvisited; consult visits, not a stale
+  dashboard point. The accompanying table stores null for unvisited Q.
+
+Values use each hypothetical player's perspective. Qs and the fixed action's
+outcome use the pre-move player's perspective. There is deliberately no root
+value error: a draw-producing action need not be optimal from its root.
+`observed_terminal_value` is additional inspection of the real final board,
+not a claim that terminal boards are sampled as training roots.
+
+`chess/terminal/mean/...` summarizes errors across the suite, and
+`chess/terminal/mate_selected_fraction` summarizes the known mating actions.
+Draw-action selection is not a strength metric. Fixed keys do not advance
+training RNG. Setup is lazy, model inference is compiled once per shape, and
+action branches scan small case batches to bound activation memory. First-call
+compilation is included in `timing/chess_terminal_seconds`; compare later calls
+for steady runtime. The probe does not execute simulator moves after termination.
 ## Inspecting saved ACPL games
 
 `diagnostics/chess/acpl.py` computes exact game-behaviour metrics independently

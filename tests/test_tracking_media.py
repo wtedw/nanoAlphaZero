@@ -61,7 +61,7 @@ def test_real_trackio_file_versions_and_html(tmp_path):
 from pathlib import Path
 import os
 from nanoalphazero.tracking import make_tracker
-from nanoalphazero.diagnostics.chess_games import games_html
+from nanoalphazero.diagnostics.chess.games import games_html
 from trackio.sqlite_storage import SQLiteStorage
 
 root = Path(os.environ["TRACKIO_DIR"]).parent

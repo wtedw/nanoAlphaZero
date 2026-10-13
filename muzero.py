@@ -553,7 +553,7 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
             files = acpl_result.files
             html = {}
             if files and tracker.should_log(cycle):
-                from nanoalphazero.diagnostics.chess_games import games_html
+                from nanoalphazero.diagnostics.chess.games import games_html
                 html["acpl/games_viewer"] = games_html(files["games.pgn"].read_text())
             tracker.log(extra_metrics, step=cycle, html=html)
             tracker.log_files("model-diagnostics", diagnostic.files, step=cycle)

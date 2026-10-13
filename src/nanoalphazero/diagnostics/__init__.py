@@ -17,9 +17,10 @@ class DiagnosticOutput:
 def make_diagnostics_fn(model, env, config):
     """Return diagnose_fn(params), lazily preparing the game's fixed probes once."""
     probe = None
+    terminal_probe = None
 
     def diagnose_fn(params):
-        nonlocal probe
+        nonlocal probe, terminal_probe
         import jax
 
         if jax.process_index() != 0:
@@ -36,8 +37,17 @@ def make_diagnostics_fn(model, env, config):
             if probe is None:
                 probe = make_chess_probe(model, env, config)
             metrics, tables = probe(params)
+            figures = chess_figures(tables)
+            if config.get("algorithm") == "muzero":
+                from nanoalphazero.diagnostics.chess.terminals import make_chess_terminal_probe
+
+                if terminal_probe is None:
+                    terminal_probe = make_chess_terminal_probe(model, env, config)
+                terminal_metrics, terminal_tables = terminal_probe(params)
+                metrics.update(terminal_metrics)
+                tables.update(terminal_tables)
             return DiagnosticOutput(metrics, {f"{name}_table": table for name, table in tables.items()},
-                                    chess_figures(tables))
+                                    figures)
         if config.get("env_id", "").startswith("hex"):
             from nanoalphazero.diagnostics.hex import make_muzero_head_probe, hex_figures
 

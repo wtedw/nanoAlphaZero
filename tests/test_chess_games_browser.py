@@ -11,7 +11,7 @@ import pytest
 
 playwright = pytest.importorskip("playwright.sync_api")
 
-from nanoalphazero.diagnostics.chess_games import games_html
+from nanoalphazero.diagnostics.chess.games import games_html
 
 
 def test_viewer_navigation_and_downloads_in_sandbox():

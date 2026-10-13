@@ -7,7 +7,7 @@ import chess
 import chess.pgn
 import pytest
 
-from nanoalphazero.diagnostics.chess_games import games_html
+from nanoalphazero.diagnostics.chess.games import games_html
 
 
 def payload(html):
