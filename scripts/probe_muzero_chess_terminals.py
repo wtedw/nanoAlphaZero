@@ -10,6 +10,7 @@ os.environ["JAX_PLATFORMS"] = "cpu"
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import chess
+import chess.pgn
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -90,6 +91,17 @@ def cases(env):
     board, state = chess.Board(), env.init()
     state = state.replace(_x=state._x._replace(step_count=jnp.int32(511)), _step_count=jnp.int32(511))
     add("512_ply_cap", board, state, "e2e4", True)
+    # The earlier cycle-8400 missed mate, replayed with its actual board history.
+    audit = Path("artifacts/chess-pgn-audit-cycle8400/report.json")
+    if audit.exists():
+        source = Path(json.loads(audit.read_text())["summary"]["source"])
+        with (source / "game-000221.pgn").open() as stream:
+            game = chess.pgn.read_game(stream)
+        board, state = game.board(), env.init()
+        for move in list(game.mainline_moves())[:47]:
+            state = step(state, jnp.int32(PgxAction.encode(move, board)))
+            board.push(move)
+        add("previous_missed_Qh1_mate", board, state, board.parse_san("Qh1#").uci(), True)
     return examples
 
 
@@ -167,17 +179,23 @@ def main():
     buffer, state = make_muzero_selfplay_buffer(cfg, get_dummy_muzero_selfplay_output(cfg))
     state, _ = jax.jit(buffer.add_backfill)(state, output, following.env_state.terminated, following.env_state.rewards)
     starts = jax.tree.map(lambda x: x[:, :1], state.experience)
-    targets, missing = gather_muzero_training_samples(state.experience, starts, 5, 4672)
+    value_only = saved_config.get("muzero_predict_value_only", False)
+    from nanoalphazero.muzero_config import normalize_exploration_config
+    mode = normalize_exploration_config(saved_config)["muzero_exploration_losses"]
+    targets, missing = gather_muzero_training_samples(
+        state.experience, starts, 5, 4672, value_only=value_only, exploration_losses=mode)
     assert int(missing) == 0
     terminal = np.asarray(actual.terminated)
     actual_rewards = actual.rewards[jnp.arange(len(examples)), roots.current_player]
     np.testing.assert_array_equal(targets.reward[terminal, 0], actual_rewards[terminal])
     np.testing.assert_array_equal(targets.transition_reward[terminal, 0], actual_rewards[terminal])
     np.testing.assert_array_equal(output.discount[:, 0][terminal], 0)
-    np.testing.assert_array_equal(targets.reward[terminal, 1:], 0)
+    expected_tail = (np.asarray(actual_rewards)[terminal, None] * (-1.)**np.arange(1, 6)
+                     if value_only else np.zeros((int(terminal.sum()), 5)))
+    np.testing.assert_array_equal(targets.reward[terminal, 1:], expected_tail)
     np.testing.assert_array_equal(targets.value_mask[terminal, 1:], True)
     np.testing.assert_array_equal(targets.transition_reward[terminal, 1:], 0)
-    np.testing.assert_array_equal(targets.reward_mask[terminal, 1:], True)
+    np.testing.assert_array_equal(targets.reward_mask[terminal, 1:], not value_only)
     print("Verified actual self-play and absorbing targets", flush=True)
     # auto_reset immediately supplies a new initial board while preserving the
     # finished game's reward/done flags. Subsequent steps play that new game.
@@ -188,7 +206,8 @@ def main():
         state, _ = jax.jit(buffer.add_backfill)(state, next_output,
             following.env_state.terminated, following.env_state.rewards)
     after_reset, missing_after = gather_muzero_training_samples(
-        state.experience, starts, 5, 4672, self_consistency=True)
+        state.experience, starts, 5, 4672, self_consistency=True,
+        value_only=value_only, exploration_losses=mode)
     assert int(missing_after) == 0
     for field in ("reward", "transition_reward", "action", "policy_mask", "value_mask", "reward_mask"):
         np.testing.assert_array_equal(np.asarray(getattr(after_reset, field))[terminal],
