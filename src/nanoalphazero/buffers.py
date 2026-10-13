@@ -497,6 +497,7 @@ def estimate_muzero_storage(config, device_count=1):
 class MuZeroSelfplayOutput(SelfplayOutput):
     transition_reward: Optional[ArrayLike] = None
     discount: Optional[ArrayLike] = None
+    is_terminal: Optional[ArrayLike] = None  # Actual final board, not an outgoing real move.
 
 
 @chex.dataclass(frozen=True)
@@ -510,6 +511,7 @@ class MuZeroTrainingSample:
     policy_mask: ArrayLike
     value_mask: ArrayLike
     reward_mask: ArrayLike
+    terminal_mask: Optional[ArrayLike] = None  # Absorbing positions, including terminal roots.
     board_bool: Optional[ArrayLike] = None
     board_float: Optional[ArrayLike] = None
     k_indices: Optional[ArrayLike] = None
@@ -536,7 +538,8 @@ def get_dummy_muzero_selfplay_output(config):
     if original.k_indices is not None and config["game_num_actions"] <= 65536:
         original = original.replace(k_indices=original.k_indices.astype(jnp.uint16))
     return MuZeroSelfplayOutput(
-        **vars(original), transition_reward=jnp.float32(0), discount=jnp.float32(0)
+        **vars(original), transition_reward=jnp.float32(0), discount=jnp.float32(0),
+        is_terminal=jnp.bool_(False),
     )
 
 
@@ -564,11 +567,13 @@ def get_dummy_muzero_training_sample(config):
         policy_mask=jnp.zeros((k + 1,), bool),
         value_mask=jnp.zeros((k + 1,), bool),
         reward_mask=jnp.zeros((k,), bool),
+        terminal_mask=jnp.zeros((k + 1,), bool),
     )
 
 
 def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions=None,
-                                  *, self_consistency=False, exploration_losses="none", value_only=False):
+                                  *, self_consistency=False, exploration_losses="none", value_only=False,
+                                  terminal_policy="none"):
     """Gather ordered records, never extending a sequence into another game.
 
     Starts come from AlphaZero consume, which adds a singleton time axis.
@@ -584,6 +589,7 @@ def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions
     def gather(name, count=unroll_steps + 1, offset=0):
         return getattr(experience, name)[lanes[:, None], indices[:, offset:offset + count]]
     valid = starts.is_valid_sample
+    terminal_root = (jnp.zeros_like(valid) if starts.is_terminal is None else starts.is_terminal)
     remaining = starts.ep_termination_step - starts.ep_step
     real = valid[:, None] & (offsets <= remaining[:, None])
     matches = (
@@ -598,8 +604,9 @@ def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions
     value_allowed = (~gather("is_exploration") if exploration_losses != "all"
                      else jnp.ones_like(real))
     allowed = ~gather("is_exploration") if exploration_losses == "none" else jnp.ones_like(real)
-    # A window needs at least one real supervised position, not just padding.
-    complete = complete & jnp.any(real & allowed, axis=1)
+    # Ordinary windows need real supervision; an explicit terminal root owns
+    # a known value target and is independently eligible.
+    complete = complete & (terminal_root | jnp.any(real & allowed, axis=1))
     real = real & complete[:, None]
     # Rewards belong to the action at the source position. Gather K directly
     # rather than slicing a K+1 gather (the TPU gather/slice compiler workaround).
@@ -636,6 +643,9 @@ def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions
         last = jnp.clip(remaining, 0, unroll_steps)
         outcome = jnp.take_along_axis(gather("reward"), last[:, None], axis=1)
         tail_value = jnp.where((offsets - remaining[:, None]) % 2 == 0, outcome, -outcome)
+        # A terminal root has remaining=-1 and already owns the opponent's outcome.
+        tail_value = jnp.where(terminal_root[:, None],
+                               starts.reward[:, None] * jnp.where(offsets % 2 == 0, 1., -1.), tail_value)
         tail_value = jnp.where(complete[:, None], tail_value, 0)
 
     sample = MuZeroTrainingSample(
@@ -650,7 +660,8 @@ def gather_muzero_training_samples(experience, starts, unroll_steps, num_actions
         # Gather K transitions directly. Gathering K+1 then slicing the result
         # triggers an invalid TPU all-reduce-scatter rewrite at K=5.
         transition_reward=jnp.where(real[:, :-1], gather("transition_reward", unroll_steps), 0),
-        policy_mask=real & allowed,
+        policy_mask=(real & allowed) | (complete[:, None] & ~real & (terminal_policy == "uniform")),
+        terminal_mask=complete[:, None] & ~real,
         value_mask=complete[:, None] & (~real | value_allowed),
         reward_mask=complete[:, None] & (~real[:, :-1] | reward_allowed) & ~jnp.bool_(value_only),
     )
@@ -710,6 +721,11 @@ def make_muzero_selfplay_buffer(config, dummy_selfplay_output, data_sharding=Non
     def add_backfill(state, output, env_state_terminated, env_state_rewards):
         old = state.experience
         index = state.current_index
+        if config.get("muzero_train_on_terminal_states", False):
+            # The preceding mating/drawing transition was already completed and
+            # assigned an episode ID. The reset call belongs to that same episode.
+            output = output.replace(game_id=jnp.where(
+                output.is_terminal, old.game_id[:, (index - 1) % capacity, None], output.game_id))
         # Chronological eviction removes a start before any of its successors.
         # Thus every surviving completed start still has its forward unroll.
         dropped_pending = old.is_from_selfplay[:, index] & (old.is_pending_reward_i8[:, index] != 0)
@@ -775,6 +791,7 @@ def make_muzero_selfplay_buffer(config, dummy_selfplay_output, data_sharding=Non
             self_consistency=config.get("exp_self_consistency", False),
             exploration_losses=config.get("muzero_exploration_losses", "none"),
             value_only=config.get("muzero_predict_value_only", False),
+            terminal_policy=config.get("muzero_terminal_policy", "none"),
         )
         after = after.replace(missing_count=after.missing_count + missing)
         return after, jax.tree.map(lambda x: x[:, None], samples), metrics

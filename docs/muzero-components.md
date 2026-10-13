@@ -747,3 +747,48 @@ zero missed-mate fraction. Both numerator and denominator are emitted.
 This scan does not recompute ACPL, call Stockfish to judge sacrifices or winning
 alternatives, or replay model search. Those require separate, more expensive
 probes. In particular, a repetition draw alone does not prove a missed win.
+
+## Experimental terminal-root training
+
+`--muzero.train-on-terminal-states` retains the actual final board for one
+collection call before resetting that lane. It is off by default. The regular
+AlphaZero collector and PGX1 package are unchanged; MuZero substitutes a local
+delayed-reset wrapper built from the regular environment step/init functions.
+Each completed lane spends one call resetting while other lanes continue.
+The self-play step budget counts collection calls, including these reset calls.
+
+The buffer stores the terminal board as a completed root in the same episode,
+with no outgoing reward. Earlier roots are backfilled once, on the ending move.
+The terminal entry's `ep_termination_step = ep_step - 1` identifies a root with
+no real outgoing transitions; all its actions come from absorbing padding.
+Sampling never learns a terminal-to-new-game transition. The terminal root is
+eligible independently of exploration masks, including after an entirely
+exploratory game. It participates in the normal fresh-start consume mechanism.
+
+In value-only mode its value is the outcome for the terminal player (usually
+the loser), alternating sign through the unroll. Draw targets are zero. In
+reward-predicting mode terminal-root and subsequent values/rewards are zero;
+the actual terminal reward remains exclusively on the incoming real move.
+
+`--muzero.terminal-policy none|uniform` independently controls policy loss on
+terminal and post-terminal positions, including tails of ordinary roots.
+The default `none` preserves policy masking. `uniform` uses exact KL against a
+uniform distribution over **all** action IDs, without needing a dense target
+or relying on terminal legal masks. It works with BNK policy storage. Padding
+actions remain uniformly sampled. Consistency loss excludes absorbing targets
+in both modes; there are no real future observations for those transitions.
+
+For example, add either of these to an existing MuZero command:
+
+```bash
+--muzero.train-on-terminal-states --muzero.terminal-policy none
+--muzero.train-on-terminal-states --muzero.terminal-policy uniform
+```
+
+This changes collection and replay structure; compare fresh runs (or explicitly
+start from model weights), not an exact resume with different training options.
+No terminal-board observation is added to every old transition: final boards
+occupy ordinary self-play slots with an additional boolean marker. Replay keeps
+a K+1 boolean terminal mask to distinguish uniform policy from real search
+targets and exclude padding from consistency. Terminal-only batches count as
+valid even when their policy loss is disabled.

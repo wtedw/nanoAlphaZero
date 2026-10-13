@@ -68,6 +68,8 @@ def test_muzero_config_group():
         "muzero_predict_value_only": True, "muzero_unroll_steps": 7,
         "muzero_exploration_losses": "policy-transition",
         "muzero_remat_blocks": False,
+        "muzero_train_on_terminal_states": False,
+        "muzero_terminal_policy": "none",
     }
     with pytest.raises(SystemExit):
         parse_muzero_args(["--muzero-discount", "0.99"])

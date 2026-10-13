@@ -60,6 +60,9 @@ def make_muzero_selfplay(config, wenv, run_mcts_fn, data_sharding=None):
     from nanoalphazero.core import make_selfplay
     from nanoalphazero.muzero_metrics import selfplay_metrics
 
+    if config.get("muzero_train_on_terminal_states", False):
+        from nanoalphazero.muzero_selfplay import with_delayed_reset
+        wenv = with_delayed_reset(wenv)
     original, state = make_selfplay(config, wenv, run_mcts_fn, data_sharding)
 
     def selfplay_fn(rng, state, params):
@@ -73,9 +76,13 @@ def make_muzero_selfplay(config, wenv, run_mcts_fn, data_sharding=None):
         )
         output = MuZeroSelfplayOutput(
             **vars(output), transition_reward=reward[:, None], discount=discount[:, None],
+            is_terminal=jnp.zeros_like(output.just_terminated),
         )
         return following, output, selfplay_metrics(metrics[0], following, output)
 
+    if config.get("muzero_train_on_terminal_states", False):
+        from nanoalphazero.muzero_selfplay import collect_terminal_roots
+        selfplay_fn = collect_terminal_roots(selfplay_fn, config)
     return selfplay_fn, state
 
 
@@ -135,16 +142,19 @@ def unroll_muzero_predictions(model, params, batch, remat=False, *, return_laten
     return (*predictions, jnp.stack(latents, axis=1)) if return_latents else predictions
 
 
-def muzero_policy_kl(logits, target, indices=None):
+def muzero_policy_kl(logits, target, indices=None, terminal_mask=None):
     """Normalize over every action before selecting sparse target support."""
     import jax
     import jax.numpy as jnp
 
     target = jax.lax.stop_gradient(target)
     log_probs = jax.nn.log_softmax(logits, axis=-1)
+    uniform_kl = -jnp.mean(log_probs, axis=-1) - jnp.log(logits.shape[-1])
     if indices is not None:
         log_probs = jnp.take_along_axis(log_probs, indices.astype(jnp.int32), axis=-1)
-    return -jnp.sum(target * log_probs + jax.scipy.special.entr(target), axis=-1)
+    kl = -jnp.sum(target * log_probs + jax.scipy.special.entr(target), axis=-1)
+    # Exact full-action uniform KL, independent of BNK support/duplicates.
+    return kl if terminal_mask is None else jnp.where(terminal_mask, uniform_kl, kl)
 
 
 def masked_consistency_loss(prediction, target, mask):
@@ -191,6 +201,8 @@ def muzero_consistency_loss(model, params, batch, predicted_latents, remat=False
     # Follow real successor policy supervision, including exploration when enabled.
     # Terminal/reset tails never contribute; gradients can cross exploratory actions.
     mask = batch.policy_mask[:, 1:].reshape(-1)
+    if batch.terminal_mask is not None:
+        mask = mask & ~batch.terminal_mask[:, 1:].reshape(-1)
     return masked_consistency_loss(prediction, target, mask)
 
 
@@ -206,7 +218,7 @@ def muzero_loss(model, params, batch, remat=False, *, self_consistency_weight=0.
     def mean_masked(values, mask):
         return jnp.sum(jnp.where(mask, values, 0)) / jnp.maximum(jnp.sum(mask), 1)
 
-    kl = muzero_policy_kl(logits, batch.action_weights, batch.k_indices)
+    kl = muzero_policy_kl(logits, batch.action_weights, batch.k_indices, batch.terminal_mask)
     loss_pi = mean_masked(kl, batch.policy_mask)
     loss_v = mean_masked((values - batch.reward) ** 2, batch.value_mask)
     loss_r = (jnp.zeros((), values.dtype) if value_only else
@@ -216,8 +228,11 @@ def muzero_loss(model, params, batch, remat=False, *, self_consistency_weight=0.
     if self_consistency_weight > 0:
         consistency = muzero_consistency_loss(model, params, batch, predictions[3], remat)
         total += self_consistency_weight * consistency
+        consistency_mask = batch.policy_mask[:, 1:]
+        if batch.terminal_mask is not None:
+            consistency_mask = consistency_mask & ~batch.terminal_mask[:, 1:]
         metrics.update(loss_consistency=consistency,
-                       **{"consistency/n_valid": jnp.sum(batch.policy_mask[:, 1:]).astype(jnp.float32)})
+                       **{"consistency/n_valid": jnp.sum(consistency_mask).astype(jnp.float32)})
     return total, metrics
 
 

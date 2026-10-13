@@ -572,6 +572,7 @@ def get_muzero_config(env="hex4", **overrides):
         muzero_exploration_losses="policy-transition",
         muzero_network="spatial", muzero_unroll_steps=5,
         muzero_predict_value_only=True,
+        muzero_train_on_terminal_states=False, muzero_terminal_policy="none",
         muzero_remat_blocks=env == "chess", muzero_remat_unroll=env == "chess",
         muzero_memory_fraction=0.75,
         enable_wandb=False,

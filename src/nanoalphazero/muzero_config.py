@@ -13,6 +13,10 @@ class MuZeroConfig:
     predict_value_only: bool = True
     # Losses at real exploratory positions; terminal padding is unaffected.
     exploration_losses: Literal["none", "policy-transition", "all"] = "policy-transition"
+    # Retain the final board as a completed root; reset on the following call.
+    train_on_terminal_states: bool = False
+    # Policy supervision on terminal and absorbing positions, over all actions.
+    terminal_policy: Literal["none", "uniform"] = "none"
     memory_fraction: float | None = None
     remat_blocks: bool | None = None
     remat_unroll: bool | None = None

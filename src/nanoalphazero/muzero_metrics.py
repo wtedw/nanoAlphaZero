@@ -16,7 +16,7 @@ SAMPLE_FIELDS = ("row_id", "col_id", "game_id", "global_step_id", "ep_step")
 def training_batch_arrays(batch, selfplay_step):
     """Root provenance from the actual optimizer batch, not a diagnostic resample."""
     arrays = {name: getattr(batch, name) for name in SAMPLE_FIELDS}
-    arrays["valid"] = jnp.any(batch.policy_mask, axis=-1)
+    arrays["valid"] = jnp.any(batch.policy_mask | batch.value_mask, axis=-1)
     arrays["age"] = selfplay_step.astype(jnp.int32) - batch.global_step_id.astype(jnp.int32)
     return arrays
 
@@ -46,7 +46,7 @@ def training_batch_histograms(arrays):
 
 def training_batch_metrics(batch):
     """Count usable windows and supervised positions, including absorbing V/R tails."""
-    valid = jnp.any(batch.policy_mask, axis=1)
+    valid = jnp.any(batch.policy_mask | batch.value_mask, axis=1)
     counts = dict(
         n_is_valid=jnp.sum(valid), n_is_invalid=jnp.sum(~valid),
         n_policy_valid=jnp.sum(batch.policy_mask),
