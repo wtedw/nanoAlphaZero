@@ -15,6 +15,7 @@ import math
 import os
 from pathlib import Path
 import statistics
+import subprocess
 import sys
 import tempfile
 import time
@@ -50,6 +51,12 @@ def run_cycle_profile(args):
                replay_buffer_max_len=16, replay_buffer_min_len=1,
                replay_buffer_total_size=args.batch * 16,
                muzero_unroll_steps=args.unroll, enable_wandb=False)
+    for arg, name in ((args.remat_blocks, "muzero_remat_blocks"),
+                      (args.remat_unroll, "muzero_remat_unroll")):
+        if arg is not None:
+            if args.algorithm != "muzero":
+                raise ValueError("Checkpoint overrides apply only to MuZero")
+            cfg[name] = arg
     for arg, name in ((args.root_considered, "mcts_num_root_considered"),
                       (args.survivors, "mcts_num_survivors")):
         if arg is not None:
@@ -116,6 +123,13 @@ def run_cycle_profile(args):
     finished, fixture_buffer = jax.block_until_ready(prepare(games, state.selfplay_buffer_state))
     assert bool(jnp.all(finished.env_state.terminated))
     assert int(fixture_buffer.num_valid_consumable) == args.batch
+    if args.check_equivalence:
+        if args.algorithm != "muzero":
+            raise ValueError("Equivalence checks apply only to MuZero")
+        from check_muzero_training import check_training_equivalence
+        samples = jax.jit(lambda b: algorithm.selfplay_buffer.consume(b)[1])(fixture_buffer)
+        samples = jax.tree.map(lambda x: x[:, 0], samples)
+        check_training_equivalence(module, cfg, algorithm.model, state.model_ts, samples, output)
     # Start the timed self-play call on a live board; preserve unique step IDs.
     fixture_games = state.selfplay_state._replace(
         step_count=finished.step_count, next_game_id=finished.next_game_id)
@@ -171,6 +185,9 @@ def run_cycle_profile(args):
         print(f"Cycle {iteration + 1}: {elapsed * 1000:.2f} ms, drain=1, update={updates}", flush=True)
     (output / "sharding-output.json").write_text(json.dumps(sharding_report(state), indent=2))
     report = dict(algorithm=args.algorithm, mode="cycle", batch=args.batch,
+                  revision=subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+                  remat_blocks=cfg.get("muzero_remat_blocks"),
+                  remat_unroll=cfg.get("muzero_remat_unroll"),
                   fixture="scripted Scholar's mate; first start per lane; restored outside timing",
                   compile_seconds=compile_seconds, seconds=durations,
                   median_seconds=statistics.median(durations),

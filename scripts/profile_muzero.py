@@ -36,11 +36,20 @@ def main():
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--unroll", type=int, default=5,
                         help="MuZero cycle training unroll (default: 5)")
+    parser.add_argument("--remat-blocks", action=argparse.BooleanOptionalAction, default=None,
+                        help="Override MuZero block checkpointing in cycle mode")
+    parser.add_argument("--remat-unroll", action=argparse.BooleanOptionalAction, default=None,
+                        help="Override MuZero unroll checkpointing in cycle mode")
+    parser.add_argument("--check-equivalence", action="store_true",
+                        help="Compare MuZero losses, gradients and updates to both checkpoint levels enabled")
     parser.add_argument("--only-time", action="store_true")
     parser.add_argument("--no-analyze", action="store_true",
                         help="Save the trace without printing the XLA text summary")
     parser.add_argument("--output-parent", type=Path, default=Path("/tmp/maz-profiles"))
     args = parser.parse_args()
+    if (args.remat_blocks is not None or args.remat_unroll is not None or args.check_equivalence):
+        if args.mode != "cycle" or args.algorithm != "muzero":
+            parser.error("checkpoint overrides and equivalence checks require MuZero cycle mode")
     if min(args.batch, args.iterations, args.warmup) < 1:
         parser.error("batch, iterations, and warmup must be positive")
     if args.root_considered is not None and args.root_considered < 1:

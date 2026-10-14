@@ -113,6 +113,54 @@ self-play storage keeps its default capacity, and replay capacity is 16 items pe
 lane. This is a controlled runtime benchmark, not a learning evaluation or a
 measurement with full production replay capacity. MuZero keeps its default
 five-step training unroll; `--unroll 1` is available for a diagnostic comparison.
+
+### MuZero checkpointing: speed versus activation memory
+
+The chess defaults checkpoint both residual blocks and the training unroll.
+Checkpointing saves activation memory by recomputing forward operations during
+backpropagation. When memory permits, benchmark removing the outer checkpoint
+or both levels without changing model size, buffers, batch size, or unroll:
+
+```bash
+# Keep block checkpoints; remove the outer unroll checkpoint.
+just prof-analyze chess cycle --no-remat-unroll
+# Fastest measured configuration; uses more temporary memory.
+just prof-analyze chess cycle --no-remat-blocks --no-remat-unroll --check-equivalence
+```
+
+On four TPU v4 devices, batch 256, b10c256, five-step unroll, the controlled
+cycle benchmark measured the following (10 warmed calls; compilation excluded):
+
+| Checkpoints | Median cycle | Traced training branch | Compiler temporary memory |
+| --- | ---: | ---: | ---: |
+| Blocks + unroll (default) | 55.56 ms | 33.24 ms | 533 MiB |
+| Blocks only | 49.14 ms | 27.02 ms | 668 MiB |
+| Neither | 45.20 ms | 23.08 ms | 1,420 MiB |
+
+These are fixed-size benchmark comparisons, not full-production-buffer memory
+validation. Persistent model/buffer sizes are identical between these runs.
+The training branch includes its enclosing control-flow event; do not add it to
+the durations of its child operations. All four devices remain data parallel.
+Defaults remain memory-conservative: the larger production batch may require
+checkpointing. The production CLI already supports the corresponding settings:
+
+```bash
+uv run --frozen python muzero.py --env chess --muzero.no-remat-unroll
+# Add --muzero.no-remat-blocks only with sufficient activation-memory headroom.
+```
+
+`--check-equivalence` compares identical parameters, optimizer state, and a real
+five-step fixture batch against the double-checkpoint reference before timing.
+It writes `equivalence.json` with loss, metrics, gradients, AdamW updates, resulting
+parameters, and optimizer-state errors. The update comparison allows absolute
+error 1e-8 plus relative error 1e-3 per element, and additionally requires whole
+update relative L2 error below 1e-4 (gradient relative L2 below 1e-3). This protects
+near-zero entries while bounding aggregate drift; it is not bitwise equality or
+a guarantee of identical long training trajectories. CPU regression coverage
+also checks three successive updates with varied targets and partial masks.
+The full-size TPU comparison measured identical loss, gradient relative L2 error
+8.91e-8, update relative L2 error 2.75e-6, and maximum resulting parameter error
+1.86e-9. These checks cover sampled updates, not training convergence.
 One MuZero update therefore has more network evaluations than one AlphaZero update.
 Reports include input/output leaf shardings, optimized HLO, update/drain checks,
 and per-device XLA timeline coverage. Coverage measures overlapping operation
