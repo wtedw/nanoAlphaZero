@@ -2,11 +2,12 @@
 
 Only compressed chunks are written to disk. Host staging is bounded by one
 4 MiB chunk, except for runtime/codec overhead. Save between completed cycles;
-do not mutate/donate the source state concurrently. Single-host checkpoints
-restore with the same shard geometry (device IDs themselves may change).
+do not mutate/donate the source state concurrently. Multihost checkpoints use
+a shared filesystem and restore with the same topology and shard geometry.
+Replicated model tensors can also be loaded alone on a single host.
 """
 
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from functools import partial
 import hashlib
 import itertools
@@ -98,6 +99,9 @@ def _allocate(zero, shape):
 
 
 def save(path, payload, config, *, metadata=None):
+    if jax.process_count() > 1:
+        from nanoalphazero.ckpt.distributed import save as distributed_save
+        return distributed_save(path, payload, config, metadata=metadata)
     started = time.monotonic()
     timings = dict(transfer_seconds=0.0, compress_seconds=0.0, write_seconds=0.0)
     root = Path(path)
@@ -114,47 +118,14 @@ def save(path, payload, config, *, metadata=None):
         temporary = root / f".writing-{token}"
         committed = root / f"gen-{token}"
         temporary.mkdir()
-        compressor = zstd.ZstdCompressor(level=3)
         manifest = dict(format=FORMAT, mode="full" if "runner_state" in payload else "partial",
                         config=config, metadata=metadata or {}, fields=[], chunk_bytes=CHUNK_BYTES)
         published = False
         try:
-            for field_id, (keys, value) in enumerate(jax.tree_util.tree_flatten_with_path(payload)[0]):
-                key_impl = None
-                if hasattr(value, "dtype") and jax.dtypes.issubdtype(value.dtype, jax.dtypes.prng_key):
-                    key_impl = str(jax.random.key_impl(value))
-                    value = jax.random.key_data(value)
-                value = jax.numpy.asarray(value)
-                if not value.is_fully_addressable:
-                    raise ValueError("Compressed checkpoints currently require single-host arrays")
-                field = dict(path=jax.tree_util.keystr(keys), shape=list(value.shape),
-                             dtype=str(value.dtype), key_impl=key_impl, shards=[])
-                seen = set()
-                for shard in value.addressable_shards:
-                    index = _index(shard.index, value.shape)
-                    identity = str(index)
-                    if identity in seen:
-                        continue  # Store replicated data only once.
-                    seen.add(identity)
-                    entry = dict(index=index, shape=list(shard.data.shape), chunks=[])
-                    for block_id, (start, shape) in enumerate(_blocks(shard.data.shape, value.dtype.itemsize)):
-                        tick = time.monotonic()
-                        chunk = (shard.data if shape == shard.data.shape else
-                                 _slice(shard.data, np.asarray(start, dtype=np.int32), shape))
-                        raw = np.asarray(jax.device_get(chunk)).tobytes()
-                        timings["transfer_seconds"] += time.monotonic() - tick
-                        tick = time.monotonic()
-                        encoded = compressor.compress(raw)
-                        timings["compress_seconds"] += time.monotonic() - tick
-                        filename = f"{field_id}-{len(field['shards'])}-{block_id}.zst"
-                        tick = time.monotonic()
-                        _write(temporary / filename, encoded)
-                        timings["write_seconds"] += time.monotonic() - tick
-                        entry["chunks"].append(dict(file=filename, bytes=len(raw),
-                                                    start=start, shape=shape,
-                                                    sha256=hashlib.sha256(raw).hexdigest()))
-                    field["shards"].append(entry)
-                manifest["fields"].append(field)
+            from nanoalphazero.ckpt.distributed import _fields
+            manifest["fields"] = _fields(temporary, payload, timings)
+            for field in manifest["fields"]:
+                field.pop("indices")
             _write(temporary / "manifest.json", json.dumps(manifest, allow_nan=False).encode())
             _sync_directory(temporary)
             temporary.rename(committed)
@@ -191,10 +162,28 @@ def inspect_checkpoint(path):
 
 
 def load(path, template, *, field_prefix=None):
+    from nanoalphazero.ckpt.distributed import collectively
+    # Pin one published generation until every host has finished reading it.
+    # Individual readers alone could otherwise straddle a concurrent publication.
+    with ExitStack() as stack:
+        if jax.process_count() > 1:
+            collectively(lambda: stack.enter_context(_lock(Path(path), exclusive=False))
+                         if jax.process_index() == 0 else None, "lock restore")
+        return collectively(lambda: _load(path, template, field_prefix=field_prefix), "restore")
+
+
+def _load(path, template, *, field_prefix=None):
     root = Path(path)
     with _lock(root, exclusive=False):
         directory = _generation(root)
         manifest = json.loads((directory / "manifest.json").read_text())
+        if field_prefix is None:
+            from nanoalphazero.ckpt.distributed import topology
+            saved_topology = manifest.get("topology")
+            if saved_topology is not None and saved_topology != topology():
+                raise ValueError("Checkpoint topology differs; restore with the original hosts/devices")
+            if saved_topology is None and jax.process_count() > 1:
+                raise ValueError("Single-host checkpoint requires single-host restore")
         expected, tree = jax.tree_util.tree_flatten_with_path(template)
         mode = "full" if "runner_state" in template else "partial"
         if manifest["format"] != FORMAT or (field_prefix is None and manifest["mode"] != mode):
@@ -217,8 +206,6 @@ def load(path, template, *, field_prefix=None):
             if list(shape) != field["shape"] or str(dtype) != field["dtype"]:
                 raise ValueError(f"Checkpoint shape/dtype mismatch: {field['path']}")
             sharding = getattr(example, "sharding", None) or jax.sharding.SingleDeviceSharding(jax.devices()[0])
-            if not sharding.is_fully_addressable:
-                raise ValueError("Compressed restore currently requires single-host arrays")
             local_arrays = []
             for device, index in sharding.addressable_devices_indices_map(shape).items():
                 saved = next((s for s in field["shards"] if s["index"] == _index(index, shape)), None)

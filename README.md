@@ -55,6 +55,10 @@ uv run train --env ttt
 
 ## MuZero components
 
+For commands across an existing TPU pod, see [pod setup and launch](docs/pod.md).
+`uv run pod setup` discovers workers automatically and prepares the shared
+checkout and local environments; `uv run pod status` checks readiness.
+
 [muzero.py](muzero.py) assembles the package components and exposes its
 self-play, buffers, search, learner, and complete runner state. Its cycle is
 visible in the file: advance ongoing games, consume fresh starts into K-step

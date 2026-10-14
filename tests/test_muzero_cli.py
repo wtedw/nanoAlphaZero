@@ -38,7 +38,7 @@ def test_boolean_overrides_preserve_three_states(name):
 def test_omitted_options_inherit_game_defaults(env):
     args = parse_muzero_args(["--env", env])
     overrides = {k: v for k, v in vars(args).items()
-                 if v is not None and k not in ("env", "muzero", "ckpt", "acpl", "platform", "ladder_period")
+                 if v is not None and k not in ("env", "muzero", "ckpt", "acpl", "platform", "distributed", "ladder_period")
                  and not k.startswith("hex_eval_")}
     overrides.update(args.muzero.overrides())
     assert get_muzero_config(env, **overrides) == get_muzero_config(env)

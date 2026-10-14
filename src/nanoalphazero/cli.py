@@ -8,6 +8,8 @@ from pathlib import Path
 import sys
 import tomllib
 
+from nanoalphazero.distributed import DistributedArgs
+
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
@@ -354,6 +356,7 @@ class MuZeroArgs:
 
     env: MuZeroEnv = "hex4"
     platform: Literal["cpu", "tpu"] | None = None
+    distributed: DistributedArgs = field(default_factory=DistributedArgs)
 
     muzero: MuZeroConfig = field(default_factory=MuZeroConfig)
     ckpt: MuZeroCheckpointArgs = field(default_factory=MuZeroCheckpointArgs)

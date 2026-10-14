@@ -454,6 +454,7 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
     from nanoalphazero.eval.ladder import make_ladder
     from nanoalphazero.eval.acpl import make_acpl
     from nanoalphazero.tracking import make_tracker
+    from nanoalphazero.tracking_arrays import gather_training_arrays, device_memory_metrics
     from nanoalphazero.muzero_metrics import training_batch_histograms
 
     config = algorithm.config
@@ -527,7 +528,7 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
                 if diagnose_fn is None:
                     diagnose_fn = make_diagnostics_fn(algorithm.model, algorithm.env, config)
                 diagnostic = diagnose_fn(state.model_ts.params)
-                batch_histograms = training_batch_histograms(jax.device_get(array_metrics))
+                batch_histograms = training_batch_histograms(gather_training_arrays(array_metrics))
                 metrics.update(diagnostic.scalar_metrics)
                 if algorithm.compression_probe is not None:
                     # Inspection has an independent key and never advances training RNG.
@@ -538,10 +539,7 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
                     metrics.update({name: float(value) for name, value in jax.device_get(probe).items()})
                 devices = (list(algorithm.data_sharding.mesh.devices.flat)
                            if algorithm.data_sharding is not None else [jax.devices()[0]])
-                memory = [device.memory_stats() or {} for device in devices]
-                for name in ("bytes_in_use", "peak_bytes_in_use", "bytes_limit"):
-                    if all(name in stats for stats in memory):
-                        metrics[f"memory/{name}_max"] = max(stats[name] for stats in memory)
+                metrics.update(device_memory_metrics(devices))
             check(metrics)
             tracker.log_training(metrics, step=cycle, tables=diagnostic.tables,
                                  histograms={**batch_histograms, **diagnostic.histograms},
@@ -593,7 +591,7 @@ def main(argv=None):
     if args.platform:
         os.environ["JAX_PLATFORMS"] = args.platform
     overrides = {name: value for name, value in vars(args).items()
-                 if value is not None and name not in ("env", "muzero", "ckpt", "acpl", "platform", "ladder_period", "trackio_run")
+                 if value is not None and name not in ("env", "muzero", "ckpt", "acpl", "platform", "distributed", "ladder_period", "trackio_run")
                  and not name.startswith("hex_eval_")}
     overrides.update(args.muzero.overrides())
     if args.acpl.period:
@@ -614,7 +612,12 @@ def main(argv=None):
             from nanoalphazero.eval.hex.engine import MoHexPool
             size = config["boardsize"]
             pool = MoHexPool(args.hex_eval_engine_path, args.hex_eval_engine_config, size, size * size)
+        from nanoalphazero.distributed import initialize_distributed, validate_muzero_run
+        initialize_distributed(args.distributed)
         import jax
+        validate_muzero_run(config, jax.process_count(),
+                           checkpoint=args.ckpt.save is not None or args.ckpt.resume is not None,
+                           hex_evaluation=bool(args.hex_eval_period))
         from nanoalphazero.eval.hex.training import MuZeroHexEvaluator
         algorithm = make_muzero(config, jax.random.PRNGKey(config["seed"]))
         evaluator = (MuZeroHexEvaluator(algorithm, pool, args.hex_eval_period, args.hex_eval_output)

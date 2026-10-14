@@ -13,6 +13,9 @@ plans/
 
 # Python
 __pycache__/
+.venv/
+.pytest_cache/
+.worktrees/
 
 # Editor / tooling
 .ropeproject/

@@ -818,6 +818,9 @@ def check_muzero_storage_budget(config, devices):
     print(json.dumps({"buffer_storage": storage}), flush=True)
     per_device = sum(spec["bytes_per_device"] for spec in storage.values())
     for device in devices:
+        # Capacity is global, but only the owning process can query a device.
+        if device.process_index != jax.process_index():
+            continue
         stats = device.memory_stats() or {}
         limit = stats.get("bytes_limit")
         if limit is not None and per_device + stats.get("bytes_in_use", 0) > config.get("muzero_memory_fraction", 0.75) * limit:

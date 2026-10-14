@@ -58,7 +58,8 @@ def test_disabled_tracker_needs_no_backend(monkeypatch):
     assert tracker.metadata == {}
 
 
-def test_real_trackio_resume_and_duplicate_cycles(tmp_path):
+@pytest.mark.parametrize("storage_mode", ["sqlite", "jsonl"])
+def test_real_trackio_resume_and_duplicate_cycles(tmp_path, storage_mode):
     """Use an isolated local database, never the user's actual Trackio project."""
     import os
     import subprocess
@@ -100,7 +101,8 @@ except ValueError:
 else:
     raise AssertionError("Missing run must not silently create a new identity")
 '''], check=True, cwd=tmp_path, env={**os.environ, "TRACKIO_DIR": str(tmp_path / "trackio"),
-                                   "JAX_PLATFORMS": "cpu"}, capture_output=True, text=True)
+                                   "JAX_PLATFORMS": "cpu", "TRACKIO_STORAGE_MODE": storage_mode},
+                   capture_output=True, text=True)
 
 
 @pytest.mark.parametrize("trackio_enabled,wandb_enabled,backend", [
@@ -249,7 +251,7 @@ def test_trackio_wait_is_best_effort(monkeypatch, capsys, read_error):
             raise OSError("database unavailable")
         return None
     monkeypatch.setattr(tracking, "_persisted_step", read)
-    tracker = TrainingTracker(None, {"trackio": {"project": "test", "name": "test", "id": "test"}}, 200)
+    tracker = TrainingTracker(Mock(), {"trackio": {"project": "test", "name": "test", "id": "test"}}, 200)
     tracker.flush(timeout=0.01)
     assert "continuing with checkpoint save" in capsys.readouterr().err
 
@@ -271,7 +273,7 @@ def test_same_cycle_extra_metrics_are_logged():
 def test_host_acpl_count_and_viewer_are_distinct(assembly, monkeypatch, tmp_path, resume_step):
     import nanoalphazero.tracking as tracking
     from nanoalphazero.eval import acpl
-    from nanoalphazero.diagnostics import chess_games
+    from nanoalphazero.diagnostics.chess import games as chess_games
 
     path = tmp_path / "games.pgn"
     path.write_text("1. e4 *")
