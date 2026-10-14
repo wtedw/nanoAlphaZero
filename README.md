@@ -36,6 +36,89 @@ Environment step benchmarks:
 
 > note: all code is optimized for TPUs; correctness on GPUs isn't guaranteed.
 
+## MuZero MCTS and self-play profiling
+
+On an idle TPU, profile MAZ's MuZero chess search and summarize its XLA trace:
+
+```bash
+just prof-analyze chess mcts
+just prof-analyze chess mcts --batch 1024 --root-considered 8 --survivors 4
+just prof-analyze chess mcts --only-time
+just prof-analyze chess selfplay
+just prof-analyze chess selfplay --batch 1024 --warmup 32
+# Compare with AlphaZero using the same batch/search defaults:
+just prof-analyze chess selfplay --algorithm alphazero --warmup 32
+# Without just:
+uv run --frozen python scripts/profile_muzero.py chess mcts
+```
+
+To capture a trace for interactive inspection without the text summary:
+
+```bash
+just prof chess mcts
+just prof chess selfplay --warmup 32
+just prof chess mcts --algorithm alphazero
+just prof chess selfplay --algorithm alphazero --warmup 32
+just xp
+```
+
+Open `http://localhost:6007`, choose the **Profile** tab, select a run, then
+**Trace Viewer**. `just xp` serves all runs under `/tmp/maz-profiles`; use
+`just xp /path/to/run 6008` for a specific run and another port. The viewer
+installs pinned TensorBoard/XProf dependencies in an isolated uv tool environment
+on first use. It does not initialize JAX or need the TPU. Stop it with Ctrl-C.
+For a remote TPU VM, forward the port from your local machine with
+`ssh -N -L 6007:localhost:6007 USER@TPU_HOST`, then open the same localhost URL.
+The viewer follows the [JAX TensorBoard/XProf workflow](https://docs.jax.dev/en/latest/profiling.html#xprof-tensorboard-profiling).
+`prof-analyze` still saves the same viewable trace and additionally prints the
+operation summary. `--only-time` skips trace collection in either command.
+
+The default uses batch 256, the current MuZero chess model/search defaults,
+random parameters, and initial positions. Two warmup calls precede ten
+synchronized timing calls; one additional call is traced separately. Search
+budget is controlled by root candidates and survivors, not `num_simulations`.
+This measures isolated search, not full self-play or training throughput.
+Each run saves its config, timings, trace, and analysis in a new directory under
+`/tmp/maz-profiles` (override with `--output-parent`). No checkpoint is loaded or
+written. The trace analyzer is adapted from the sibling AZ repository and
+reports summed XLA operation durations; these may overlap and are not wall time.
+The command uses the existing uv lockfile, avoiding resolution of unused local
+optional dependencies. It refuses to initialize the TPU when an owner is detected.
+
+`selfplay` profiles the actual MuZero self-play function, including search,
+action selection, environment stepping/reset, sample construction, and metrics.
+Games and RNG advance through warmup, timing, and the extra traced step. Increase
+`--warmup` to move beyond the opening. Each call advances one ply per batch lane;
+throughput is positions per second. Replay-buffer writes and training are excluded.
+The short default run is not representative of late-game or reset-heavy workloads.
+`--algorithm alphazero` selects the production AlphaZero model, search, and
+self-play factories. Both algorithms use their b10c256 chess defaults, but their
+network structures differ: MuZero searches learned latents, whereas AlphaZero
+steps the real environment and evaluates observations at each search expansion.
+
+For a reduced full production cycle (one self-play step, one drained batch,
+one optimizer update), use:
+
+```bash
+just prof-analyze chess cycle --algorithm alphazero
+just prof-analyze chess cycle --algorithm muzero
+```
+
+Cycle mode stages a legal seven-ply Scholar's mate with scripted one-hot targets,
+keeping the first start per lane eligible for consumption. It restores this
+fixture outside timing before every call so draining and training both execute;
+the real production search and optimizer run inside the timed cycle. Parameters
+keep updating. Self-play and training batches are both `--batch` (default 256),
+self-play storage keeps its default capacity, and replay capacity is 16 items per
+lane. This is a controlled runtime benchmark, not a learning evaluation or a
+measurement with full production replay capacity. MuZero keeps its default
+five-step training unroll; `--unroll 1` is available for a diagnostic comparison.
+One MuZero update therefore has more network evaluations than one AlphaZero update.
+Reports include input/output leaf shardings, optimized HLO, update/drain checks,
+and per-device XLA timeline coverage. Coverage measures overlapping operation
+intervals without double counting; it is not hardware FLOP or memory-bandwidth
+utilization. Summed operation-family percentages can include overlapping events.
+
 ## Setup
 
 On a fresh TPU VM:
