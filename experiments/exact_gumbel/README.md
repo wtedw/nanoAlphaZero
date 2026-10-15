@@ -48,6 +48,20 @@ temperature and BNK compression):
 | exact node2, 12 sims | **392** |
 | exact node2, 32 sims | 878 |
 
+Whole self-play steps (`bench_selfplay_cycle.py`): maz's own `make_muzero`
+and jitted `selfplay_fn`, chess, 8192 games, 4 chips, `cycle_n_selfplay=20`:
+
+| search | ms per self-play step | self-play seconds per cycle |
+|---|---:|---:|
+| maz 1sh (8+4) | 340 | 6.8 |
+| exact node2, 12 sims | **320** | 6.4 |
+| exact node2, 32 sims | 810 | 16.2 |
+
+So 32 simulations should cost about 2.4x 1sh per self-play step. A larger
+ratio usually points to one of these: plain `jit` sharding instead of the
+shard_map wrapper (GSPMD adds collectives), `return_tree=True`, `max_depth`
+below the simulation count (slow fallback), or an extra search call per step.
+
 `test_maz_integration.py` (CPU, hex5 and connect4, 1 or 4 devices) checks
 that actions and visit counts equal upstream on the same roots. Without
 `--xla_force_host_platform_device_count` it runs on one device. Its
@@ -186,6 +200,7 @@ PYTHONPATH=$PWD/ref:$PWD JAX_PLATFORMS=cpu ../../.venv/bin/python quick_equiv.py
 PYTHONPATH=$PWD/ref:$PWD JAX_PLATFORMS=cpu XLA_FLAGS=--xla_force_host_platform_device_count=4 ../../.venv/bin/python test_sharded.py
 PYTHONPATH=$PWD/ref:$PWD:../../src JAX_PLATFORMS=cpu ../../.venv/bin/python test_maz_integration.py hex5
 PYTHONPATH=$PWD/ref:$PWD:../../src ../../.venv/bin/python bench_maz.py 12,32                                   # TPU, all chips
+PYTHONPATH=$PWD/ref:$PWD:../../src ../../.venv/bin/python bench_selfplay_cycle.py exact 32                      # TPU; or "1sh"
 PYTHONPATH=$PWD/ref:$PWD ../../.venv/bin/python bench_sharded.py 8192 12,32                                    # TPU, all chips
 PYTHONPATH=$PWD/ref:$PWD ../../.venv/bin/python tpu_equiv_sharded.py                                           # TPU, all chips
 PYTHONPATH=$PWD/ref:$PWD ../../.venv/bin/python bench_search.py --sims 12,24,48 --variants net,1sh,node2   # TPU
