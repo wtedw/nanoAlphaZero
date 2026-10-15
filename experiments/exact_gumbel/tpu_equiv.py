@@ -36,7 +36,7 @@ for n, m, rescale, vs, legal in [(12, 8, False, 1.0, 32), (24, 8, False, 1.0, 32
         return policy(params, key, root, recurrent, n, invalid, qtransform=qt, max_num_considered_actions=m)
 
     ref = jax.jit(functools.partial(run, mctx_ref.gumbel_muzero_policy))(params, obs, invalid, key)
-    out = jax.jit(functools.partial(run, eg.gumbel_muzero_policy_node))(params, obs, invalid, key)
+    out = jax.jit(functools.partial(run, getattr(eg, sys.argv[2] if len(sys.argv) > 2 else "gumbel_muzero_policy_node")))(params, obs, invalid, key)
     fields = ["node_visits", "node_values", "raw_values", "children_index", "children_visits",
               "children_values", "children_prior_logits", "embeddings"]
     res = dict(n=n, m=m, rescale=rescale, value_scale=vs,

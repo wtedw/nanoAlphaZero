@@ -744,8 +744,8 @@ class NodeTree(NamedTuple):
 
 
 class NodeView:
-    def __init__(self, t, num_actions):
-        self.t, self.A = t, num_actions
+    def __init__(self, t, num_actions, edge_rows="mask"):
+        self.t, self.A, self.edge_rows = t, num_actions, edge_rows
         self.children_prior_logits = t.children_prior_logits
         self.raw_values = t.raw_values
         self.root_invalid_actions = t.root_invalid_actions
@@ -756,11 +756,37 @@ class NodeView:
         actions = jnp.arange(self.A, dtype=self.t.action_from_parent.dtype)
         return (self.t.parents == node)[None, :] & (self.t.action_from_parent[None, :] == actions[:, None])
 
+    def _key(self, node):
+        # Action of each node if it is a child of `node`, else -1.
+        return jnp.where(self.t.parents == node, self.t.action_from_parent, -1)
+
+    def _pick_many(self, node, xs):
+        """Edge rows [A] for several per-node arrays, sharing one comparison."""
+        actions = jnp.arange(self.A, dtype=self.t.action_from_parent.dtype)
+        match = self._key(node)[None, :] == actions[:, None]            # [A, N]
+        if self.edge_rows == "matmul":
+            # One-hot matmul at HIGHEST precision reproduces each value exactly.
+            stacked = jnp.stack([x.astype(jnp.float32) for x in xs], -1)  # [N, S]
+            rows = jnp.matmul(match.astype(jnp.float32), stacked,
+                              precision=jax.lax.Precision.HIGHEST)
+            return [rows[:, i].astype(x.dtype) for i, x in enumerate(xs)]
+        return [jnp.sum(jnp.where(match, x[None, :], jnp.zeros((), x.dtype)), axis=-1) for x in xs]
+
     def _pick(self, node, x):
+        if self.edge_rows in ("mask2", "matmul"):
+            return self._pick_many(node, [x])[0]
+        if self.edge_rows == "scatter":
+            # Scatter this node's children (at most N) into a fresh [A] row.
+            target = jnp.where(self.t.parents == node, self.t.action_from_parent, self.A)
+            return jnp.zeros((self.A,), x.dtype).at[target].set(x, mode="drop")
         # Exactly one match per visited action; sums of a single term are exact.
         return jnp.sum(jnp.where(self._match(node), x[None, :], jnp.zeros((), x.dtype)), axis=-1)
 
     def qvalues(self, node):
+        if self.edge_rows in ("mask2", "matmul"):
+            # Same elementwise op on the same inputs, computed before the pick.
+            # Unvisited actions pick 0, as upstream's 0 + 0 * 0.
+            return self._pick(node, self.t.reward_in + self.t.discount_in * self.t.node_values)
         return (self._pick(node, self.t.reward_in)
                 + self._pick(node, self.t.discount_in) * self._pick(node, self.t.node_values))
 
@@ -771,22 +797,36 @@ def _node_child(t, node, action):
     return jnp.where(jnp.any(hit), jnp.sum(jnp.where(hit, index, 0)), UNVISITED)
 
 
-def _node_simulate(t, A, root_select, interior_select, max_depth):
-    view = NodeView(t, A)
+def _node_simulate(t, A, root_select, interior_select, max_depth, hoist_root=False,
+                   edge_rows="mask"):
+    view = NodeView(t, A, edge_rows)
 
     def cond(state):
         return state[4]
 
     def body(state):
         _, _, node, depth, _ = state
-        action = jax.lax.cond(depth == 0, lambda: root_select(None, view, node),
-                              lambda: interior_select(None, view, node, depth))
+        if hoist_root:
+            action = interior_select(None, view, node, depth)
+        else:
+            action = jax.lax.cond(depth == 0, lambda: root_select(None, view, node),
+                                  lambda: interior_select(None, view, node, depth))
         next_node = _node_child(t, node, action)
         depth = depth + 1
         return node, action, next_node, depth, jnp.logical_and(next_node != UNVISITED, depth < max_depth)
 
-    state = (jnp.int32(NO_PARENT), jnp.int32(NO_PARENT), jnp.int32(ROOT),
-             jnp.zeros((), t.children_prior_logits.dtype), jnp.array(True))
+    depth0 = jnp.zeros((), t.children_prior_logits.dtype)
+    if hoist_root:
+        # Upstream's first loop iteration, done once outside the loop: under vmap
+        # the in-loop cond would otherwise evaluate root selection at every depth.
+        root_action = root_select(None, view, jnp.int32(ROOT))
+        child = _node_child(t, jnp.int32(ROOT), root_action)
+        depth1 = depth0 + 1
+        state = (jnp.int32(ROOT), root_action, child, depth1,
+                 jnp.logical_and(child != UNVISITED, depth1 < max_depth))
+    else:
+        state = (jnp.int32(NO_PARENT), jnp.int32(NO_PARENT), jnp.int32(ROOT),
+                 depth0, jnp.array(True))
     parent, action, _, _, _ = jax.lax.while_loop(cond, body, state)
     return parent, action
 
@@ -814,7 +854,8 @@ def node_to_tree(t, A):
 def gumbel_muzero_policy_node(
     params, rng_key, root, recurrent_fn, num_simulations, invalid_actions=None,
     max_depth=None, *, qtransform=QT.qtransform_completed_by_mix_value,
-    max_num_considered_actions=16, gumbel_scale=1.0, return_tree=True):
+    max_num_considered_actions=16, gumbel_scale=1.0, return_tree=True,
+    hoist_root=False, edge_rows="mask", node_major_priors=False):
     """Bitwise-equivalent mctx.gumbel_muzero_policy without large scatters.
 
     Requires max_depth is None or >= num_simulations; otherwise falls back.
@@ -843,16 +884,23 @@ def gumbel_muzero_policy_node(
         node_values=jnp.zeros(bn, dtype), parents=jnp.full(bn, NO_PARENT, jnp.int32),
         action_from_parent=jnp.full(bn, NO_PARENT, jnp.int32),
         reward_in=jnp.zeros(bn, dtype), discount_in=jnp.zeros(bn, dtype),
-        children_prior_logits=jnp.zeros((batch, N, A), root.prior_logits.dtype),
+        children_prior_logits=jnp.zeros((N, batch, A) if node_major_priors else (batch, N, A),
+                                        root.prior_logits.dtype),
         embeddings=jax.tree.map(zeros, root.embedding),
         root_invalid_actions=invalid_actions, root_gumbel=gumbel)
     put = lambda x, v, node: jax.lax.dynamic_update_index_in_dim(x, v.astype(x.dtype), node, axis=1)
+    # Node-major priors make each node write cover whole (8, 128) TPU tiles.
+    put_prior = (lambda x, v, node: jax.lax.dynamic_update_index_in_dim(x, v.astype(x.dtype), node, axis=0)) \
+        if node_major_priors else put
+    axes = NodeTree(*([0] * len(NodeTree._fields)))._replace(
+        children_prior_logits=1 if node_major_priors else 0)
     t = t._replace(
-        children_prior_logits=put(t.children_prior_logits, root.prior_logits, 0),
+        children_prior_logits=put_prior(t.children_prior_logits, root.prior_logits, 0),
         raw_values=put(t.raw_values, root.value, 0), node_values=put(t.node_values, root.value, 0),
         node_visits=put(t.node_visits, t.node_visits[:, 0] + 1, 0),
         embeddings=jax.tree.map(lambda x, v: put(x, v, 0), t.embeddings, root.embedding))
-    simulate = jax.vmap(_node_simulate, in_axes=(0, None, None, None, None))
+    simulate = jax.vmap(functools.partial(_node_simulate, hoist_root=hoist_root, edge_rows=edge_rows),
+                        in_axes=(axes, None, None, None, None))
     rows = jnp.arange(batch)
 
     def body(sim, carry):
@@ -864,7 +912,7 @@ def gumbel_muzero_policy_node(
         step, embedding = recurrent_fn(params, expand_key, action, embedding)
         new_visit = jax.lax.dynamic_index_in_dim(t.node_visits, node, axis=1, keepdims=False) + 1
         t = t._replace(
-            children_prior_logits=put(t.children_prior_logits, step.prior_logits, node),
+            children_prior_logits=put_prior(t.children_prior_logits, step.prior_logits, node),
             raw_values=put(t.raw_values, step.value, node),
             node_values=put(t.node_values, step.value, node),
             node_visits=put(t.node_visits, new_visit, node),
@@ -882,7 +930,8 @@ def gumbel_muzero_policy_node(
     # final computation on a one-node upstream Tree, so its fusion matches.
     view_rows = jax.vmap(lambda t: (
         NodeView(t, A)._pick(ROOT, t.node_visits), NodeView(t, A)._pick(ROOT, t.node_values),
-        NodeView(t, A)._pick(ROOT, t.reward_in), NodeView(t, A)._pick(ROOT, t.discount_in)))(t)
+        NodeView(t, A)._pick(ROOT, t.reward_in), NodeView(t, A)._pick(ROOT, t.discount_in)),
+        in_axes=(axes,))(t)
     rv, cv, cr, cd = jax.lax.optimization_barrier(view_rows)
     one = lambda x: x[:, None]
     root_tree = tree_lib.Tree(
@@ -890,7 +939,8 @@ def gumbel_muzero_policy_node(
         node_values=t.node_values[:, :1], parents=t.parents[:, :1],
         action_from_parent=t.action_from_parent[:, :1],
         children_index=jnp.where(one(rv) > 0, 0, UNVISITED).astype(jnp.int32),
-        children_prior_logits=t.children_prior_logits[:, :1], children_values=one(cv),
+        children_prior_logits=(jnp.swapaxes(t.children_prior_logits[:1], 0, 1) if node_major_priors
+                               else t.children_prior_logits[:, :1]), children_values=one(cv),
         children_visits=one(rv), children_rewards=one(cr), children_discounts=one(cd),
         embeddings=None, root_invalid_actions=invalid_actions,
         extra_data=AS.GumbelMuZeroExtraData(root_gumbel=gumbel))
@@ -903,7 +953,9 @@ def gumbel_muzero_policy_node(
     completed_search_logits = _mask_invalid_actions(
         root.prior_logits + completed_qvalues, invalid_actions)
     return base.PolicyOutput(action=action, action_weights=jax.nn.softmax(completed_search_logits),
-                             search_tree=node_to_tree(t, A) if return_tree else None)
+                             search_tree=node_to_tree(t._replace(children_prior_logits=jnp.swapaxes(
+                                 t.children_prior_logits, 0, 1)) if node_major_priors else t, A)
+                             if return_tree else None)
 
 
 # ---------------------------------------------------------------------------
@@ -921,3 +973,226 @@ def compress_action_weights(action_weights, num_k_actions):
     index_dtype = jnp.uint16 if action_weights.shape[-1] <= 65536 else jnp.int32
     return (indices.astype(index_dtype),
             weights / jnp.maximum(mass, jnp.finfo(weights.dtype).tiny), mass[..., 0])
+
+
+# ---------------------------------------------------------------------------
+# Variant 6 (node2): variant 5 plus
+#   * edge rows built for only two per-node arrays (visits, and Q computed per
+#     node), by one-hot matmul at HIGHEST precision (exact for 0/1 weights);
+#   * root selection done once per simulation outside the descent loop, with
+#     the root prior row passed in directly (reading it from the tree there
+#     made XLA relayout the whole prior array every simulation);
+#   * prior logits stored flat as [B, N * A_pad], A_pad a multiple of 128, so a
+#     node write covers whole TPU tiles instead of 1 row of every 8-row tile.
+# ---------------------------------------------------------------------------
+class NodeTree2(NamedTuple):
+    node_visits: Any
+    raw_values: Any
+    node_values: Any
+    parents: Any
+    action_from_parent: Any
+    reward_in: Any
+    discount_in: Any
+    prior_flat: Any            # [B, N * A_pad]
+    embeddings: Any
+    root_invalid_actions: Any
+    root_gumbel: Any
+    root_prior_logits: Any     # [B, A]
+    root_visits: Any = None    # [B, A] maintained root edge visits (root_rows=True)
+    root_q: Any = None         # [B, A] maintained root edge Q-values
+
+
+class NodeView2:
+    """Upstream-Tree view; `root_only` serves the root prior from its own row."""
+
+    def __init__(self, t, num_actions, a_pad, root_only=False, edge_rows="matmul"):
+        self.t, self.A, self.a_pad, self.edge_rows = t, num_actions, a_pad, edge_rows
+        self.root_rows = root_only and t.root_visits is not None
+        if root_only:
+            self.children_prior_logits = _Indexer(lambda n: t.root_prior_logits)
+        elif t.prior_flat.ndim == 3:  # tiled [N, 8, A_pad / 8] per row
+            self.children_prior_logits = _Indexer(
+                lambda n: t.prior_flat[n].reshape(-1)[:num_actions])
+        else:
+            if t.prior_flat.ndim == 1:  # flat [N * A_pad] per row
+                self.children_prior_logits = _Indexer(
+                    lambda n: jax.lax.dynamic_slice_in_dim(t.prior_flat, n * a_pad, num_actions))
+            else:  # [N, A] per row
+                self.children_prior_logits = t.prior_flat
+        self.raw_values = t.raw_values
+        self.root_invalid_actions = t.root_invalid_actions
+        self.extra_data = AS.GumbelMuZeroExtraData(root_gumbel=t.root_gumbel)
+        if self.root_rows:
+            self.children_visits = _Indexer(lambda n: t.root_visits)
+        else:
+            self.children_visits = _Indexer(lambda n: self._pick(n, t.node_visits))
+
+    def _pick(self, node, x):
+        actions = jnp.arange(self.A, dtype=self.t.action_from_parent.dtype)
+        key = jnp.where(self.t.parents == node, self.t.action_from_parent, -1)
+        match = key[None, :] == actions[:, None]                         # [A, N]
+        if self.edge_rows == "matmul":
+            return jnp.matmul(match.astype(jnp.float32), x.astype(jnp.float32),
+                              precision=jax.lax.Precision.HIGHEST).astype(x.dtype)
+        return jnp.sum(jnp.where(match, x[None, :], jnp.zeros((), x.dtype)), axis=-1)
+
+    def qvalues(self, node):
+        if self.root_rows:
+            return self.t.root_q
+        # Same elementwise op on the same inputs as upstream, applied per node.
+        return self._pick(node, self.t.reward_in + self.t.discount_in * self.t.node_values)
+
+
+def _root_child_on_path(parents, leaf):
+    """Ancestor of `leaf` whose parent is the root (leaf itself if depth 1)."""
+    def cond(i):
+        return parents[i] != ROOT
+    return jax.lax.while_loop(cond, lambda i: parents[i], leaf)
+
+
+def _node2_simulate(t, A, a_pad, root_select, interior_select, max_depth, edge_rows):
+    view = NodeView2(t, A, a_pad, edge_rows=edge_rows)
+    root_view = NodeView2(t, A, a_pad, root_only=True, edge_rows=edge_rows)
+    depth = jnp.zeros((), t.root_prior_logits.dtype) + 1
+    root_action = root_select(None, root_view, jnp.int32(ROOT))
+    child = _node_child(t, jnp.int32(ROOT), root_action)
+
+    def cond(state):
+        return state[4]
+
+    def body(state):
+        _, _, node, depth, _ = state
+        action = interior_select(None, view, node, depth)
+        next_node = _node_child(t, node, action)
+        depth = depth + 1
+        return node, action, next_node, depth, jnp.logical_and(next_node != UNVISITED, depth < max_depth)
+
+    state = (jnp.int32(ROOT), root_action, child, depth,
+             jnp.logical_and(child != UNVISITED, depth < max_depth))
+    parent, action, _, _, _ = jax.lax.while_loop(cond, body, state)
+    return parent, action
+
+
+def gumbel_muzero_policy_node2(
+    params, rng_key, root, recurrent_fn, num_simulations, invalid_actions=None,
+    max_depth=None, *, qtransform=QT.qtransform_completed_by_mix_value,
+    max_num_considered_actions=16, gumbel_scale=1.0, return_tree=True,
+    edge_rows="matmul", flat_priors=False, tiled_priors=True, root_rows=True):
+    """Bitwise-equivalent mctx.gumbel_muzero_policy; fastest variant so far.
+
+    Requires max_depth is None or >= num_simulations; otherwise falls back.
+    """
+    if max_depth is not None and max_depth < num_simulations:
+        return gumbel_muzero_policy_fastbw(
+            params, rng_key, root, recurrent_fn, num_simulations, invalid_actions, max_depth,
+            qtransform=qtransform, max_num_considered_actions=max_num_considered_actions,
+            gumbel_scale=gumbel_scale)
+    root = root.replace(prior_logits=_mask_invalid_actions(root.prior_logits, invalid_actions))
+    rng_key, gumbel_rng = jax.random.split(rng_key)
+    gumbel = gumbel_scale * jax.random.gumbel(
+        gumbel_rng, shape=root.prior_logits.shape, dtype=root.prior_logits.dtype)
+    root_select, interior_select = _selectors(
+        num_simulations, max_num_considered_actions, qtransform)
+    batch, A = root.prior_logits.shape
+    a_pad = -(-A // 128) * 128 if flat_priors else (-(-A // 8) * 8 if tiled_priors else A)
+    N = num_simulations + 1
+    depth_limit = num_simulations if max_depth is None else max_depth
+    if invalid_actions is None:
+        invalid_actions = jnp.zeros_like(root.prior_logits)
+    dtype = root.value.dtype
+    bn = (batch, N)
+    zeros = lambda x: jnp.zeros(bn + x.shape[1:], x.dtype)
+    put = lambda x, v, node: jax.lax.dynamic_update_index_in_dim(x, v.astype(x.dtype), node, axis=1)
+    put_prior = (lambda x, v, node: jax.lax.dynamic_update_slice_in_dim(x, v.astype(x.dtype), node * a_pad, axis=1)) \
+        if flat_priors else ((lambda x, v, node: put(x, jnp.pad(v, ((0, 0), (0, a_pad - A))).reshape(
+            v.shape[0], 8, a_pad // 8), node)) if tiled_priors else put)
+    t = NodeTree2(
+        node_visits=jnp.zeros(bn, jnp.int32), raw_values=jnp.zeros(bn, dtype),
+        node_values=jnp.zeros(bn, dtype), parents=jnp.full(bn, NO_PARENT, jnp.int32),
+        action_from_parent=jnp.full(bn, NO_PARENT, jnp.int32),
+        reward_in=jnp.zeros(bn, dtype), discount_in=jnp.zeros(bn, dtype),
+        prior_flat=jnp.zeros((batch, N * a_pad) if flat_priors else
+                             ((batch, N, 8, a_pad // 8) if tiled_priors else (batch, N, A)),
+                             root.prior_logits.dtype),
+        embeddings=jax.tree.map(zeros, root.embedding),
+        root_invalid_actions=invalid_actions, root_gumbel=gumbel,
+        root_prior_logits=root.prior_logits,
+        root_visits=jnp.zeros((batch, A), jnp.int32) if root_rows else None,
+        root_q=jnp.zeros((batch, A), dtype) if root_rows else None)
+    t = t._replace(
+        prior_flat=put_prior(t.prior_flat, root.prior_logits, 0),
+        raw_values=put(t.raw_values, root.value, 0), node_values=put(t.node_values, root.value, 0),
+        node_visits=put(t.node_visits, t.node_visits[:, 0] + 1, 0),
+        embeddings=jax.tree.map(lambda x, v: put(x, v, 0), t.embeddings, root.embedding))
+    simulate = jax.vmap(_node2_simulate, in_axes=(0, None, None, None, None, None, None))
+    rows = jnp.arange(batch)
+
+    def body(sim, carry):
+        key, t = carry
+        key, _, expand_key = jax.random.split(key, 3)
+        parent, action = simulate(t, A, a_pad, root_select, interior_select, depth_limit, edge_rows)
+        node = sim + 1
+        embedding = jax.tree.map(lambda x: x[rows, parent], t.embeddings)
+        step, embedding = recurrent_fn(params, expand_key, action, embedding)
+        new_visit = jax.lax.dynamic_index_in_dim(t.node_visits, node, axis=1, keepdims=False) + 1
+        t = t._replace(
+            prior_flat=put_prior(t.prior_flat, step.prior_logits, node),
+            raw_values=put(t.raw_values, step.value, node),
+            node_values=put(t.node_values, step.value, node),
+            node_visits=put(t.node_visits, new_visit, node),
+            embeddings=jax.tree.map(lambda x, v: put(x, v, node), t.embeddings, embedding),
+            reward_in=put(t.reward_in, step.reward, node),
+            discount_in=put(t.discount_in, step.discount, node),
+            parents=put(t.parents, parent, node),
+            action_from_parent=put(t.action_from_parent, action, node))
+        values, visits = _backward_small(t.node_values, t.node_visits, t.parents, t.reward_in,
+                                         t.discount_in, jnp.full((batch,), node, jnp.int32))
+        t = t._replace(node_values=values, node_visits=visits)
+        if root_rows:
+            # Only the root child on this path changed; refresh its entry with
+            # the same expressions the row rebuild would use.
+            child = jax.vmap(_root_child_on_path)(t.parents, jnp.full((batch,), node, jnp.int32))
+            hit = jnp.arange(A)[None, :] == t.action_from_parent[rows, child][:, None]
+            q = t.reward_in + t.discount_in * t.node_values
+            t = t._replace(
+                root_visits=jnp.where(hit, t.node_visits[rows, child][:, None], t.root_visits),
+                root_q=jnp.where(hit, q[rows, child][:, None], t.root_q))
+        return key, t
+
+    _, t = jax.lax.fori_loop(0, num_simulations, body, (rng_key, t))
+    # Same final step as variant 5: upstream's own code on a one-node Tree.
+    v = jax.vmap(lambda t: (lambda w: (w._pick(ROOT, t.node_visits), w._pick(ROOT, t.node_values),
+                                       w._pick(ROOT, t.reward_in), w._pick(ROOT, t.discount_in)))(
+        NodeView2(t, A, a_pad, root_only=True, edge_rows=edge_rows)))(t)
+    # The root prior goes through the barrier too, so the final qtransform does
+    # not fuse with the masking that produced it (that changes rounding).
+    rv, cv, cr, cd, root_prior = jax.lax.optimization_barrier(v + (t.root_prior_logits,))
+    one = lambda x: x[:, None]
+    root_tree = tree_lib.Tree(
+        node_visits=t.node_visits[:, :1], raw_values=t.raw_values[:, :1],
+        node_values=t.node_values[:, :1], parents=t.parents[:, :1],
+        action_from_parent=t.action_from_parent[:, :1],
+        children_index=jnp.where(one(rv) > 0, 0, UNVISITED).astype(jnp.int32),
+        children_prior_logits=one(root_prior), children_values=one(cv),
+        children_visits=one(rv), children_rewards=one(cr), children_discounts=one(cd),
+        embeddings=None, root_invalid_actions=invalid_actions,
+        extra_data=AS.GumbelMuZeroExtraData(root_gumbel=gumbel))
+    root_visits = root_tree.summary().visit_counts
+    considered_visit = jnp.max(root_visits, axis=-1, keepdims=True)
+    completed_qvalues = jax.vmap(qtransform, in_axes=[0, None])(root_tree, root_tree.ROOT_INDEX)
+    to_argmax = SH.score_considered(considered_visit, gumbel, root.prior_logits,
+                                    completed_qvalues, root_visits)
+    action = AS.masked_argmax(to_argmax, invalid_actions)
+    completed_search_logits = _mask_invalid_actions(
+        root.prior_logits + completed_qvalues, invalid_actions)
+    tree = None
+    if return_tree:
+        priors = (t.prior_flat.reshape(batch, N, a_pad)[:, :, :A] if (flat_priors or tiled_priors)
+                  else t.prior_flat)
+        tree = node_to_tree(NodeTree(
+            node_visits=t.node_visits, raw_values=t.raw_values, node_values=t.node_values,
+            parents=t.parents, action_from_parent=t.action_from_parent, reward_in=t.reward_in,
+            discount_in=t.discount_in, children_prior_logits=priors, embeddings=t.embeddings,
+            root_invalid_actions=t.root_invalid_actions, root_gumbel=t.root_gumbel), A)
+    return base.PolicyOutput(action=action, action_weights=jax.nn.softmax(completed_search_logits),
+                             search_tree=tree)
