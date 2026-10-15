@@ -1,7 +1,7 @@
 """Batched PGX self-play with host-local PGN/FEN recording.
 
 Retains the original global batch, host partition, and per-ply multihost gather
-structure. Multi-host execution is retained but not part of current validation.
+structure. Multihost validation covers 16 and 496 global games on four TPU hosts.
 """
 
 from dataclasses import dataclass

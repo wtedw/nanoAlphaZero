@@ -69,13 +69,14 @@ series; summary values use `acpl/*` and flow through either W&B or Trackio.
 
 Global game batches, host partitions, per-ply gathers/barriers, broadcast output
 IDs, and final aggregation are retained. All hosts must call the function at the
-same cycles with a common mesh and shared output filesystem. Only single-host
-execution is validated currently; this is not a multihost performance claim.
+same cycles with a common mesh and shared output filesystem. Multihost execution
+has been validated with small search/analysis budgets on four TPU v4 hosts;
+this is not a production-budget performance claim.
 The caller must arrange distributed initialization, as for the training model.
 
 ## Reproducible smoke
 
-`scripts/smoke_acpl.py` accepts a real AlphaZero checkpoint or a compact MuZero
+`scripts/smoke_acpl.py` accepts a real AlphaZero checkpoint or a full/partial MuZero
 checkpoint and constructs only inference components, without allocating training
 buffers. It checks TPU ownership before JAX initialization. Run from repo root:
 
@@ -88,8 +89,9 @@ uv run --extra trackio python scripts/smoke_acpl.py \
   --output artifacts/acpl-desert-cpu-UNIQUE
 ```
 
-Use `--platform tpu` when free. For MuZero, use `--algorithm mz` and a compact
-chess checkpoint. The script restores architecture metadata before loading
+Use `--platform tpu` when free. For MuZero, use `--algorithm mz` and a
+chess checkpoint; add `--distributed` when launching through `uv run pod run`.
+The script restores architecture metadata before loading
 parameters. First-call time includes compilation; subsequent calls use the same
 batch shape and compiled search. These tiny runs validate integration, not strength.
 
@@ -126,3 +128,23 @@ Evidence remains under local `artifacts/acpl-{desert,muzero}-{cpu,tpu}-20261008-
 with console logs in `/tmp/acpl-*.log`. All smoke games reached the deliberately
 short cap; this does not measure completed-game strength. The full 496-game,
 depth-18 workload and multihost execution have not been benchmarked or validated.
+
+### Multihost validation on 2026-10-15 (JST)
+
+Four TPU v4 hosts with four devices each passed 16-game evaluations twice and a
+496-game evaluation once, using a small MuZero chess model restored from a full
+distributed checkpoint. Each game used 24 book plies plus four model moves and
+Stockfish depth 2. The 16-game suite assigned four distinct games to each host;
+the 496-game suite assigned 124. All games were analyzed, every global game ID
+appeared once, and all hosts received identical aggregate metrics. Only process
+0 published combined artifacts. Repeated trajectories matched exactly.
+
+The 16-game evaluations took 16.84 s initially and 1.06 s on repeat; the 496-game
+evaluation took 30.71 s, including 18.29 s rollout and 10.55 s analysis. Model
+loading is excluded. All games intentionally hit the short cap; these results
+are integration checks, not playing-strength results or full-game depth-18 timing.
+
+The original scorer from `~/nfs_share/az1/src/alphazero/validation/chess_validation.py`
+was run on all 16 first-suite FEN histories; all four score statistics matched to
+1e-12. The inherited evaluator logic needed no rewrite. Evidence is retained in
+`artifacts/acpl-pod-{16,496}-20261015-01`; launch manifests contain exact commands.

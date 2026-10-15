@@ -75,7 +75,8 @@ def test_multihost_unsupported_features_fail_explicitly():
         validate_muzero_run({}, 4)
     validate_muzero_run({**config, "enable_trackio": True}, 4)
     validate_muzero_run({**config, "enable_wandb": True}, 4)
-    for option in ({"eval_period": 10}, {"acpl": {"period": 10}}):
+    validate_muzero_run({**config, "acpl": {"period": 10}}, 4)
+    for option in ({"eval_period": 10},):
         with pytest.raises(ValueError, match="disabled"):
             validate_muzero_run({**config, **option}, 4)
     validate_muzero_run(config, 4, checkpoint=True)

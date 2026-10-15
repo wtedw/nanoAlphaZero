@@ -104,8 +104,9 @@ uv run pod run --timeout 900 -- python muzero.py --env hex4 --platform tpu \
 
 This is a bounded training smoke configuration. Batch sizes are global and
 buffer time capacities do not multiply by the number of hosts. Compressed
-multihost checkpoints use the shared filesystem (see below). Strength evaluations
-still need validation; the CLI rejects those on multiple hosts for now.
+multihost checkpoints use the shared filesystem (see below). Chess ACPL supports
+multiple hosts. Ladder and MoHex evaluations still need validation; the CLI
+rejects those on multiple hosts for now.
 Existing AlphaZero commands do not
 automatically become distributed merely by being launched on several hosts.
 
@@ -156,7 +157,7 @@ Fixed game probes run on process 0 using local replicated model parameters.
 The global compression probe runs on every process. Device memory is queried
 locally and aggregated across hosts. Only process 0 constructs backend media
 and writes files. Tracker initialization errors are broadcast to every process.
-Strength evaluations remain separate work.
+Ladder and MoHex evaluations remain separate work.
 
 ## Checkpoints
 
@@ -199,8 +200,11 @@ resuming if updates and self-play steps advance at different rates. Checkpoint
 continuation tests compare the next cycle directly, independently of that budget.
 
 CPU validation uses two actual JAX processes, including full chess state and
-next-cycle equivalence. TPU checkpoint validation must wait until all pod hosts
-are free; CPU tests do not establish TPU throughput or peak memory.
+next-cycle equivalence. A bounded chess test also passed on four TPU hosts / 16
+TPU v4 devices: full/partial snapshots, exact next-cycle continuation, and a fresh
+algorithm restore. Injected write/publication failures preserved the previous
+checkpoint on the same pod. This validates correctness with small buffers,
+not production chess checkpoint throughput or peak memory.
 
 ```bash
 JAX_PLATFORMS=cpu XLA_FLAGS=--xla_force_host_platform_device_count=4 \
@@ -209,6 +213,38 @@ JAX_PLATFORMS=cpu XLA_FLAGS=--xla_force_host_platform_device_count=4 \
 # Only when the pod is free; use a new shared output directory:
 uv run pod run --timeout 900 -- python tests/helpers/checkpoint_smoke.py \
   --platform tpu --case chess --directory artifacts/checkpoint-chess-smoke
+```
+
+## Multihost chess ACPL
+
+Add the same ACPL options to every worker's MuZero command:
+
+```bash
+--ladder-period 0 --acpl.period 100 \
+--acpl.stockfish-path /usr/local/bin/stockfish \
+--acpl.output artifacts/chess-acpl --acpl.num-games 496 \
+--acpl.depth 18 --acpl.workers 8
+```
+
+Stockfish must exist on every host, and the output path must be shared. Workers
+are per host; the bounded worker count above deliberately differs from the old
+512-worker default. Game count is global, so 496 games on four hosts means 124
+distinct games per host. Only JAX process 0 publishes the combined PGN/summary
+and tracker artifacts. Evaluation pauses training synchronously.
+
+Validated on four TPU hosts / 16 devices using a restored MuZero model: 16 games
+twice (identical trajectories) and 496 games once, all analyzed without failures
+or duplicate game IDs. These used depth 2 and a 28-ply cap. They establish batch,
+partition, aggregation, and engine compatibility; they do not benchmark full
+games at depth 18. The original AZ scorer matched all 16 smoke games to 1e-12.
+
+To repeat a bounded inference-only check from a full or partial chess checkpoint:
+
+```bash
+uv run pod run --timeout 600 -- python scripts/smoke_acpl.py \
+  --algorithm mz --checkpoint artifacts/chess-pod.ckpt --platform tpu --distributed \
+  --games 16 --max-plies 28 --depth 2 --workers 2 --repeats 2 \
+  --output artifacts/acpl-pod-smoke-NEW
 ```
 
 ## Validation

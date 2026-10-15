@@ -47,15 +47,16 @@ def make_chess_terminal_probe(model, env, config, *, uniform_actions=32, top_act
     """
     import pgx1
 
-    # Construct games once on CPU, avoiding TPU compilation of board setup.
-    with jax.default_device(jax.local_devices(backend='cpu')[0]):
+    # Keep this rank-zero-only probe on a local device. A TPU-only run need
+    # not enable a CPU backend, nor initialize another distributed backend.
+    device = jax.local_devices()[0]
+    with jax.default_device(device):
         cases = terminal_cases(pgx1.make('chess', use_bitmask=True))
         roots = jax.tree.map(lambda *xs: jnp.stack(xs), *(c[2] for c in cases))
         following = jax.tree.map(lambda *xs: jnp.stack(xs), *(c[4] for c in cases))
         observation = env.observe(roots, roots.current_player)
         after_observation = env.observe(following, following.current_player)
         outcome = np.asarray(following.rewards[jnp.arange(len(cases)), roots.current_player])
-    device = jax.local_devices()[0]
     roots, observation, after_observation = jax.device_put((roots, observation, after_observation), device)
     actions = jax.device_put(np.asarray([c[3] for c in cases], np.int32), device)
     action_count = config['game_num_actions']

@@ -55,8 +55,8 @@ def validate_muzero_run(config, process_count, *, checkpoint=False, hex_evaluati
     if not config.get("enable_sharding", False):
         raise ValueError("Multihost MuZero requires global sharding")
     unsupported = []
-    if config.get("eval_period") or config.get("acpl", {}).get("period") or hex_evaluation:
-        unsupported.append("evaluation (use --ladder-period 0)")
+    if config.get("eval_period") or hex_evaluation:
+        unsupported.append("ladder/MoHex evaluation (use --ladder-period 0)")
     if unsupported:
         raise ValueError("Multihost MuZero currently supports bounded training with these features disabled: "
                          + ", ".join(unsupported))

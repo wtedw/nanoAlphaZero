@@ -55,15 +55,16 @@ def main():
         mesh = jax.sharding.Mesh(np.asarray(jax.devices()), ("data",))
         sharded = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec("data"))
         replicated = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
-        value = jax.make_array_from_callback((4, 21), sharded,
-            lambda index: np.arange(84, dtype=np.float32).reshape(4, 21)[index])
+        rows = max(4, jax.device_count())
+        value = jax.make_array_from_callback((rows, 21), sharded,
+            lambda index: np.arange(rows * 21, dtype=np.float32).reshape(rows, 21)[index])
         def replicate(value):
             host = np.asarray(value)
             return jax.make_array_from_callback(host.shape, replicated, lambda i: host[i])
         tree = {"runner_state": {"buffer": value,
                 "rng": jax.random.wrap_key_data(replicate(jax.random.key_data(jax.random.key(7)))),
                 "counter": replicate(jnp.int32(9)),
-                "empty": jax.make_array_from_callback((4, 0), sharded, lambda i: np.empty((4, 0), np.float32)[i]),
+                "empty": jax.make_array_from_callback((rows, 0), sharded, lambda i: np.empty((rows, 0), np.float32)[i]),
                 "bf16": replicate(jnp.array([0., -0., jnp.nan, jnp.inf], jnp.bfloat16))},
                 "cycle": jnp.int32(3)}
         compressed.save(path, tree, {}, metadata={"trackio": {"id": "resume-me"}})

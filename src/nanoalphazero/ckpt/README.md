@@ -17,11 +17,9 @@ and `compressed.py` the chunked directory format.
 
 ## Follow-ups
 
-- Add `load_model(...)` to read model parameters, inference state, and architecture
-  directly from a training checkpoint without loading optimizer or experience
-  buffers. Arrays are compressed in separate chunks, so selective loading can
-  skip those fields. Add `export_model(...)` for standalone inference files.
-  Neither model-only API is implemented yet.
+- `load_model(...)` reads model parameters and architecture directly from a
+  training checkpoint without loading optimizer or experience buffers. A separate
+  `export_model(...)` API for standalone inference files remains a follow-up.
 
 - Consider moving the host cycle counter into `RunnerState`, then returning just
   state from `restore_checkpoint`. Review shared AlphaZero constructors, checkpoint migration,
@@ -71,8 +69,9 @@ Saving writes and fsyncs a private generation, then fsyncs its directory, rename
 it, and atomically replaces/fsyncs `LATEST`. Only after publication is durable is
 the previous generation deleted. An advisory lock serializes writers and prevents
 readers racing generation deletion. A failed save before publication leaves the
-previous checkpoint authoritative. Interrupted `.writing-*` directories are
-removed under the writer lock on the next save. An interruption between committing
+previous checkpoint authoritative. Single-host saves remove interrupted `.writing-*`
+directories under the writer lock; multihost saves leave them for manual cleanup
+when no writer is active. An interruption between committing
 a generation and pointer publication can leave an unused `gen-*` directory; it
 does not change which checkpoint loads. No automatic deletion of unknown
 generation directories is performed.
@@ -81,7 +80,12 @@ Allow space for old and new compressed checkpoints simultaneously: approximately
 10 GB total for two estimated 5 GB chess snapshots, plus margin. The compression
 estimate came from sampled buffers; real checkpoint sizes vary.
 
-Current scope: one host, same shard geometry on resume. There is no automatic
+Multihost saves require shared storage. Each host writes its unique local shards;
+only process 0 publishes after all writes succeed and shard coverage is verified.
+Ordinary errors propagate to every host. Restore holds the generation's shared
+lock until all hosts finish. Full/partial resume requires the same host/device
+topology and shard geometry. Replicated model parameters can be loaded alone on
+one host. There is no automatic
 resharding across device counts, asynchronous save, incremental buffer archive,
 or automatic restart. Local Trackio identity is saved in host metadata and reused
 on resume. The loader creates new device
@@ -145,3 +149,14 @@ the final shape-template/host-resume checks passed four tests on CPU and four
 on TPU. The initial five-test TPU suite also passed packed-chess next-cycle
 continuation (including full and compact saves). Next-cycle comparisons are
 bit-exact within each platform; no CPU-versus-TPU numerical parity is claimed.
+
+Multihost validation (2026-10-15 JST): four TPU v4 hosts / 16 global devices passed
+`tests/helpers/checkpoint_smoke.py --platform tpu --case chess` using global batch
+16, width 8/depth 1, 512 self-play steps, and one optimizer update per cycle.
+Full state matched byte-for-byte after restore, as did the next state/metrics
+and continuation through a fresh algorithm. Partial snapshots also passed.
+The `--case storage` test passed worker-write/publication failure recovery,
+topology rejection, corruption propagation, and bounded chunks on the same pod.
+Evidence: `artifacts/checkpoint-tpu-20261015-01` and
+`artifacts/checkpoint-tpu-failure-20261015-01`. Production chess buffer sizes and
+checkpoint throughput are not measured by these small tests.

@@ -196,7 +196,8 @@ The same `--acpl.*` options work in root MuZero and AlphaZero's `train` CLI.
 See [ACPL component documentation](../src/nanoalphazero/eval/acpl/README.md)
 for the preserved legacy scoring convention, budgets, output files, and smoke
 commands. The default 496 games/depth 18 budget is substantial; use explicit
-smaller budgets for smoke tests. Multihost structure is retained but unvalidated.
+smaller budgets for smoke tests. Four-host TPU validation covers global batches
+of 16 and 496 games at depth 2 with a 28-ply cap; see [pod usage](pod.md).
 
 ## Data lifecycle
 
