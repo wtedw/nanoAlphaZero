@@ -24,9 +24,36 @@ node2 temp memory: 2.0 GiB at 12 sims, 5.7 GiB at 48, 10.6 GiB at 96
 (upstream: 10.8 GiB at 12). The fork's `_opt` restricts nodes to top-K
 children and uses a modified qtransform, so it is not equivalent to upstream.
 
-At 512 roots per chip the ratios are the same (node 32 sims: 246 ms, 1sh:
-81 ms). The network is saturated from about 512 roots per chip (about 11 us
+At 512 roots per chip: network 67 ms, 1sh 81, node2 77 at 12 sims; network
+168 ms, node2 202 at 32 sims. The network is saturated from about 512 roots per chip (about 11 us
 per row) and its outputs are bitwise batch-size invariant on TPU.
+
+## Using it in maz: `maz_integration.make_exact_muzero_mcts`
+
+A drop-in for `nanoalphazero.mcts.make_muzero_mcts(config, env, model,
+data_sharding)`. It returns maz's `PolicyOutput`, with root `visit_counts`
+for the exploration sampler and the BNK fields when
+`exp_bnk_action_weights` is set. Root temperature is applied as maz applies
+it. It uses `config["mcts_num_simulations"]` and
+`config["mcts_num_root_considered"]` (`mcts_num_survivors` is unused), and
+uses the shard_map wrapper whenever `data_sharding` spans several devices.
+
+Measured as maz's self-play search call (`bench_maz.py`: chess, 8192 real
+positions, 4 chips, including observation, legal-move unpacking, root
+temperature and BNK compression):
+
+| search | ms per call |
+|---|---:|
+| maz 1sh (8+4) | 414 |
+| exact node2, 12 sims | **392** |
+| exact node2, 32 sims | 878 |
+
+`test_maz_integration.py` (CPU, hex5 and connect4, 1 or 4 devices) checks
+that actions and visit counts equal upstream on the same roots. Without
+`--xla_force_host_platform_device_count` it runs on one device. Its
+`action_weights` differ by about 2e-7: computing the root network inside the
+same program changes XLA's fusion of the final softmax, the same
+compile-context effect described below.
 
 ## Multi-chip: use the shard_map wrapper
 
@@ -157,6 +184,8 @@ PYTHONPATH=$PWD/ref:$PWD JAX_PLATFORMS=cpu ../../.venv/bin/python test_equivalen
 PYTHONPATH=$PWD/ref:$PWD:../../src JAX_PLATFORMS=cpu ../../.venv/bin/python test_bnk.py
 PYTHONPATH=$PWD/ref:$PWD JAX_PLATFORMS=cpu ../../.venv/bin/python quick_equiv.py '{"fn":"gumbel_muzero_policy_node2"}' full
 PYTHONPATH=$PWD/ref:$PWD JAX_PLATFORMS=cpu XLA_FLAGS=--xla_force_host_platform_device_count=4 ../../.venv/bin/python test_sharded.py
+PYTHONPATH=$PWD/ref:$PWD:../../src JAX_PLATFORMS=cpu ../../.venv/bin/python test_maz_integration.py hex5
+PYTHONPATH=$PWD/ref:$PWD:../../src ../../.venv/bin/python bench_maz.py 12,32                                   # TPU, all chips
 PYTHONPATH=$PWD/ref:$PWD ../../.venv/bin/python bench_sharded.py 8192 12,32                                    # TPU, all chips
 PYTHONPATH=$PWD/ref:$PWD ../../.venv/bin/python tpu_equiv_sharded.py                                           # TPU, all chips
 PYTHONPATH=$PWD/ref:$PWD ../../.venv/bin/python bench_search.py --sims 12,24,48 --variants net,1sh,node2   # TPU
