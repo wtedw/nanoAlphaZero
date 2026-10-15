@@ -25,6 +25,7 @@ p.add_argument("--m", type=int, default=8)
 p.add_argument("--variants", default="net,1sh,upstream,fork,exact,exact_rb")
 p.add_argument("--reps", type=int, default=5)
 p.add_argument("--legal", type=int, default=32)
+p.add_argument("--k", default="128,32")
 a = p.parse_args()
 
 dev = jax.devices()[0]
@@ -112,6 +113,37 @@ def make(variant, n):
             out = mctx.gumbel_muzero_policy(
                 params, key, mctx.RootFnOutput(prior_logits=logits, value=value, embedding=latent),
                 recurrent_fork, n, invalid, qtransform=fqt, max_num_considered_actions=m)
+            return out.action, out.action_weights
+        return f
+    if variant.startswith("opt"):
+        K = int(variant[3:])
+        fqt = functools.partial(mctx.qtransform_completed_by_mix_value, value_scale=1.0,
+                                maxvisit_init=50.0, rescale_values=False)
+        fin = functools.partial(mctx.qtransform_completed_by_mix_value, value_scale=1.0,
+                                maxvisit_init=50.0, rescale_values=False, return_extras=True)
+        def f(params, obs, invalid, key):
+            latent, logits, value = root_of(params, obs)
+            out = mctx.gumbel_muzero_policy_opt(
+                params, key, mctx.RootFnOutput(prior_logits=logits, value=value, embedding=latent),
+                recurrent_fork, K, n, invalid, qtransform=fqt, final_qtransform=fin,
+                max_num_considered_actions=m)
+            return out.action, out.action_weights
+        return f
+    if variant == "node_tree":
+        def f(params, obs, invalid, key):
+            latent, logits, value = root_of(params, obs)
+            out = eg.gumbel_muzero_policy_node(
+                params, key, mctx_ref.RootFnOutput(prior_logits=logits, value=value, embedding=latent),
+                recurrent, n, invalid, qtransform=qt, max_num_considered_actions=m)  # default return_tree=True
+            return out.action, out.action_weights, out.search_tree
+        return f
+    if variant == "node_depth":
+        def f(params, obs, invalid, key):
+            latent, logits, value = root_of(params, obs)
+            out = eg.gumbel_muzero_policy_node(
+                params, key, mctx_ref.RootFnOutput(prior_logits=logits, value=value, embedding=latent),
+                recurrent, n, invalid, max_depth=n - 1, qtransform=qt, max_num_considered_actions=m,
+                return_tree=False)
             return out.action, out.action_weights
         return f
     if variant == "node":
