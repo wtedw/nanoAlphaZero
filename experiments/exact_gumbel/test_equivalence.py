@@ -6,7 +6,7 @@ import exact_gumbel as eg
 import test_exact as te
 import jax.numpy as jnp
 
-VARIANT = sys.argv[1] if len(sys.argv) > 1 else "gumbel_muzero_policy_node"
+VARIANT = sys.argv[1] if len(sys.argv) > 1 else "gumbel_muzero_policy_node2"
 fails = 0
 for (n, m), rescale, vs, md, seed in itertools.product(
         [(12, 8), (24, 8), (32, 16), (16, 4), (64, 16), (7, 16)], [False, True], [1.0, 0.1], [None, 3], [0, 1, 2]):

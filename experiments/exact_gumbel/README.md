@@ -3,22 +3,30 @@
 Goal: run full sequential Gumbel MuZero (`mctx.gumbel_muzero_policy`) fast on TPU,
 numerically equivalent to upstream mctx, instead of the fixed two-rung 1sh search.
 
-`exact_gumbel.gumbel_muzero_policy_node` is a drop-in replacement for upstream's
-`gumbel_muzero_policy(params, rng_key, root, recurrent_fn, num_simulations,
-invalid_actions, max_depth, *, qtransform, max_num_considered_actions,
-gumbel_scale)`. It calls upstream's own selection, qtransform and
-sequential-halving code. Only the tree storage and update mechanics change.
+**Use `exact_gumbel.gumbel_muzero_policy_node2`.** It is a drop-in replacement
+for upstream's `gumbel_muzero_policy(params, rng_key, root, recurrent_fn,
+num_simulations, invalid_actions, max_depth, *, qtransform,
+max_num_considered_actions, gumbel_scale)`; pass `return_tree=False` in
+production. It calls upstream's own selection, qtransform and
+sequential-halving code; only the tree storage and update mechanics change.
+`gumbel_muzero_policy_node` is the previous version, kept for comparison.
 
-## Results (TPU, one chip, 2048 roots, chess b10c256, A=4672, m=8)
+## Results (TPU, one chip, 2048 roots, chess b10c256, A=4672, m=8), ms
 
-| sims | network only | 1sh (8+4) | upstream mctx | node variant |
-|-----:|-------------:|----------:|--------------:|-------------:|
-| 12   | 278 ms | 329 ms | 877 ms (10.8 GiB temp) | 340 ms (2.0 GiB) |
-| 24   | 533 ms |        | 3009 ms (21 GiB)       | 709 ms (3.4 GiB) |
-| 48   | 1041 ms |       | 10703 ms (37 GiB)      | 1577 ms (5.7 GiB) |
-| 96   | 2058 ms |       | not run                | 3892 ms (10.5 GiB) |
+| sims | network only | 1sh (8+4) | upstream mctx | node | **node2** | fork `_opt` K=32 |
+|-----:|-------------:|----------:|--------------:|-----:|----------:|-----------------:|
+| 12   | 277  | 328 | 877   | 339  | **303**  | 391  |
+| 24   | 531  |     | 3009  | 707  | **592**  | 670  |
+| 48   | 1040 |     | 10703 | 1575 | **1191** | 1348 |
+| 96   | 2057 |     | not run | 3890 | **2460** | 2846 |
 
-The installed fork's `gumbel_muzero_policy` times the same as upstream.
+node2 temp memory: 2.0 GiB at 12 sims, 5.7 GiB at 48, 10.6 GiB at 96
+(upstream: 10.8 GiB at 12). The fork's `_opt` restricts nodes to top-K
+children and uses a modified qtransform, so it is not equivalent to upstream.
+
+At 512 roots per chip the ratios are the same (node 32 sims: 246 ms, 1sh:
+81 ms). The network is saturated from about 512 roots per chip (about 11 us
+per row) and its outputs are bitwise batch-size invariant on TPU.
 
 ## Equivalence
 
@@ -26,13 +34,16 @@ The installed fork's `gumbel_muzero_policy` times the same as upstream.
   `PolicyOutput` field and every search-tree array. The configurations vary
   n, m, `rescale_values`, `value_scale`, `max_depth`, seeds, and rows with 0, 1
   and 2 legal moves (`test_equivalence.py`).
-- TPU, production chess network: the whole search tree (visits, values,
-  children, priors, embeddings) and the chosen action are bitwise identical.
-  `action_weights` differ by up to 1.2e-7 (`tpu_equiv.py`). Upstream does
-  the same to itself: recompiling only its final qtransform/softmax step on
-  its own tree changes `action_weights` by 1.5e-8 (`tpu_ctx.py`). That last
-  ulp-level gap depends on XLA's compilation context and cannot be closed
-  across different programs.
+- TPU, production chess network (`tpu_equiv.py chess gumbel_muzero_policy_node2`):
+  node2 is bitwise identical to upstream in the tree, the action and
+  `action_weights` (max difference 0.0) across 5 configurations, including
+  `rescale_values=True` and rows with few legal moves.
+- The older `node` variant matched the tree and action but differed in
+  `action_weights` by up to 1.2e-7, because its final qtransform fused with
+  the root-prior masking. node2 routes the root prior through an
+  optimization barrier, which removes that. Upstream's own `action_weights`
+  shift by 1.5e-8 if only its final step is compiled separately
+  (`tpu_ctx.py`), so such differences come from XLA fusion, not the search.
 
 ## Why upstream is slow on TPU
 
@@ -77,10 +88,32 @@ bookkeeping that grows with n²:
 - Variants 2 and 3 (small-carry backward, slice expand): exact, but only 12–55%
   faster than upstream.
 
+## What node2 adds (all exact)
+
+Found with `profile_ops.py`, which prints a per-op TPU time breakdown:
+
+- Child-stat rows are built for only two per-node arrays: visits, and Q
+  computed per node (the same elementwise op on the same inputs). They use a
+  one-hot matmul at HIGHEST precision, which reproduces each value exactly.
+- Root selection runs once per simulation outside the descent loop. Under
+  `vmap`, upstream's in-loop `cond` evaluates root selection at every depth.
+  The root prior row is passed in directly; reading it from the tree there
+  made XLA relayout the whole prior array every simulation.
+- Prior logits are stored as `[B, N, 8, A/8]`. In `[B, N, A]` the TPU tiles
+  (node, action) by (8, 128), so every node write rewrote 8 nodes' tiles
+  (1.1 ms per simulation at n=48).
+- The root's edge rows are maintained incrementally, since each simulation
+  changes exactly one root child.
+
+Tree-only overhead with a trivial network (`tree_bench.py`): 27.7 ms at 12
+sims and 218 ms at 48. The figures were 62.6 / 724 ms for node and
+587 / 11327 ms for upstream.
+
 ## Remaining headroom
 
-What remains at large n is the `[A, N]` mask work, up to about 1.9x the
-network time at n=96. Restricting children to the top-K prior (BNK) would
+node2 is within 10-20% of the network-only time. Most of what remains is the
+in-loop child-stat rows (`[A, N]` work per tree level) and the embedding
+reads and writes. Restricting children to the top-K prior (BNK) would
 remove most of it. That is not bitwise: the interior softmax would normalise
 over K actions instead of A. With K >= num_simulations plus a stored full
 log-sum-exp per node, the decisions are identical in exact arithmetic, but
@@ -99,6 +132,7 @@ stays exact; only the stored training target is truncated to the top K.
 cd experiments/exact_gumbel && ./make_ref.sh            # vendors upstream mctx as mctx_ref
 PYTHONPATH=$PWD/ref:$PWD JAX_PLATFORMS=cpu ../../.venv/bin/python test_equivalence.py
 PYTHONPATH=$PWD/ref:$PWD:../../src JAX_PLATFORMS=cpu ../../.venv/bin/python test_bnk.py
-PYTHONPATH=$PWD/ref:$PWD ../../.venv/bin/python bench_search.py --sims 12,24,48 --variants net,1sh,node   # TPU
-PYTHONPATH=$PWD/ref:$PWD ../../.venv/bin/python tpu_equiv.py chess                                      # TPU
+PYTHONPATH=$PWD/ref:$PWD JAX_PLATFORMS=cpu ../../.venv/bin/python quick_equiv.py '{"fn":"gumbel_muzero_policy_node2"}' full
+PYTHONPATH=$PWD/ref:$PWD ../../.venv/bin/python bench_search.py --sims 12,24,48 --variants net,1sh,node2   # TPU
+PYTHONPATH=$PWD/ref:$PWD ../../.venv/bin/python tpu_equiv.py chess gumbel_muzero_policy_node2           # TPU
 ```
