@@ -129,12 +129,14 @@ def make(variant, n):
                 max_num_considered_actions=m)
             return out.action, out.action_weights
         return f
-    if variant == "node2":
+    if variant.startswith("node2"):
+        extra = dict(edge_rows="matmul_fused", live_chunk=8) if variant == "node2_fused" else {}
         def f(params, obs, invalid, key):
             latent, logits, value = root_of(params, obs)
             out = eg.gumbel_muzero_policy_node2(
                 params, key, mctx_ref.RootFnOutput(prior_logits=logits, value=value, embedding=latent),
-                recurrent, n, invalid, qtransform=qt, max_num_considered_actions=m, return_tree=False)
+                recurrent, n, invalid, qtransform=qt, max_num_considered_actions=m, return_tree=False,
+                **extra)
             return out.action, out.action_weights
         return f
     if variant == "node_tree":

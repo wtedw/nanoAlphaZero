@@ -1005,8 +1005,11 @@ class NodeTree2(NamedTuple):
 class NodeView2:
     """Upstream-Tree view; `root_only` serves the root prior from its own row."""
 
-    def __init__(self, t, num_actions, a_pad, root_only=False, edge_rows="matmul"):
+    def __init__(self, t, num_actions, a_pad, root_only=False, edge_rows="matmul", n_live=None):
         self.t, self.A, self.a_pad, self.edge_rows = t, num_actions, a_pad, edge_rows
+        # Only nodes [0, n_live) can exist yet; the rest never match a parent.
+        self.n_live = t.parents.shape[0] if n_live is None else n_live
+        self._rows_cache = {}
         self.root_rows = root_only and t.root_visits is not None
         if root_only:
             self.children_prior_logits = _Indexer(lambda n: t.root_prior_logits)
@@ -1025,7 +1028,9 @@ class NodeView2:
         if self.root_rows:
             self.children_visits = _Indexer(lambda n: t.root_visits)
         else:
-            self.children_visits = _Indexer(lambda n: self._pick(n, t.node_visits))
+            self.children_visits = _Indexer(
+                (lambda n: self._edge_rows(n)[0]) if edge_rows == "matmul_fused"
+                else (lambda n: self._pick(n, t.node_visits)))
 
     def _pick(self, node, x):
         actions = jnp.arange(self.A, dtype=self.t.action_from_parent.dtype)
@@ -1036,9 +1041,27 @@ class NodeView2:
                               precision=jax.lax.Precision.HIGHEST).astype(x.dtype)
         return jnp.sum(jnp.where(match, x[None, :], jnp.zeros((), x.dtype)), axis=-1)
 
+    def _edge_rows(self, node):
+        """(visits, Q) rows of `node`, from one shared comparison (cached per call site)."""
+        key = id(node)
+        if key not in self._rows_cache:
+            L, t = self.n_live, self.t
+            actions = jnp.arange(self.A, dtype=t.action_from_parent.dtype)
+            parent_key = jnp.where(t.parents[:L] == node, t.action_from_parent[:L], -1)
+            match = (parent_key[None, :] == actions[:, None]).astype(jnp.float32)   # [A, L]
+            # Same elementwise op on the same inputs as upstream, applied per node.
+            q = t.reward_in[:L] + t.discount_in[:L] * t.node_values[:L]
+            both = jnp.stack([t.node_visits[:L].astype(jnp.float32), q.astype(jnp.float32)], -1)
+            rows = jnp.matmul(match, both, precision=jax.lax.Precision.HIGHEST)   # [A, 2]
+            self._rows_cache[key] = (node, rows[:, 0].astype(t.node_visits.dtype),
+                                     rows[:, 1].astype(t.node_values.dtype))
+        return self._rows_cache[key][1:]
+
     def qvalues(self, node):
         if self.root_rows:
             return self.t.root_q
+        if self.edge_rows == "matmul_fused":
+            return self._edge_rows(node)[1]
         # Same elementwise op on the same inputs as upstream, applied per node.
         return self._pick(node, self.t.reward_in + self.t.discount_in * self.t.node_values)
 
@@ -1050,9 +1073,9 @@ def _root_child_on_path(parents, leaf):
     return jax.lax.while_loop(cond, lambda i: parents[i], leaf)
 
 
-def _node2_simulate(t, A, a_pad, root_select, interior_select, max_depth, edge_rows):
-    view = NodeView2(t, A, a_pad, edge_rows=edge_rows)
-    root_view = NodeView2(t, A, a_pad, root_only=True, edge_rows=edge_rows)
+def _node2_simulate(t, A, a_pad, root_select, interior_select, max_depth, edge_rows, n_live=None):
+    view = NodeView2(t, A, a_pad, edge_rows=edge_rows, n_live=n_live)
+    root_view = NodeView2(t, A, a_pad, root_only=True, edge_rows=edge_rows, n_live=n_live)
     depth = jnp.zeros((), t.root_prior_logits.dtype) + 1
     root_action = root_select(None, root_view, jnp.int32(ROOT))
     child = _node_child(t, jnp.int32(ROOT), root_action)
@@ -1073,24 +1096,77 @@ def _node2_simulate(t, A, a_pad, root_select, interior_select, max_depth, edge_r
     return parent, action
 
 
-def gumbel_muzero_policy_node2(
+def _prepare_root(rng_key, root, invalid_actions, gumbel_scale):
+    """Upstream's pre-search steps: mask the root prior and draw Gumbel noise."""
+    root = root.replace(prior_logits=_mask_invalid_actions(root.prior_logits, invalid_actions))
+    rng_key, gumbel_rng = jax.random.split(rng_key)
+    gumbel = gumbel_scale * jax.random.gumbel(
+        gumbel_rng, shape=root.prior_logits.shape, dtype=root.prior_logits.dtype)
+    return root, rng_key, gumbel
+
+
+def gumbel_muzero_policy_node2_with_visits(*args, **kwargs):
+    """node2 returning (PolicyOutput, root_visit_counts [B, A])."""
+    return _node2_impl(*args, **kwargs)
+
+
+def gumbel_muzero_policy_node2(*args, **kwargs):
+    """Bitwise-equivalent drop-in for mctx.gumbel_muzero_policy (fastest variant)."""
+    return _node2_impl(*args, **kwargs)[0]
+
+
+def gumbel_muzero_policy_node2_sharded(
+    mesh, axis, params, rng_key, root, recurrent_fn, num_simulations, invalid_actions,
+    max_depth=None, *, gumbel_scale=1.0, **kwargs):
+    """node2 with each device searching only its rows of the batch (shard_map).
+
+    Searches are independent per row, so this needs no collectives. Masking and
+    the Gumbel draw happen on the global batch first, exactly as upstream, so
+    the result equals an unsharded upstream run. Returns (PolicyOutput without
+    tree, root visit counts). `params` are replicated; batch arrays are split
+    along `axis` of `mesh`.
+    """
+    from jax.sharding import PartitionSpec as P
+    root, rng_key, gumbel = _prepare_root(rng_key, root, invalid_actions, gumbel_scale)
+
+    def local(params, rng_key, root, invalid_actions, gumbel):
+        out, visits = _node2_impl(params, rng_key, root, recurrent_fn, num_simulations,
+                                  invalid_actions, max_depth, return_tree=False,
+                                  _prepared=gumbel, **kwargs)
+        return out.action, out.action_weights, visits
+
+    batch_spec = P(axis)
+    root_spec = jax.tree.map(lambda _: batch_spec, root)
+    action, weights, visits = jax.shard_map(
+        local, mesh=mesh,
+        in_specs=(P(), P(), root_spec, batch_spec, batch_spec),
+        out_specs=(batch_spec, batch_spec, batch_spec), check_vma=False,
+    )(params, rng_key, root, invalid_actions, gumbel)
+    return base.PolicyOutput(action=action, action_weights=weights, search_tree=None), visits
+
+
+def _node2_impl(
     params, rng_key, root, recurrent_fn, num_simulations, invalid_actions=None,
     max_depth=None, *, qtransform=QT.qtransform_completed_by_mix_value,
     max_num_considered_actions=16, gumbel_scale=1.0, return_tree=True,
-    edge_rows="matmul", flat_priors=False, tiled_priors=True, root_rows=True):
+    edge_rows="matmul", flat_priors=False, tiled_priors=True, root_rows=True, live_chunk=0,
+    _prepared=None):
     """Bitwise-equivalent mctx.gumbel_muzero_policy; fastest variant so far.
 
     Requires max_depth is None or >= num_simulations; otherwise falls back.
     """
     if max_depth is not None and max_depth < num_simulations:
-        return gumbel_muzero_policy_fastbw(
+        if _prepared is not None:
+            raise ValueError("The sharded node2 search requires max_depth >= num_simulations")
+        out = gumbel_muzero_policy_fastbw(
             params, rng_key, root, recurrent_fn, num_simulations, invalid_actions, max_depth,
             qtransform=qtransform, max_num_considered_actions=max_num_considered_actions,
             gumbel_scale=gumbel_scale)
-    root = root.replace(prior_logits=_mask_invalid_actions(root.prior_logits, invalid_actions))
-    rng_key, gumbel_rng = jax.random.split(rng_key)
-    gumbel = gumbel_scale * jax.random.gumbel(
-        gumbel_rng, shape=root.prior_logits.shape, dtype=root.prior_logits.dtype)
+        return out, out.search_tree.children_visits[:, tree_lib.Tree.ROOT_INDEX]
+    if _prepared is None:
+        root, rng_key, gumbel = _prepare_root(rng_key, root, invalid_actions, gumbel_scale)
+    else:  # already masked and noised for the global batch (sharded wrapper)
+        gumbel = _prepared
     root_select, interior_select = _selectors(
         num_simulations, max_num_considered_actions, qtransform)
     batch, A = root.prior_logits.shape
@@ -1124,13 +1200,14 @@ def gumbel_muzero_policy_node2(
         raw_values=put(t.raw_values, root.value, 0), node_values=put(t.node_values, root.value, 0),
         node_visits=put(t.node_visits, t.node_visits[:, 0] + 1, 0),
         embeddings=jax.tree.map(lambda x, v: put(x, v, 0), t.embeddings, root.embedding))
-    simulate = jax.vmap(_node2_simulate, in_axes=(0, None, None, None, None, None, None))
+    simulate = jax.vmap(_node2_simulate, in_axes=(0, None, None, None, None, None, None, None))
     rows = jnp.arange(batch)
 
-    def body(sim, carry):
+    def body(sim, carry, n_live=None):
         key, t = carry
         key, _, expand_key = jax.random.split(key, 3)
-        parent, action = simulate(t, A, a_pad, root_select, interior_select, depth_limit, edge_rows)
+        parent, action = simulate(t, A, a_pad, root_select, interior_select, depth_limit, edge_rows,
+                                  n_live)
         node = sim + 1
         embedding = jax.tree.map(lambda x: x[rows, parent], t.embeddings)
         step, embedding = recurrent_fn(params, expand_key, action, embedding)
@@ -1159,7 +1236,15 @@ def gumbel_muzero_policy_node2(
                 root_q=jnp.where(hit, q[rows, child][:, None], t.root_q))
         return key, t
 
-    _, t = jax.lax.fori_loop(0, num_simulations, body, (rng_key, t))
+    if live_chunk:
+        # Simulations [s0, s1) see at most s1 nodes; scan only those.
+        carry = (rng_key, t)
+        for s0 in range(0, num_simulations, live_chunk):
+            s1 = min(num_simulations, s0 + live_chunk)
+            carry = jax.lax.fori_loop(s0, s1, functools.partial(body, n_live=s1), carry)
+        _, t = carry
+    else:
+        _, t = jax.lax.fori_loop(0, num_simulations, body, (rng_key, t))
     # Same final step as variant 5: upstream's own code on a one-node Tree.
     v = jax.vmap(lambda t: (lambda w: (w._pick(ROOT, t.node_visits), w._pick(ROOT, t.node_values),
                                        w._pick(ROOT, t.reward_in), w._pick(ROOT, t.discount_in)))(
@@ -1194,5 +1279,35 @@ def gumbel_muzero_policy_node2(
             parents=t.parents, action_from_parent=t.action_from_parent, reward_in=t.reward_in,
             discount_in=t.discount_in, children_prior_logits=priors, embeddings=t.embeddings,
             root_invalid_actions=t.root_invalid_actions, root_gumbel=t.root_gumbel), A)
+    out = base.PolicyOutput(action=action, action_weights=jax.nn.softmax(completed_search_logits),
+                            search_tree=tree)
+    # Root visit counts (e.g. for maz's exploration sampler) without the tree.
+    return out, root_visits
+
+
+def upstream_with_noise(params, rng_key, root, recurrent_fn, num_simulations, invalid_actions,
+                        gumbel, *, qtransform=QT.qtransform_completed_by_mix_value,
+                        max_num_considered_actions=16):
+    """Upstream gumbel_muzero_policy, verbatim, but with an already-masked root and given noise.
+
+    `rng_key` is the key left after upstream's Gumbel split. For checking a
+    sharded search against upstream run on each device's local batch.
+    """
+    extra_data = AS.GumbelMuZeroExtraData(root_gumbel=gumbel)
+    search_tree = S.search(
+        params=params, rng_key=rng_key, root=root, recurrent_fn=recurrent_fn,
+        root_action_selection_fn=functools.partial(
+            AS.gumbel_muzero_root_action_selection, num_simulations=num_simulations,
+            max_num_considered_actions=max_num_considered_actions, qtransform=qtransform),
+        interior_action_selection_fn=functools.partial(
+            AS.gumbel_muzero_interior_action_selection, qtransform=qtransform),
+        num_simulations=num_simulations, invalid_actions=invalid_actions, extra_data=extra_data)
+    summary = search_tree.summary()
+    considered_visit = jnp.max(summary.visit_counts, axis=-1, keepdims=True)
+    completed_qvalues = jax.vmap(qtransform, in_axes=[0, None])(search_tree, search_tree.ROOT_INDEX)
+    to_argmax = SH.score_considered(considered_visit, gumbel, root.prior_logits,
+                                    completed_qvalues, summary.visit_counts)
+    action = AS.masked_argmax(to_argmax, invalid_actions)
+    completed_search_logits = _mask_invalid_actions(root.prior_logits + completed_qvalues, invalid_actions)
     return base.PolicyOutput(action=action, action_weights=jax.nn.softmax(completed_search_logits),
-                             search_tree=tree)
+                             search_tree=search_tree)

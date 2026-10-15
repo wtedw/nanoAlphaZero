@@ -28,6 +28,29 @@ At 512 roots per chip the ratios are the same (node 32 sims: 246 ms, 1sh:
 81 ms). The network is saturated from about 512 roots per chip (about 11 us
 per row) and its outputs are bitwise batch-size invariant on TPU.
 
+## Multi-chip: use the shard_map wrapper
+
+Under plain `jit` with a batch-sharded input (maz's data parallelism), GSPMD
+puts all-gathers and all-reduces inside the search loop. On 4 chips with
+8192 roots and 12 sims, node2 took 430 ms there, against 303 ms on one chip
+and 328 ms for 1sh. `gumbel_muzero_policy_node2_sharded(mesh, axis, ...)` runs
+each device's rows with `jax.shard_map`. Searches are independent per row, so
+this needs no collectives: 304 ms at 12 sims and 792 ms at 32 (GSPMD: 1132),
+with half the memory. It also returns the root visit counts that maz's
+exploration sampler needs, so the tree is not required
+(`gumbel_muzero_policy_node2_with_visits` does the same unsharded).
+
+Masking and the Gumbel draw happen on the global batch, as upstream does. On
+TPU, though, upstream's own output depends on the batch size it runs with:
+rows 0-255 searched alone differ from the same rows inside a batch of 1024
+(`batch_dependence.py`). The root network (`model.initial`) also changes
+slightly when its batch is sharded, while the recurrent network does not.
+"Equal to upstream" under sharding therefore means equal to upstream run on
+each device's local batch. `tpu_equiv_sharded.py` checks exactly that: bitwise
+identical action, `action_weights` and root visits on 4 chips (3
+configurations, including `rescale_values=True`). On CPU with 4 virtual
+devices, it also equals upstream on the global batch (`test_sharded.py`).
+
 ## Equivalence
 
 - CPU: 144/144 configurations are bitwise identical to upstream, covering every
@@ -133,6 +156,9 @@ cd experiments/exact_gumbel && ./make_ref.sh            # vendors upstream mctx 
 PYTHONPATH=$PWD/ref:$PWD JAX_PLATFORMS=cpu ../../.venv/bin/python test_equivalence.py
 PYTHONPATH=$PWD/ref:$PWD:../../src JAX_PLATFORMS=cpu ../../.venv/bin/python test_bnk.py
 PYTHONPATH=$PWD/ref:$PWD JAX_PLATFORMS=cpu ../../.venv/bin/python quick_equiv.py '{"fn":"gumbel_muzero_policy_node2"}' full
+PYTHONPATH=$PWD/ref:$PWD JAX_PLATFORMS=cpu XLA_FLAGS=--xla_force_host_platform_device_count=4 ../../.venv/bin/python test_sharded.py
+PYTHONPATH=$PWD/ref:$PWD ../../.venv/bin/python bench_sharded.py 8192 12,32                                    # TPU, all chips
+PYTHONPATH=$PWD/ref:$PWD ../../.venv/bin/python tpu_equiv_sharded.py                                           # TPU, all chips
 PYTHONPATH=$PWD/ref:$PWD ../../.venv/bin/python bench_search.py --sims 12,24,48 --variants net,1sh,node2   # TPU
 PYTHONPATH=$PWD/ref:$PWD ../../.venv/bin/python tpu_equiv.py chess gumbel_muzero_policy_node2           # TPU
 ```
