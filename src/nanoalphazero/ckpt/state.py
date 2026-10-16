@@ -39,7 +39,7 @@ def save_checkpoint(path, *, state, cycle, config, mode="full", metadata=None):
     return save(path, payload(state, cycle, mode == "full"), config, metadata=metadata)
 
 
-def restore_checkpoint(path, *, state, config, mode="full"):
+def restore_checkpoint(path, *, state, config, mode="full", fork=False):
     """Return (RunnerState, start_cycle), or the initial state when path is None.
 
     Owns the supplied initial state, like the donating training loop. Compressed
@@ -51,7 +51,7 @@ def restore_checkpoint(path, *, state, config, mode="full"):
     if path is None:
         return state, 0
     from nanoalphazero.ckpt.inspection import validate_resume_config
-    validate_resume_config(path, config, mode)
+    validate_resume_config(path, config, mode, fork=fork)
     resume = path
     include_replay = mode == "full"
     placement = jax.tree.map(lambda x: x.sharding, state)

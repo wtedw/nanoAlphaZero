@@ -636,6 +636,10 @@ def validate_muzero_config(config, num_actions, device_count=1):
             raise ValueError("mcts_num_k_actions must be an integer within the action space")
     if not 1 <= config["mcts_num_survivors"] <= config["mcts_num_root_considered"] <= num_actions:
         raise ValueError("Search requires 1 <= survivors <= roots <= action count")
+    if config.get("mcts_variant", "1sh") not in ("1sh", "gumbel"):
+        raise ValueError("MuZero mcts_variant must be 1sh or gumbel")
+    if config.get("mcts_variant") == "gumbel" and config["mcts_num_simulations"] < 1:
+        raise ValueError("Exact Gumbel search requires positive mcts_num_simulations")
     for name in ("selfplay_batch_size", "train_batch_size", "selfplay_buffer_consume_size"):
         if config[name] % device_count:
             raise ValueError(f"{name} must be divisible by the device count")

@@ -684,6 +684,13 @@ def compress_muzero_policy(output, num_actions):
 
 def make_muzero_mcts(config, wenv, model, data_sharding=None, *, return_diagnostics=False):
     """Use shared search with learned transitions and optional inspection output."""
+    variant = config.get("mcts_variant", "1sh")
+    if variant == "gumbel":
+        from nanoalphazero.mcts_exact import search as search_fn
+    elif variant == "1sh":
+        search_fn = gumbel_muzero_policy_1sh
+    else:
+        raise ValueError(f"Unknown MuZero search variant: {variant}")
     def recurrent(params, keys, action, latent):
         latent, reward, logits, value = model.apply(
             {"params": params}, latent, action, method=model.recurrent
@@ -710,12 +717,16 @@ def make_muzero_mcts(config, wenv, model, data_sharding=None, *, return_diagnost
                 legal, logits / config.get("exp_root_temperature", 1.3),
                 jnp.finfo(logits.dtype).min,
             )
-        output = gumbel_muzero_policy_1sh(
+        search_options = (dict(num_simulations=config["mcts_num_simulations"]
+                               if num_simulations is None else num_simulations)
+                          if variant == "gumbel" else
+                          dict(num_survivors=config["mcts_num_survivors"]))
+        output = search_fn(
             params, key,
             RootFnOutput(prior_logits=logits, value=value, embedding=latent),
             recurrent,
             num_root_considered=config["mcts_num_root_considered"],
-            num_survivors=config["mcts_num_survivors"],
+            **search_options,
             invalid_actions=~legal, gumbel_scale=gumbel_scale,
             value_scale=config.get("mcts_value_scale", 1.0),
             maxvisit_init=config.get("mcts_maxvisit_init", 50.0),

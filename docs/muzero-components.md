@@ -675,6 +675,68 @@ MuZero CLI settings are grouped in `MuZeroConfig`: `--muzero.network`,
 `--muzero.chess-action-encoding`, `--muzero.memory-fraction`,
 `--muzero.remat-blocks`, and `--muzero.remat-unroll`. The discount option
 has been removed; player perspective still supplies the search sign.
+## Exact sequential Gumbel search
+
+MuZero can opt into `--mcts-variant gumbel --mcts-num-root-considered 16
+--mcts-num-simulations 32`. The default remains `1sh`; AlphaZero dispatch is
+unchanged. Exact search ignores the `1sh` survivor count. The optional simulation
+override passed to the MuZero search function is honored by this variant.
+
+`mcts_exact.py` ports the node-only algorithm from branch `muzero-exact-gumbel`,
+commit `01c4e68`. It uses Apache-2.0 upstream mctx helpers pinned at
+`428bfb7e1c931715cd3d74f9c65e9991afd86df8`, under `_vendor/mctx/`, rather than
+the installed fork. It stores full action logits at every node; it does not
+truncate interior policies. Production returns only root statistics, avoiding
+materializing the full edge tree. Full-tree output is available for verification.
+The port rejects truncated maximum depth rather than silently switching search
+implementations. Learned recurrent transitions must be deterministic.
+
+BNK (`--exp-bnk-action-weights --mcts-num-k-actions 128`) still calls the existing
+`compress_muzero_policy` **after** search. Actions, visits, and dense targets are
+unchanged by compression. Only stored policy supervision is truncated and
+renormalized; retained mass is reported by the existing compression probe.
+Diagnostics use the same exact search and expose its backed-up root statistics.
+For this variant, diagnostic `child_value` is the child's backed-up value after
+search, rather than its initial network prediction; `final_score` also includes
+upstream's final considered-visit filter.
+
+Prepare the independent reference once in a new directory, then run CPU checks:
+
+```bash
+uv run python tests/helpers/prepare_mctx_reference.py artifacts/exact-gumbel-reference
+PYTHONPATH="$PWD/artifacts/exact-gumbel-reference" JAX_PLATFORMS=cpu \
+  XLA_FLAGS=--xla_force_host_platform_device_count=4 \
+  uv run pytest -q tests/test_mcts_exact.py
+```
+
+Reference tests require exact actions and tree state, with tight tolerance for
+final policy probabilities: fusion can cause rounding differences even on CPU.
+The standalone four-host TPU check is `tests/helpers/exact_search_smoke.py`,
+launched through `pod run` with the same reference PYTHONPATH after checking TPU
+ownership. CPU correctness tests are not TPU performance evidence.
+
+Parent latent lookup explicitly batches a node-axis gather with `vmap`.
+Avoid rewriting this as `embeddings[arange(global_batch), parent]`: TPU SPMD
+can lower that form to a global latent all-reduce on every simulation, even
+though trees never cross batch shards. The local lookup preserves tree values
+and leaves only scalar synchronization for traversal termination.
+
+For a bounded production-model search benchmark on a free pod:
+
+```bash
+uv run pod run --timeout 1800 -- python -u tests/helpers/benchmark_muzero_search.py \
+  --batches 4096,8192,16384,32768 --variants 1sh,gumbel12,gumbel32 \
+  --hlo-dir artifacts/search-benchmark/hlo
+```
+
+This uses chess, the 384×10 model, and BNK-128 output. It reports compilation
+separately, discards three warmup calls, then times five synchronized calls.
+Batch sizes are global. It measures search on initial chess positions, not
+training cycles or late-game positions; confirm the selected batch in training.
+`--variants net32` measures 32 sequential recurrent network calls without a tree.
+Keep replay capacity and the collected-position/update ratio explicit when
+changing self-play batch size.
+
 # Chess terminal diagnostics
 
 When tracking is enabled, the existing diagnostic cadence also evaluates the
@@ -750,6 +812,17 @@ alternatives, or replay model search. Those require separate, more expensive
 probes. In particular, a repetition draw alone does not prove a missed win.
 
 ## Experimental terminal-root training
+
+To explicitly continue a **partial** checkpoint as a new experiment, use
+`--ckpt.fork SOURCE --ckpt.save NEW_DIRECTORY`. This retains parameters,
+optimizer, RNG and cycle, refills fresh games/replay, and starts a new tracker.
+Only `mcts_num_simulations`, `mcts_num_root_considered`, and
+`muzero_train_on_terminal_states` may differ in addition to ordinary resume
+exceptions. Architecture, optimizer settings and other targets must match.
+The source checkpoint is untouched; new checkpoints record source configuration
+and cycle in fork metadata. This is not an exact continuation of self-play.
+Ordinary `--ckpt.resume` remains strict. Fork cannot reuse a tracking run or
+write directly over its source.
 
 `--muzero.train-on-terminal-states` retains the actual final board for one
 collection call before resetting that lane. It is off by default. The regular

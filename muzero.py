@@ -445,7 +445,7 @@ def make_muzero(config, rng, data_sharding=None):
 
 
 def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
-               evaluator=None, checkpoint_mode="full", trackio_run=None):
+               evaluator=None, checkpoint_mode="full", trackio_run=None, fork=False):
     """Compile once, warm up replay, then run and monitor persistent cycles."""
     import jax
     import jax.numpy as jnp
@@ -461,7 +461,7 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
     # Restore the contents actually saved; future checkpoints may be fuller.
     resume_mode = ckpt.inspect_checkpoint(resume)["mode"] if resume is not None else checkpoint_mode
     state, start_cycle = ckpt.restore_checkpoint(
-        resume, state=algorithm.runner_state, config=config, mode=resume_mode,
+        resume, state=algorithm.runner_state, config=config, mode=resume_mode, fork=fork,
     )
 
     def check(metrics):
@@ -486,7 +486,10 @@ def run_muzero(algorithm, *, num_iters=None, checkpoint_path=None, resume=None,
     )}
     print(json.dumps({"compile_seconds": time.monotonic() - started,
                       "compiled_memory": compiled_memory}), flush=True)
-    tracker = make_tracker(config, resume=resume, trackio_run=trackio_run)
+    tracker = make_tracker(config, resume=None if fork else resume, trackio_run=trackio_run)
+    if fork:
+        tracker.metadata["fork"] = {"source": str(resume), "cycle": start_cycle,
+                                    "config": ckpt.inspect_checkpoint(resume)["config"]}
     try:
         from nanoalphazero.diagnostics import DiagnosticOutput, make_diagnostics_fn
         diagnose_fn = None
@@ -603,8 +606,12 @@ def main(argv=None):
         overrides["ckpt_period"] = args.ckpt.every
     config = get_muzero_config(args.env, **overrides)
     from nanoalphazero.ckpt import inspect_checkpoint, validate_resume_config
-    resume_mode = inspect_checkpoint(args.ckpt.resume)["mode"] if args.ckpt.resume is not None else args.ckpt.mode
-    validate_resume_config(args.ckpt.resume, config, resume_mode)
+    source = args.ckpt.fork or args.ckpt.resume
+    resume_mode = inspect_checkpoint(source)["mode"] if source is not None else args.ckpt.mode
+    if args.ckpt.fork is not None:
+        validate_resume_config(source, config, resume_mode, fork=True)
+    else:
+        validate_resume_config(source, config, resume_mode)
     pool = None
     try:
         # Start subprocess engines before JAX/libtpu owns accelerator resources.
@@ -616,15 +623,15 @@ def main(argv=None):
         initialize_distributed(args.distributed)
         import jax
         validate_muzero_run(config, jax.process_count(),
-                           checkpoint=args.ckpt.save is not None or args.ckpt.resume is not None,
+                           checkpoint=args.ckpt.save is not None or source is not None,
                            hex_evaluation=bool(args.hex_eval_period))
         from nanoalphazero.eval.hex.training import MuZeroHexEvaluator
         algorithm = make_muzero(config, jax.random.PRNGKey(config["seed"]))
         evaluator = (MuZeroHexEvaluator(algorithm, pool, args.hex_eval_period, args.hex_eval_output)
                      if pool is not None else None)
         run_muzero(algorithm, checkpoint_path=args.ckpt.save,
-                   resume=args.ckpt.resume, evaluator=evaluator, checkpoint_mode=args.ckpt.mode,
-                   trackio_run=args.trackio_run)
+                   resume=source, evaluator=evaluator, checkpoint_mode=args.ckpt.mode,
+                   trackio_run=args.trackio_run, fork=args.ckpt.fork is not None)
     finally:
         if pool is not None:
             pool.close()

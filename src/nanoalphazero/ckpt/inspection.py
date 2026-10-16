@@ -22,11 +22,13 @@ def checkpoint_metadata(path):
     return inspect_checkpoint(path).get("metadata", {})
 
 
-def validate_resume_config(path, config, mode="full"):
+def validate_resume_config(path, config, mode="full", *, fork=False):
     """Reject incompatible resumes before model/buffer allocation or deletion."""
     if path is None:
         return
     saved = inspect_checkpoint(path)
+    if fork and mode != "partial":
+        raise ValueError("Checkpoint forks require partial checkpoints with fresh games and buffers")
     if saved["mode"] != mode:
         raise ValueError(f"Checkpoint mode is {saved['mode']}, requested {mode}")
 
@@ -42,9 +44,14 @@ def validate_resume_config(path, config, mode="full"):
         from nanoalphazero.muzero_config import normalize_exploration_config
         values = normalize_exploration_config(values)
         ignored = {"acpl", "ckpt_period", "enable_trackio", "enable_wandb"}
+        if fork:
+            # Explicit experiment continuation, not an exact resume. Keep the
+            # architecture, optimizer, batch sizes, and target conventions fixed.
+            ignored.update({"mcts_num_simulations", "mcts_num_root_considered",
+                            "muzero_train_on_terminal_states"})
         # CLI preflight precedes environment construction. Once assembled,
         # compare derived dimensions too, before releasing the initial state.
-        ignored.update(key for key in ("game_obs_shape", "game_num_actions") if key not in config)
+        ignored.update(key for key in ("game_obs_shape", "game_num_actions") if config.get(key) is None)
         if mode == "partial":
             ignored.update(("selfplay_buffer_max_len", "buffer_layout"))
         return {key: value for key, value in values.items() if key not in ignored}

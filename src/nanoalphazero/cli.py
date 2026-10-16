@@ -344,6 +344,9 @@ class MuZeroCheckpointArgs:
     save: Path | None = None
     # Restore a checkpoint. Does not enable saving.
     resume: Path | None = None
+    # Fork a partial checkpoint into a new tracking run, retaining optimizer/RNG/cycle.
+    # Only simulation count, root candidates and terminal-root collection may change.
+    fork: Path | None = None
     # Period in training cycles; 0 disables periodic saves. First/final saves remain.
     every: int | None = None
     # Saved contents: full includes games/buffers; partial omits them. Resume detects saved mode.
@@ -390,6 +393,8 @@ class MuZeroArgs:
     selfplay_buffer_consume_size: int | None = None
     replay_buffer_max_len: int | None = None
     mcts_num_root_considered: int | None = None
+    mcts_variant: Literal["1sh", "gumbel"] | None = None
+    mcts_num_simulations: int | None = None
     mcts_num_survivors: int | None = None
     lr_warmup_steps: int | None = None
     mcts_num_k_actions: int | None = None
@@ -412,6 +417,11 @@ class MuZeroArgs:
 def parse_muzero_args(argv: Sequence[str] | None = None) -> MuZeroArgs:
     """Tyro owns MuZero CLI types and flags; AlphaZero keeps its existing parser."""
     args = tyro.cli(MuZeroArgs, args=argv, config=(tyro.conf.DisallowNone,))
+    if args.ckpt.fork is not None:
+        if args.ckpt.resume is not None or args.trackio_run is not None:
+            raise ValueError("--ckpt.fork requires a new tracking run and cannot be combined with resume")
+        if args.ckpt.save is not None and args.ckpt.save.resolve() == args.ckpt.fork.resolve():
+            raise ValueError("--ckpt.fork must save to a different checkpoint directory")
     if args.hex_eval_period < 0:
         raise ValueError("--hex-eval-period cannot be negative")
     if args.hex_eval_period and (

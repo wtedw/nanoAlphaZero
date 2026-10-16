@@ -24,6 +24,15 @@ def test_typed_overrides_and_paths():
     assert args.conv_width is None
 
 
+def test_exact_gumbel_search_flags():
+    args = parse_muzero_args(['--mcts-variant', 'gumbel',
+                             '--mcts-num-root-considered', '16',
+                             '--mcts-num-simulations', '32'])
+    assert args.mcts_variant == 'gumbel'
+    assert args.mcts_num_root_considered == 16
+    assert args.mcts_num_simulations == 32
+
+
 @pytest.mark.parametrize("name", [
     "enable_sharding", "enable_wandb", "exp_bnk_action_weights",
 ])
